@@ -24,6 +24,7 @@ const petSprite = (pet, mood = 0) => tinted(spriteOf(pet.species, pet.stage, moo
 const hueStyle = pet => (pet.hue ? ` style="filter:hue-rotate(${pet.hue}deg)"` : '');
 const eggClass = species => 'egg-' + EGG_ORDER.indexOf(speciesOf(species).element);
 const elColor = species => ELEMENT_COLOR[speciesOf(species).element];
+const gradeInfo = id => S.GRADES.find(x => x.id === id) || S.GRADES[0];
 
 // Solo toca el DOM si el contenido cambió (así no se pierden pulsaciones ni animaciones).
 function setHTML(el, html) {
@@ -142,12 +143,13 @@ $('btn-start').onclick = () => {
   birthModal(game.pet);
 };
 
-function birthModal(pet) {
+function birthModal(pet, grade = null) {
   const sp = speciesOf(pet.species);
   modal({
     title: `¡Ha nacido ${pet.name}!`,
     body: `<div class="hatch"><i class="egg-img ${eggClass(sp.id)}"></i><canvas data-sprite="${sp.id}:0:${pet.hue || 0}"></canvas></div>
       <p>Del huevo salió un <b>${esc(sp.name)}</b>, de elemento ${esc(sp.element)}. Lo suyo: ${esc(sp.role.toLowerCase())}.</p>
+      ${grade ? `<p>Por cómo cuidaste el huevo nació con categoría <b style="color:${grade.color}">${grade.name}</b>. ${grade.desc}</p>` : ''}
       <p>Frótalo para acariciarlo, arrastra la comida hasta él y lánzale la pelota. Según cómo lo trates crecerá con un carácter u otro.</p>`,
     actions: [{ label: 'Vamos', cls: 'primary' }],
   });
@@ -228,7 +230,7 @@ function renderCare() {
     : `<b class="big">Sin definir</b><p>Se decide al evolucionar a Teen, según cómo la trates.</p>`)
     + (trend ? `<p>Con el trato de ahora va camino de ser <span class="tag" style="--c:${S.CHARS[trend].color}">${S.CHARS[trend].name}</span></p>` : '')
     + `<p><b style="color:var(--ink)">Rasgo: ${S.QUIRKS[p.quirk].name}.</b> ${S.QUIRKS[p.quirk].desc}</p>`
-    + (S.isRare(p) ? '<p><span class="tag" style="--c:var(--gold)">Color raro</span></p>' : ''));
+    + ((p.grade && p.grade !== 'comun') || S.isRare(p) ? `<p>${p.grade && p.grade !== 'comun' ? `<span class="tag" style="--c:${gradeInfo(p.grade).color}" title="${gradeInfo(p.grade).desc}">Categoría ${gradeInfo(p.grade).name}</span> ` : ''}${S.isRare(p) ? '<span class="tag" style="--c:var(--gold)">Color raro</span>' : ''}</p>` : ''));
 
   const taste = (label, id, known) => known
     ? `<div class="taste"><i class="ic ic-${id}"></i><span>${S.FOODS[id].name}<small>${label}</small></span></div>`
@@ -264,24 +266,23 @@ function renderCare() {
   $('btn-decor').hidden = !game.decor.length || !!room.mini;
   $('btn-decor').textContent = room.editing ? 'Listo' : 'Decorar';
   $('btn-decor').classList.toggle('on', room.editing);
-  setHTML($('evo-line'), STAGES.map((name, i) =>
-    `<div class="step ${i < p.stage ? 'past' : i === p.stage ? 'now' : 'future'}"><i class="sp sp-${p.species}-${i}"${hueStyle(p)}></i>${name}</div>`).join('<span class="arrow">›</span>'));
-  $('evo-text').textContent = !evo ? 'Ya está en su forma Final.'
+  const evoText = !evo ? 'Ya está en su forma Final.'
     : evo.ready ? `¡${p.name} puede evolucionar! Pulsa el botón dorado de la sala.`
-    : `Siguiente: ${STAGES[p.stage + 1]} con nivel ${evo.req.level}` + (game.testMode ? '.' : ` y ${evo.req.days} días de vida${evo.okTime ? '' : ` (faltan ${evo.daysLeft})`}.`);
+    : `Siguiente forma: ${STAGES[p.stage + 1]}, con nivel ${evo.req.level}` + (game.testMode ? '.' : ` y ${evo.req.days} días de vida${evo.okTime ? '' : ` (faltan ${evo.daysLeft})`}.`);
 
   const tags = list => (list.length ? list.map(e => `<span class="tag" style="--c:${ELEMENT_COLOR[e]}">${e}</span>`).join(' ') : '—');
   setHTML($('species-info'), `<p><b>${sp.name}</b> <span class="tag" style="--c:${ELEMENT_COLOR[sp.element]}">${sp.element}</span></p>
     <p>${sp.role}.</p>
     <p class="match"><span>Fuerte contra</span>${tags(strongAgainst(sp.element))}</p>
     <p class="match"><span>Débil contra</span>${tags(weakAgainst(sp.element))}</p>
-    ${p.mastery ? `<p><b>${S.MASTERY[p.mastery].name}.</b> ${S.MASTERY[p.mastery].desc}</p>` : ''}`);
+    ${p.mastery ? `<p><b>${S.MASTERY[p.mastery].name}.</b> ${S.MASTERY[p.mastery].desc}</p>` : ''}
+    <p class="evo-next">${evoText}</p>`);
 
   // Poderes: tres de su elemento (por nivel) y el propio de la especie (forma Final)
   const prof = S.profile(p), rest = S.restLeft(p);
   $('mp-max').textContent = `· ${prof.maxMp} MP`;
-  setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><i class="pi pi-${slug(pw.name)}"></i><span><b>${pw.name}</b>
-    <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need} · ${pw.desc}</small></span></div>`).join(''));
+  setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}" title="${esc(pw.desc)}"><i class="pi pi-${slug(pw.name)}"></i><span><b>${pw.name}</b>
+    <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need}</small></span></div>`).join(''));
 
   setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i></div>
     <span>Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
@@ -321,31 +322,49 @@ for (const b of document.querySelectorAll('.heal-btn')) {
   };
 }
 
+// Zona de incubación: el huevo elegido, su temperatura, su limpieza y cómo va de cuidado.
+let eggPick = 0;
 function renderEggs() {
   if (!game) return;
-  $('eggs-count').textContent = `(${game.eggs.length})`;
-  setHTML($('eggs-list'), game.eggs.length ? game.eggs.map((e, i) => {
-    const ready = S.eggReady(game, e);
-    return `<button class="egg-card${ready ? ' ready' : ''}" data-egg="${i}" style="--c:${elColor(e.species)}">
-      <i class="egg-img ${eggClass(e.species)}"></i>
-      <span><b>${esc(speciesOf(e.species).element)}</b>${ready ? '¡Listo! Toca para abrirlo' : 'Se abre en ' + duration(S.eggReadyAt(game, e) - Date.now())}</span></button>`;
-  }).join('') : `<p class="muted">Sin huevos. Compra uno, o derrota ${S.DEFEATS_FOR_EGG} veces a una especie que no tengas.</p>`);
-  setHTML($('btn-buy-egg'), `<i class="ic ic-huevomas"></i> Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i>`);
+  S.tickEggs(game);
+  const n = game.eggs.length, box = $('incubator');
+  $('eggs-count').textContent = n ? `(${n} de ${S.MAX_EGGS})` : '';
+  const buy = `<button class="btn buy-egg" data-buy-egg="1"><i class="ic ic-huevomas"></i> Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i></button>`;
+  if (!n) {
+    return setHTML(box, `<div class="incu-empty"><div class="incu-dome empty"><i></i></div>
+      <div><p><b>No hay huevos incubando.</b></p><p class="muted">Compra uno, o derrota ${S.DEFEATS_FOR_EGG} veces a una especie que no tengas. Tardan ${S.EGG_DAYS} días y hay que cuidarlos.</p>${buy}</div></div>`);
+  }
+  eggPick = Math.min(eggPick, n - 1);
+  const e = game.eggs[eggPick], st = S.eggStatus(game, e), T = S.EGG_TEMP, pos = v => ((v - T.min) / (T.max - T.min)) * 100;
+  const glow = st.cold ? '#6fb8ff' : st.hot ? '#ff8a3d' : elColor(e.species);
+  const state = st.ready ? '¡Listo para abrir!' : st.ok ? 'Todo correcto' : [st.cold ? 'Tiene frío' : st.hot ? 'Tiene calor' : '', st.dirty ? 'Está sucio' : ''].filter(Boolean).join(' · ');
+  const tabs = n > 1 ? `<div class="incu-tabs">${game.eggs.map((x, i) => { const s2 = S.eggStatus(game, x); return `<button class="${i === eggPick ? 'on' : ''}${s2.ready ? ' ready' : s2.ok ? '' : ' warn'}" data-egg-tab="${i}"><i class="egg-img ${eggClass(x.species)}"></i></button>`; }).join('')}</div>` : '';
+  setHTML(box, `${tabs}<div class="incu">
+    <div class="incu-dome${st.ready ? ' ready' : ''}" data-rub="1" style="--c:${glow}" title="Frota el huevo para limpiarlo"><i class="egg-img ${eggClass(e.species)}"></i><span class="grime" style="opacity:${Math.min(1, e.dirt / 85)}"></span></div>
+    <div class="incu-info">
+      <p><b>Huevo de ${esc(speciesOf(e.species).element)}</b> <span class="tag" style="--c:${st.ready ? 'var(--gold)' : st.ok ? 'var(--green)' : '#ff7a7a'}">${state}</span></p>
+      <div class="incu-row"><span>${st.ready ? 'Incubación completa' : `Día ${st.day} de ${S.EGG_DAYS} · se abre en ${duration(st.left)}`}</span><div class="bar"><i style="width:${Math.min(100, st.progress * 100)}%;background:var(--gold)"></i></div></div>
+      <div class="incu-row"><span>Temperatura <b>${e.temp.toFixed(1)} °C</b></span>
+        <div class="thermo"><button data-warm="-0.5" ${st.ready ? 'disabled' : ''} aria-label="Enfriar">−</button>
+          <div class="gauge"><i class="band" style="left:${pos(T.ideal - T.ok)}%;width:${pos(T.ideal + T.ok) - pos(T.ideal - T.ok)}%"></i><i class="mark" style="left:${pos(e.temp)}%"></i></div>
+          <button data-warm="0.5" ${st.ready ? 'disabled' : ''} aria-label="Calentar">+</button></div></div>
+      <div class="incu-row"><span>Limpieza${st.dirty ? ' · <b>frota el huevo</b>' : ''}</span><div class="bar"><i style="width:${100 - e.dirt}%;background:${st.dirty ? '#ff7a7a' : 'var(--blue)'}"></i></div></div>
+      <p class="incu-care">Bien cuidado el <b>${Math.round(st.care * 100)} %</b> del tiempo · categoría <b style="color:${st.grade.color}" title="${st.grade.desc}">${st.grade.name}</b></p>
+      ${st.ready ? '<button class="btn primary" data-hatch="1">¡Abrir el huevo!</button>' : ''}
+    </div></div>${n < S.MAX_EGGS ? buy : ''}`);
 }
 
-$('btn-buy-egg').onclick = () => {
+function buyEggNow() {
   const res = S.buyEgg(game);
   if (res.error) { toast(res.error); return sfx.error(); }
   sfx.coin();
+  eggPick = game.eggs.length - 1;
   commit();
-  toast(`Compraste un huevo de ${speciesOf(res.species).element}. Nunca sale una especie que ya tengas.`);
-};
-
-$('eggs-list').onclick = e => {
-  const b = e.target.closest('[data-egg]');
-  if (!b) return;
-  const i = +b.dataset.egg, egg = game.eggs[i];
-  if (!S.eggReady(game, egg)) return toast('Ese huevo aún se está incubando.');
+  toast(`Compraste un huevo de ${speciesOf(res.species).element}. Cuídalo ${S.EGG_DAYS} días: temperatura y limpieza.`);
+}
+function hatchNow(i) {
+  const egg = game.eggs[i];
+  if (!egg || !S.eggReady(game, egg)) return toast('Ese huevo aún se está incubando.');
   modal({
     title: `Huevo de ${speciesOf(egg.species).element}`,
     body: '<p>Está a punto de abrirse. ¿Cómo se va a llamar?</p><input id="egg-name" maxlength="12" autocomplete="off">',
@@ -357,10 +376,30 @@ $('eggs-list').onclick = e => {
       S.setActive(game, res.pet);
       room.setPet(game.pet);
       commit();
-      birthModal(game.pet);
+      birthModal(game.pet, res.grade);
     } }, closeBtn('Luego')],
   });
+}
+$('incubator').onclick = e => {
+  const t = e.target;
+  if (t.closest('[data-buy-egg]')) return buyEggNow();
+  if (t.closest('[data-hatch]')) return hatchNow(eggPick);
+  const tab = t.closest('[data-egg-tab]');
+  if (tab) { eggPick = +tab.dataset.eggTab; sfx.tap(); return renderEggs(); }
+  const warm = t.closest('[data-warm]');
+  if (warm && S.warmEgg(game, eggPick, +warm.dataset.warm)) { sfx.tap(); S.save(game); renderEggs(); }
 };
+// Frotar el huevo lo limpia.
+let rub = null;
+$('incubator').addEventListener('pointerdown', e => { if (e.target.closest('[data-rub]')) { rub = { x: e.clientX, y: e.clientY, d: 0 }; e.preventDefault(); } });
+window.addEventListener('pointermove', e => {
+  if (!rub) return;
+  rub.d += Math.hypot(e.clientX - rub.x, e.clientY - rub.y); rub.x = e.clientX; rub.y = e.clientY;
+  if (rub.d < 24) return;
+  if (S.cleanEgg(game, eggPick, rub.d * 0.12)) { renderEggs(); if (game.eggs[eggPick].dirt <= 0) { sfx.good(); S.save(game); } }
+  rub.d = 0;
+});
+for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => { if (rub) { rub = null; S.save(game); } });
 
 $('team').onclick = e => {
   const b = e.target.closest('[data-pet]');
@@ -749,7 +788,7 @@ function renderShop() {
     return `<div class="good${owned ? ' owned' : ''}"><i class="dc dc-${id}"></i><span><b>${d.name}</b><small>${d.desc}</small><small>${owned ? 'Ya está en tu sala' : ''}</small></span>
       ${owned ? '' : `<button class="btn" data-buy-decor="${id}">${d.price}<i class="ic ic-moneda"></i></button>`}</div>`;
   }).join(''));
-  setHTML($('shop-egg'), good('huevomas', 'Huevo misterioso', 'Una especie que aún no tienes. Tarda un rato en abrirse.', `<small>Incubando: ${game.eggs.length}</small>`, 'data-buy-egg="1"', S.eggPrice(game)));
+  setHTML($('shop-egg'), good('huevomas', 'Huevo misterioso', `Una especie que aún no tienes. Se incuba ${S.EGG_DAYS} días y hay que cuidarlo.`, `<small>Incubando: ${game.eggs.length}</small>`, 'data-buy-egg="1"', S.eggPrice(game)));
 }
 $('tab-shop').onclick = e => {
   const b = e.target.closest('button');

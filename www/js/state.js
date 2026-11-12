@@ -203,8 +203,16 @@ function attach(g) {
 export const rollHue = () => (Math.random() < 0.1 ? pick([120, 180, -120]) : Math.round(Math.random() * 56 - 28));
 export const isRare = pet => Math.abs(pet.hue || 0) > 60;
 
-function makePet(species, name) {
+function makePet(species, name, grade = '') {
   const now = Date.now(), sp = speciesOf(species), foods = Object.keys(FOODS), fav = pick(foods);
+  const g = GRADES.find(x => x.id === grade), best = [0, 1, 2, 3].sort((a, b) => sp.base[b] - sp.base[a]);
+  const extra = i => (g ? g.all + (best.indexOf(i) < g.top ? 1 : 0) : 0);     // lo que suma su categoría a cada estadística
+  const pet = makeBase(species, name, now, sp, fav, foods);
+  STATS.forEach((k, i) => { pet.stats[k] += extra(i); });
+  if (g) { pet.grade = g.id; if (g.rare && !isRare(pet)) pet.hue = (Math.random() < 0.5 ? -1 : 1) * (80 + Math.floor(Math.random() * 80)); }
+  return pet;
+}
+function makeBase(species, name, now, sp, fav, foods) {
   return {
     species, name, born: now, level: 1, exp: 0, stage: 0,
     stats: { pot: sp.base[0], agu: sp.base[1], pun: sp.base[2], agi: sp.base[3] },
@@ -269,6 +277,7 @@ function rollDay(p) {
 // El tiempo pasa para todas tus criaturas, aunque el juego esté cerrado.
 // Dormida: recobra energía más rápido, se recupera del combate al doble de velocidad y gasta menos.
 export function tick(g, now = Date.now()) {
+  tickEggs(g, now);
   const elapsed = now - g.lastTick, h = elapsed / 3600000;
   if (h <= 0) return;
   for (const p of g.pets) {
@@ -397,8 +406,67 @@ export function spendItem(g, id) {
 // --- Huevos ---
 // Solo se consiguen comprándolos o derrotando 10 veces a una misma especie, y nunca repetidos.
 
-export const eggReadyAt = (g, egg) => egg.laidAt + (g.testMode ? Math.min(egg.hours * 20e3, 90e3) : egg.hours * 3600e3);
+// Un huevo tarda 3 días en incubarse y hay que cuidarlo: la temperatura se va desviando y se ensucia.
+// Cuanto más tiempo pasa en buenas condiciones, mejor categoría tiene la criatura al nacer.
+export const EGG_DAYS = 3;
+export const EGG_TEMP = { ideal: 37, ok: 2, min: 30, max: 44 };   // bien entre 35 y 39 °C
+export const EGG_DIRTY = 60;                                       // a partir de aquí está sucio
+export const GRADES = [                                            // de peor a mejor; min = parte del tiempo bien cuidado
+  { id: 'comun', name: 'Común', min: 0, all: 0, top: 0, color: '#c9cbe6', desc: 'Sin extras.' },
+  { id: 'buena', name: 'Buena', min: 0.45, all: 0, top: 2, color: '#7dff9b', desc: '+1 en sus dos mejores estadísticas.' },
+  { id: 'excelente', name: 'Excelente', min: 0.75, all: 1, top: 0, color: '#7fe9ff', desc: '+1 en todas las estadísticas.' },
+  { id: 'perfecta', name: 'Perfecta', min: 0.93, all: 2, top: 0, rare: true, color: '#ffd76a', desc: '+2 en todas las estadísticas y color raro.' },
+];
+export const gradeOf = care => [...GRADES].reverse().find(x => care >= x.min);
+export const eggDay = g => (g.testMode ? 60e3 : 24 * 3600e3);      // en modo prueba un «día» dura un minuto
+const newDrift = () => (Math.random() < 0.5 ? -1 : 1) * (1.8 + Math.random() * 0.8);   // °C por día
+const newEgg = species => ({ species, laidAt: Date.now(), last: Date.now(), temp: EGG_TEMP.ideal, drift: newDrift(), dirt: 0, good: 0 });
+
+export const eggReadyAt = (g, egg) => egg.laidAt + EGG_DAYS * eggDay(g);
 export const eggReady = (g, egg) => Date.now() >= eggReadyAt(g, egg);
+
+// Pasa el tiempo en la incubadora: la temperatura se desvía, se ensucia y se cuenta cuánto estuvo bien.
+export function tickEggs(g, now = Date.now()) {
+  const day = eggDay(g);
+  for (const e of g.eggs) {
+    if (e.temp === undefined) Object.assign(e, { temp: EGG_TEMP.ideal, drift: newDrift(), dirt: 0, last: now, good: Math.max(0, Math.min(now, eggReadyAt(g, e)) - e.laidAt) });  // huevo de antes: lo pasado cuenta como bien cuidado
+    const until = Math.min(now, eggReadyAt(g, e)), dt = until - e.last;
+    if (dt <= 0) continue;
+    const d = dt / day;                                             // días transcurridos
+    // Cuánto de ese rato siguió bien: hasta que la temperatura sale de su margen o la suciedad pasa del límite.
+    const edge = EGG_TEMP.ideal + Math.sign(e.drift) * EGG_TEMP.ok;
+    const okNow = Math.abs(e.temp - EGG_TEMP.ideal) <= EGG_TEMP.ok && e.dirt < EGG_DIRTY;
+    const tTemp = (edge - e.temp) / e.drift, tDirt = (EGG_DIRTY - e.dirt) / 75;
+    if (okNow) e.good += clamp(Math.min(tTemp, tDirt), 0, d) * day;
+    e.temp = clamp(e.temp + e.drift * d, EGG_TEMP.min, EGG_TEMP.max);
+    e.dirt = clamp(e.dirt + 75 * d);
+    e.last = until;
+  }
+}
+// Cómo va un huevo: para la pantalla.
+export function eggStatus(g, egg) {
+  const total = EGG_DAYS * eggDay(g), elapsed = Math.max(1, Math.min(Date.now(), eggReadyAt(g, egg)) - egg.laidAt);
+  const cold = egg.temp < EGG_TEMP.ideal - EGG_TEMP.ok, hot = egg.temp > EGG_TEMP.ideal + EGG_TEMP.ok, dirty = egg.dirt >= EGG_DIRTY;
+  const care = clamp((egg.good || 0) / elapsed, 0, 1), ready = eggReady(g, egg);
+  return { ready, left: Math.max(0, eggReadyAt(g, egg) - Date.now()), day: Math.min(EGG_DAYS, Math.floor(elapsed / eggDay(g)) + 1), progress: elapsed / total,
+    cold, hot, dirty, ok: !cold && !hot && !dirty, care, grade: gradeOf(ready ? (egg.good || 0) / total : care) };
+}
+// Subir o bajar la temperatura. Cada ajuste cambia hacia dónde se irá desviando después.
+export function warmEgg(g, index, delta) {
+  const e = g.eggs[index];
+  if (!e || eggReady(g, e)) return false;
+  tickEggs(g);
+  e.temp = clamp(Math.round((e.temp + delta) * 10) / 10, EGG_TEMP.min, EGG_TEMP.max);
+  e.drift = newDrift();
+  return true;
+}
+export function cleanEgg(g, index, amount) {
+  const e = g.eggs[index];
+  if (!e || eggReady(g, e) || e.dirt <= 0) return false;
+  tickEggs(g);
+  e.dirt = clamp(e.dirt - amount);
+  return true;
+}
 export const owns = (g, species) => g.pets.some(p => p.species === species) || g.eggs.some(e => e.species === species);
 const hasRoom = g => g.eggs.length < MAX_EGGS && g.pets.length + g.eggs.length < MAX_PETS;
 export const eggPrice = g => 100 * (g.pets.length + g.eggs.length);
@@ -412,7 +480,7 @@ export function buyEgg(g) {
   if (g.coins < price) return { error: `Te faltan ${price - g.coins} monedas.` };
   g.coins -= price;
   const sp = pick(free);
-  g.eggs.push({ species: sp.id, laidAt: Date.now(), hours: 6 });
+  g.eggs.push(newEgg(sp.id));
   return { species: sp.id };
 }
 
@@ -420,10 +488,12 @@ export function hatchEgg(g, index, name) {
   const egg = g.eggs[index];
   if (!egg || !eggReady(g, egg)) return { error: 'Ese huevo aún no está listo.' };
   if (g.pets.length >= MAX_PETS) return { error: 'No te caben más criaturas.' };
+  tickEggs(g);
+  const grade = gradeOf((egg.good || 0) / (EGG_DAYS * eggDay(g)));
   g.eggs.splice(index, 1);
-  g.pets.push(makePet(egg.species, name));
+  g.pets.push(makePet(egg.species, name, grade.id));
   if (!g.seen.includes(egg.species)) g.seen.push(egg.species);
-  return { pet: g.pets.length - 1 };
+  return { pet: g.pets.length - 1, grade };
 }
 
 export function setActive(g, index) {
@@ -684,7 +754,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
     p.mood = clamp(p.mood + 10); p.bond = clamp(p.bond + 2);
     g.defeats[rival.species] = (g.defeats[rival.species] || 0) + 1;
     if (g.defeats[rival.species] >= DEFEATS_FOR_EGG && !owns(g, rival.species) && hasRoom(g)) {
-      g.eggs.push({ species: rival.species, laidAt: Date.now(), hours: 6 });
+      g.eggs.push(newEgg(rival.species));
       egg = true;
     }
     log(g, `Ganó a ${rival.name}${egg ? ' y se ganó un huevo de su especie' : ' y se quedó con su botín'}.`);
