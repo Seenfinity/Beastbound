@@ -1,12 +1,12 @@
 // Efectos de sonido sintetizados: no hay archivos de audio, se generan al vuelo.
 
 const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-let ctx = null, noiseBuf = null, muted = false;
+let ctx = null, noiseBuf = null, muted = false, hushed = false;   // hushed: silencio solo en esta página, sin tocar el ajuste guardado
 try { muted = localStorage.getItem('petbound-mute') === '1'; } catch { /* sin almacenamiento */ }
 
 // El navegador solo deja sonar tras un gesto del usuario; se crea en la primera llamada.
 function audio() {
-  if (!AC || muted) return null;
+  if (!AC || muted || hushed) return null;
   if (!ctx) {
     ctx = new AC();
     const len = Math.floor(ctx.sampleRate * 0.6);
@@ -76,6 +76,7 @@ export const sfx = {
 };
 
 export const isMuted = () => muted;
+export const hush = value => { hushed = value; };
 export function setMuted(value) {
   muted = value;
   try { localStorage.setItem('petbound-mute', value ? '1' : '0'); } catch { /* sin almacenamiento */ }

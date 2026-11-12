@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d0b1e">
-<title>PetBound: cría tu criatura y llévala al combate</title>
-<meta name="description" content="Incuba un huevo, cría a la criatura que salga, hazla evolucionar y llévala a duelos de artillería por turnos. Gratis, en el navegador.">
-<meta property="og:title" content="PetBound: cría tu criatura y llévala al combate">
-<meta property="og:description" content="Incuba un huevo, cría a la criatura que salga y llévala a duelos de artillería por turnos. Gratis, en el navegador.">
+<title>PetBound: cría a tu bestia y gana el duelo</title>
+<meta name="description" content="Incuba un huevo, cría a tu bestia, hazla evolucionar y llévala a duelos de artillería por turnos. 15 especies, 3 mapas. Gratis, en el navegador.">
+<meta property="og:title" content="PetBound: cría a tu bestia y gana el duelo">
+<meta property="og:description" content="Incuba, cría, evoluciona y combate. 15 especies, 3 mapas. Gratis, en el navegador.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://seenfinity.github.io/petbound/assets/landing/castillo.webp">
+<meta property="og:image" content="https://seenfinity.github.io/petbound/assets/landing/portada.webp">
+<link rel="preload" as="image" href="assets/landing/portada.webp">
 <link rel="stylesheet" href="landing.css">
 </head>
 <body>
@@ -17,104 +18,121 @@
 <header class="top">
   <a class="brand" href="./">PetBound</a>
   <nav>
-    <a href="#vida">Cómo se juega</a>
-    <a href="#especies">Las 15 especies</a>
-    <a href="#estado">Estado del proyecto</a>
+    <a href="#duelos">Duelos</a>
+    <a href="#crianza">Crianza</a>
+    <a href="#especies">Especies</a>
+    <a href="#estado">Lo que viene</a>
     <a class="go small" href="jugar.html">Jugar</a>
   </nav>
 </header>
 
 <main>
-  <!-- Portada: el huevo se abre al tocarlo -->
+  <!-- Portada -->
   <section class="hero">
     <div class="hero-text">
-      <h1>Tu criatura está en ese huevo.</h1>
-      <p class="lede">Tócalo para abrirlo. Después críala, hazla evolucionar y llévala a duelos de artillería por turnos.</p>
+      <h1>Cría a tu bestia. Gana el duelo.</h1>
+      <p class="lede">Incuba un huevo, cría a lo que salga de él y llévalo a combates de artillería por turnos, donde importa cómo lo criaste.</p>
       <div class="actions">
-        <a class="go" href="jugar.html">Jugar gratis</a>
+        <a class="go big" href="jugar.html">Jugar gratis</a>
         <span class="fine">En el navegador, sin instalar nada.</span>
       </div>
-    </div>
-    <div class="hero-egg">
-      <button class="dome" id="egg-btn" aria-label="Abrir el huevo">
-        <span class="flash" aria-hidden="true"></span>
-        <img id="egg-img" alt="" width="150" height="180">
-        <img id="baby-img" alt="" hidden>
-      </button>
-      <div class="pedestal" aria-hidden="true"></div>
-      <p class="hatch-line" id="hatch-line" aria-live="polite">Huevo misterioso</p>
-      <button class="again" id="again" hidden>Abrir otro huevo</button>
+      <ul class="facts">
+        <li><b>15</b> especies</li>
+        <li><b>3</b> formas</li>
+        <li><b>57</b> poderes</li>
+        <li><b>3</b> mapas</li>
+      </ul>
     </div>
   </section>
 
-  <!-- La vida de la criatura que salió -->
-  <section class="life unknown" id="vida">
-    <div class="block">
-      <div class="copy">
-        <h2>Crece según la cuides.</h2>
-        <p>Lo que come decide qué estadísticas le suben. Cómo la tratas decide su carácter: feroz, leal, astuta, serena o resentida. Dos huevos iguales pueden acabar siendo criaturas muy distintas.</p>
-        <p>Y se le nota en la cara. Está contenta cuando la acaricias o juega, triste si pasa hambre, y se echa a dormir cuando la acuestas.</p>
-      </div>
-      <div class="stage" id="moods" aria-label="Los ánimos de la criatura"></div>
+  <!-- Duelo en vivo: el motor real del juego, jugándose solo -->
+  <section class="duels" id="duelos">
+    <div class="head">
+      <h2>Duelos 1 contra 1.</h2>
+      <p>Artillería por turnos: eliges ángulo y fuerza, y cuentas con el viento. Cada elemento pega más a unos y menos a otros, y cada bestia trae sus propios poderes. Esto de abajo no es un vídeo: es el juego, jugándose solo.</p>
     </div>
-
-    <div class="block flip">
-      <div class="copy">
-        <h2>Evoluciona dos veces.</h2>
-        <p>Nace Baby, pasa a Teen en el nivel 10 y llega a su forma Final en el nivel 30. Con cada forma desbloquea poderes de su elemento, y en la Final, el poder propio de su especie.</p>
-      </div>
-      <div class="stage wide" id="stages" aria-label="Las tres formas de la criatura"></div>
+    <div class="arena">
+      <canvas id="duel" aria-label="Combate de demostración entre dos criaturas"></canvas>
+      <div class="versus" id="versus"></div>
     </div>
+    <div class="maps" id="maps" role="tablist" aria-label="Mapas"></div>
+    <p class="honest">Hoy se combate contra rivales del juego. Los duelos contra otros jugadores están en camino.</p>
+  </section>
 
-    <div class="duel" id="duel">
-      <div class="duel-copy">
-        <h2>Y pelea.</h2>
-        <p>Duelos de artillería por turnos: eliges ángulo y fuerza, y cuentas con el viento. Cada elemento pega más a unos y menos a otros, y cada mapa tiene sus trampas y su música.</p>
-        <a class="go" href="jugar.html">Jugar gratis</a>
+  <!-- Crianza -->
+  <section class="raise" id="crianza">
+    <div class="head">
+      <h2>Lo que haces con ella cuenta.</h2>
+      <p>La comida decide qué estadísticas le suben. El trato decide su carácter: feroz, leal, astuta, serena o resentida. Dos huevos iguales pueden acabar siendo bestias muy distintas.</p>
+    </div>
+    <div class="room" id="room">
+      <img id="room-pet" alt="">
+      <div class="rooms" id="rooms" role="tablist" aria-label="Habitaciones"></div>
+    </div>
+    <div class="shelf" id="moods" aria-label="Los ánimos de la criatura"></div>
+    <div class="trio">
+      <div><h3>Dale de comer</h3><p>19 comidas. Unas llenan, otras animan o dan energía, y cada una cría una estadística distinta.</p></div>
+      <div><h3>Entrénala</h3><p>Un minijuego por estadística: potencia, aguante, puntería y agilidad.</p></div>
+      <div><h3>Decora su sala</h3><p>Muebles que coloca donde quieras y que ella usa por su cuenta. Cuatro habitaciones.</p></div>
+    </div>
+  </section>
+
+  <!-- Evolución e incubación -->
+  <section class="grow">
+    <div class="evo">
+      <div class="head">
+        <h2>Tres formas.</h2>
+        <p>Nace Baby, pasa a Teen en el nivel 10 y llega a su forma Final en el nivel 30, cuando desbloquea el poder propio de su especie.</p>
       </div>
-      <div class="duel-field" aria-hidden="true">
-        <img id="duel-me" alt="">
-        <svg class="arc" viewBox="0 0 600 200" preserveAspectRatio="none"><path d="M40 170 Q300 -70 560 150" /></svg>
-        <img id="duel-foe" alt="">
+      <div class="shelf tall" id="stages" aria-label="Las tres formas de la criatura"></div>
+    </div>
+    <div class="incu">
+      <div class="head">
+        <h2>Todo empieza en un huevo.</h2>
+        <p>Tarda tres días en abrirse y hay que cuidarlo: vigilar su temperatura y limpiarlo. Cuanto mejor lo cuides, mejor categoría tendrá la bestia al nacer.</p>
       </div>
+      <div class="eggs" id="eggs" aria-label="Huevos de cada elemento"></div>
+      <ul class="grades" id="grades"></ul>
     </div>
   </section>
 
   <!-- Las 15 especies -->
   <section class="roster" id="especies">
-    <h2>Quince especies, catorce elementos.</h2>
-    <p class="sub">Toca una para que la página la siga a ella. En el juego empiezas eligiendo entre tres huevos y la especie es sorpresa; las demás se ganan.</p>
+    <div class="head">
+      <h2>Quince especies, catorce elementos.</h2>
+      <p>Toca una y la página te la enseña a ella. En el juego empiezas eligiendo entre tres huevos; las demás se ganan derrotándolas o comprando más huevos.</p>
+    </div>
     <div class="grid" id="grid"></div>
   </section>
 
   <!-- Qué hay y qué falta -->
   <section class="status" id="estado">
-    <h2>Dónde está el proyecto.</h2>
+    <h2>Lo que hay y lo que viene.</h2>
     <div class="cols">
       <div>
         <h3>Ya se puede jugar</h3>
         <ul>
           <li>Crianza completa: comida, entrenamiento, sueño, deseos y carácter.</li>
-          <li>Incubación de huevos, con mejor categoría cuanto mejor los cuides.</li>
-          <li>Combates contra rivales del juego en tres mapas.</li>
+          <li>Incubación de huevos con categorías.</li>
+          <li>Duelos contra rivales del juego en tres mapas, cada uno con su música.</li>
           <li>La partida se guarda en tu dispositivo.</li>
         </ul>
       </div>
       <div>
-        <h3>Lo que viene</h3>
+        <h3>En camino</h3>
         <ul>
           <li>Cuentas, para llevar tu partida a cualquier dispositivo.</li>
-          <li>Ranking mundial y combates contra otros jugadores.</li>
-          <li>Un modo de aventura contra criaturas salvajes.</li>
+          <li>Duelos contra otros jugadores y ranking mundial.</li>
+          <li>Un modo de aventura contra bestias salvajes.</li>
           <li>Versión para Android.</li>
         </ul>
       </div>
     </div>
-    <p class="note">Es una versión de prueba: está activado un modo que acelera los tiempos para poder verlo todo rápido. Se apaga en Ajustes.</p>
+    <p class="note">Es una versión de prueba: viene activado un modo que acelera los tiempos para poder verlo todo rápido. Se apaga en Ajustes.</p>
   </section>
 
   <section class="last">
-    <h2>El huevo no se abre solo.</h2>
+    <h2>Tu huevo ya está en la incubadora.</h2>
     <a class="go big" href="jugar.html">Jugar gratis</a>
   </section>
 </main>
