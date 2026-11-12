@@ -233,7 +233,7 @@ export function newGame() {
   return attach({
     v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
-    lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala',
+    lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala', profile: { name: '', country: '' },
   });
 }
 
@@ -253,6 +253,7 @@ export function load() {
     g.items ||= { pocion: 1, elixir: 0, escudo: 0, mira: 1 };
     g.news = [];
     g.decor ||= []; g.decorPos ||= {}; g.rooms ||= ['sala']; g.room ||= 'sala';
+    g.profile ||= { name: '', country: '' };
     for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
     return attach(g);
   } catch {

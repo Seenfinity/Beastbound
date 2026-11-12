@@ -105,6 +105,7 @@ export class Battle {
     this.far = false; this.zoom = 1;                 // vista lejana (todo el campo) o cercana
     this.banner = null; this.ended = false;
     this.setupHazards(map.hazards || {});
+    this.setupAmbient();
     this.startTurn(this.player);
   }
 
@@ -130,6 +131,60 @@ export class Battle {
     this.gusty = !!h.gusty;
     this.snow = h.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(18, 46) })) : [];
   }
+  // Ambiente propio de cada mapa: no afecta al juego, solo le da vida.
+  setupAmbient() {
+    const id = this.map.id;
+    // Castillo: luciérnagas sobre la hierba. Aurora: destellos en el hielo. (En coordenadas del campo.)
+    this.glints = id === 'castillo' || id === 'aurora'
+      ? Array.from({ length: id === 'castillo' ? 34 : 26 }, () => { const x = rand(20, WORLD - 20); return { x, y: this.groundAt(x) - (id === 'castillo' ? rand(8, 110) : rand(1, 5)), p: rand(0, 6.28), v: rand(1.2, 2.6), r: rand(8, 26) }; })
+      : [];
+    // Volcán: brasas y ceniza que suben por toda la pantalla.
+    this.embers = id === 'volcan' ? Array.from({ length: 44 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(10, 34), p: rand(0, 6.28), big: Math.random() < 0.3 })) : [];
+    // Cielos de noche: de vez en cuando cruza una estrella fugaz.
+    this.meteor = id === 'castillo' || id === 'aurora' ? { wait: rand(3, 8), life: 0 } : null;
+  }
+  drawAmbientWorld(ctx) {
+    const id = this.map.id, t = this.t;
+    for (const g of this.glints) {
+      const a = Math.max(0, Math.sin(t * g.v + g.p));
+      if (a < 0.05) continue;
+      if (id === 'castillo') {                          // luciérnaga: se mece y parpadea
+        const x = g.x + Math.sin(t * 0.6 + g.p) * g.r, y = g.y + Math.cos(t * 0.45 + g.p * 2) * g.r * 0.4;
+        ctx.globalAlpha = a * 0.22; ctx.fillStyle = '#e8ff8a'; ctx.fillRect(x - 3, y - 3, 6, 6);
+        ctx.globalAlpha = a; ctx.fillStyle = '#f6ffc2'; ctx.fillRect(x - 1, y - 1, 2, 2);
+      } else {                                          // destello en el hielo: una crucecita
+        const y = this.groundAt(g.x) - 2, k = a * a;
+        ctx.globalAlpha = k; ctx.fillStyle = '#ffffff';
+        ctx.fillRect(g.x - 3 * k, y, 6 * k + 1, 1); ctx.fillRect(g.x, y - 3 * k, 1, 6 * k + 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  drawAmbientView(ctx) {
+    const t = this.t, VH = this.VH;
+    for (const e of this.embers) {                     // brasas: suben, se mecen y se apagan arriba
+      e.y -= e.v * 0.016; e.x += Math.sin(t * 1.3 + e.p) * 0.25 + this.windNow() * 0.02;
+      if (e.y < -4) { e.y = VH + 4; e.x = rand(0, W); }
+      if (e.x > W + 4) e.x = -4; else if (e.x < -4) e.x = W + 4;
+      const k = e.y / VH;
+      ctx.globalAlpha = Math.min(1, k * 1.6) * (0.55 + 0.45 * Math.sin(t * 6 + e.p));
+      ctx.fillStyle = k > 0.55 ? '#ffd27a' : k > 0.3 ? '#ff8a3d' : '#b8442a';
+      ctx.fillRect(e.x, e.y, e.big ? 3 : 2, e.big ? 3 : 2);
+    }
+    const m = this.meteor;
+    if (m) {
+      if (m.life <= 0 && (m.wait -= 0.016) <= 0) Object.assign(m, { life: 1, x: rand(W * 0.1, W * 0.9), y: rand(8, VH * 0.22), dir: Math.random() < 0.5 ? 1 : -1, wait: rand(5, 12) });
+      if (m.life > 0) {
+        m.life -= 0.016 * 1.4; m.x += m.dir * 5.2; m.y += 2.1;
+        const g = ctx.createLinearGradient(m.x, m.y, m.x - m.dir * 46, m.y - 18);
+        g.addColorStop(0, `rgba(255,255,255,${Math.max(0, m.life)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - m.dir * 46, m.y - 18); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   newBird(i, anywhere = false) {
     const dir = Math.random() < 0.5 ? 1 : -1;
     return { x: anywhere ? rand(0, WORLD) : dir > 0 ? -20 : WORLD + 20, y: rand(this.H - this.VH + 30, this.H - this.pad - 210), dir, v: rand(36, 60), phase: i * 2.1, away: 0 };
@@ -720,7 +775,32 @@ export class Battle {
       g.fillStyle = top; g.fillRect(x, y, 2, 4);
       g.fillStyle = light; g.fillRect(x, y, 2, 1.5);
     }
+    this.decorate(g, [rock, rock2, edge, top, light]);
     this.dirty = false;
+  }
+
+  // Detallitos sobre el suelo según el mapa: hierba y flores, vetas de lava, nieve y cristales.
+  // Salen siempre en el mismo sitio (dependen de la columna), así no bailan cuando el terreno se rompe.
+  decorate(g, [rock, rock2, edge, top, light]) {
+    const id = this.map.id;
+    if (!id) return;
+    const rnd = v => { const k = Math.sin(v * 127.1 + 311.7) * 43758.5453; return k - Math.floor(k); };
+    for (let x = 2; x < WORLD - 2; x++) {
+      const y = Math.round(this.terrain[x]), a = rnd(x), b = rnd(x + 0.37);
+      if (id === 'castillo') {
+        if (a < 0.3) { g.fillStyle = b < 0.5 ? top : light; g.fillRect(x, y - 2 - Math.floor(b * 3), 1, 2 + Math.floor(b * 3)); }          // briznas de hierba
+        else if (a > 0.965) { g.fillStyle = top; g.fillRect(x, y - 3, 1, 3); g.fillStyle = ['#ff9ad5', '#ffe36b', '#ffffff', '#9ad0ff'][Math.floor(b * 4)]; g.fillRect(x - 1, y - 5, 3, 2); g.fillRect(x, y - 6, 1, 4); }   // flores
+        else if (a > 0.5 && a < 0.515) { g.fillStyle = rock2; g.fillRect(x, y + 16 + Math.floor(b * 26), 4, 2); g.fillStyle = edge; g.fillRect(x, y + 16 + Math.floor(b * 26), 4, 1); }                     // piedras en la tierra
+      } else if (id === 'volcan') {
+        if (a < 0.016) { const len = 5 + Math.floor(b * 9), dir = b < 0.5 ? 1 : -1; for (let i = 0; i < len; i++) { g.fillStyle = i < 2 ? light : top; g.fillRect(x + dir * Math.round(i * 0.6 + Math.sin(i * 1.7 + x) * 1.2), y + 10 + i * 2, 2, 2); } }         // vetas de lava
+        else if (a > 0.93) { g.fillStyle = rock; g.fillRect(x, y - 2 - Math.floor(b * 2), 3, 2 + Math.floor(b * 2)); g.fillStyle = rock2; g.fillRect(x, y - 2 - Math.floor(b * 2), 3, 1); }                 // piedras quemadas
+        else if (a > 0.6 && a < 0.625) { g.fillStyle = b < 0.5 ? top : light; g.fillRect(x, y + 24 + Math.floor(b * 40), 2, 2); }                                                                         // ascuas en la roca
+      } else if (id === 'aurora') {
+        if (a < 0.26) { g.fillStyle = light; g.fillRect(x, y - 1 - (b < 0.35 ? 1 : 0), 2, 2); }                                                                                                          // montoncitos de nieve
+        else if (a > 0.95) { const h = 5 + Math.floor(b * 7); g.fillStyle = top; g.fillRect(x - 1, y - h + 2, 3, h - 2); g.fillStyle = light; g.fillRect(x, y - h, 1, h); g.fillStyle = '#7fd0ff'; g.fillRect(x + 1, y - h + 3, 1, h - 3); }   // cristales de hielo
+        else if (a > 0.4 && a < 0.47) { g.fillStyle = top; g.fillRect(x, y + 8, 1, 2 + Math.floor(b * 5)); }                                                                                             // carámbanos
+      }
+    }
   }
 
   drawHazards(ctx) {
@@ -1042,6 +1122,7 @@ export class Battle {
     this.drawHazards(ctx);
     const gx0 = Math.max(0, cam.x - 20), gy0 = Math.max(0, cam.y - 20), gx1 = Math.min(WORLD, cam.x + vw + 20), gy1 = Math.min(H, cam.y + vh + 20);
     ctx.drawImage(this.ground, gx0 * 2, gy0 * 2, (gx1 - gx0) * 2, (gy1 - gy0) * 2, gx0, gy0, gx1 - gx0, gy1 - gy0);
+    this.drawAmbientWorld(ctx);
     if (cam.y + vh > H - 1) { ctx.fillStyle = this.map.terrain[0]; ctx.fillRect(cam.x - 30, H - 1, vw + 60, cam.y + vh - H + 30); }   // roca por debajo del campo
     for (const f of [this.rival, this.player]) this.drawFighter(ctx, f, s * dpr * z);
 
@@ -1132,6 +1213,7 @@ export class Battle {
 
     // --- Pegado a la pantalla ---
     this.drawSnow(ctx);
+    this.drawAmbientView(ctx);
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(0.6, this.flash * 2.4)})`; ctx.fillRect(-20, -20, W + 40, VH + 40); }
     ctx.lineJoin = 'round';
     this.drawEdges(ctx);

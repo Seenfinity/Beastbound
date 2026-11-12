@@ -7,6 +7,8 @@ import { Battle, W } from './battle.js';
 import { Room } from './room.js';
 import { MINI_INFO } from './minigames.js';
 import { sfx, isMuted, setMuted } from './sfx.js';
+import { music } from './music.js';
+import * as RK from './ranking.js';
 import { playEvolution } from './evolution.js';
 
 const $ = id => document.getElementById(id);
@@ -156,6 +158,38 @@ function birthModal(pet, grade = null) {
   setTimeout(() => sfx.hatch(), 1150);                 // suena cuando se rompe el cascarón
 }
 
+// ---------- Ranking ----------
+// De momento no hay servidor: la tabla enseña tu fila y, en modo prueba, unas filas de muestra marcadas como ejemplo.
+let rankSort = 'level', rankOthers = [];
+function renderRanking() {
+  const prof = game.profile, me = { ...RK.myStats(game), name: prof.name || 'Tú (sin usuario)', country: prof.country, me: true };
+  if (document.activeElement !== $('rk-name')) $('rk-name').value = prof.name;
+  if (!$('rk-country').options.length) $('rk-country').innerHTML = '<option value="">Elige tu país…</option>' + RK.COUNTRIES.map(([code, name]) => `<option value="${code}">${RK.flag(code)} ${name}</option>`).join('');
+  if (document.activeElement !== $('rk-country')) $('rk-country').value = prof.country;
+  setHTML($('rk-me'), `<span>Nivel <b>${me.level}</b></span><span>Oro <b>${me.coins}</b></span><span>Ganadas <b>${me.wins}</b></span><span>Perdidas <b>${me.losses}</b></span>`);
+  const demo = !rankOthers.length && game.testMode, rows = RK.buildBoard([me, ...(demo ? RK.EXAMPLES : rankOthers)], rankSort);
+  $('rk-note').textContent = rankOthers.length ? '' : demo
+    ? 'Vista previa: todavía no hay servidor ni cuentas. Las filas marcadas «ejemplo» son de muestra para ver cómo quedará; los jugadores reales aparecerán cuando activemos el registro.'
+    : 'El ranking mundial todavía no está conectado: de momento solo apareces tú. Se activará con el registro.';
+  setHTML($('rk-sorts'), Object.entries(RK.SORTS).map(([k, label]) => `<button class="${k === rankSort ? 'on' : ''}" data-sort="${k}">Por ${label.toLowerCase()}</button>`).join(''));
+  const cell = (r, k) => `<span class="num${k === rankSort ? ' key' : ''}">${r[k]}</span>`;
+  setHTML($('rk-table'), `<div class="rk-row head"><span>#</span><span>Jugador</span><span class="num">Nivel</span><span class="num">Oro</span><span class="num">Ganadas</span><span class="num">Perdidas</span></div>`
+    + rows.map(r => `<div class="rk-row${r.me ? ' me' : ''}${r.demo ? ' demo' : ''}"><span class="pos">${r.rank}</span>
+      <span class="who"><i class="flag" title="${esc(RK.countryName(r.country))}">${RK.flag(r.country)}</i><b>${esc(r.name)}</b>${r.me ? '<em>tú</em>' : r.demo ? '<em>ejemplo</em>' : ''}</span>
+      ${cell(r, 'level')}${cell(r, 'coins')}${cell(r, 'wins')}<span class="num">${r.losses}</span></div>`).join(''));
+}
+$('rk-sorts').onclick = e => { const b = e.target.closest('[data-sort]'); if (b) { rankSort = b.dataset.sort; sfx.tap(); renderRanking(); } };
+$('rk-save').onclick = () => {
+  const name = $('rk-name').value.trim(), country = $('rk-country').value;
+  if (!RK.validName(name)) { sfx.error(); return toast('El usuario debe tener de 3 a 16 letras, números o guion bajo, sin espacios.'); }
+  if (!country) { sfx.error(); return toast('Elige tu país.'); }
+  game.profile = { name, country };
+  S.save(game);
+  sfx.good();
+  toast(`Ficha guardada: ${RK.flag(country)} ${name}`);
+  renderRanking();
+};
+
 // ---------- Pestañas ----------
 
 function enterGame() {
@@ -170,7 +204,7 @@ function enterGame() {
 
 function switchTab(name) {
   tab = name;
-  for (const t of ['care', 'battle', 'collection', 'shop', 'settings']) $('tab-' + t).hidden = t !== name;
+  for (const t of ['care', 'battle', 'collection', 'shop', 'ranking', 'settings']) $('tab-' + t).hidden = t !== name;
   for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   renderAll();
   window.scrollTo(0, 0);
@@ -186,9 +220,11 @@ function renderAll() {
   if (tab === 'battle') renderLobby();
   if (tab === 'collection') renderDex();
   if (tab === 'shop') renderShop();
+  if (tab === 'ranking') renderRanking();
   if (tab === 'settings') {
     $('btn-test').textContent = game.testMode ? 'Desactivar' : 'Activar';
     $('btn-sound').textContent = isMuted() ? 'Activar' : 'Silenciar';
+    $('btn-music').textContent = music.isOn() ? 'Apagar' : 'Encender';
   }
 }
 
@@ -658,6 +694,7 @@ function startBattle(map) {
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
   battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
   battle.setView(viewFar, true);
+  music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
   $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
@@ -693,6 +730,7 @@ function renderBattle() {
     btn.lastElementChild.textContent = n;
     btn.disabled = !n || !mine || battle.itemUsed;
   });
+  music.tension(battle.phase !== 'over' && (a.hp < a.maxHp * 0.3 || b.hp < b.maxHp * 0.3));   // con alguien al límite, la música aprieta
   moveButtons.forEach(btn => { btn.disabled = !mine || a.fuel <= 0; });
   $('b-view').textContent = viewFar ? 'Ver de cerca' : 'Ver todo el mapa';
   const pw = a.powers[hoverPower >= 0 ? hoverPower : battle.armed];
@@ -711,6 +749,7 @@ function endBattle(win) {
   const p = game.pet, rsp = speciesOf(rival.species);
   const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
   S.save(game);
+  music.stop();
   if (win) sfx.win(); else sfx.lose();
   const hunt = r.egg ? `<p><b>¡Décima victoria contra ${esc(rsp.name)}!</b> Te ganaste su huevo: ya está en tu incubadora.</p>`
     : win && !S.owns(game, rival.species) ? `<p class="muted">Victorias contra ${esc(rsp.name)}: ${Math.min(r.defeats, S.DEFEATS_FOR_EGG)} de ${S.DEFEATS_FOR_EGG} para ganar su huevo.</p>` : '';
@@ -822,10 +861,12 @@ function renderDex() {
 
 $('btn-test').onclick = () => { game.testMode = !game.testMode; S.save(game); renderAll(); };
 $('btn-sound').onclick = () => { setMuted(!isMuted()); renderAll(); sfx.coin(); };
+$('btn-music').onclick = () => { music.setOn(!music.isOn()); renderAll(); sfx.tap(); };
+document.addEventListener('visibilitychange', () => music.pause(document.hidden));
 $('btn-reset').onclick = () => modal({
   title: '¿Empezar de cero?',
   body: '<p>Perderás todas tus criaturas, huevos y monedas. No se puede deshacer.</p>',
-  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
+  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); music.stop(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
 });
 
 // ---------- Bucle y arranque ----------

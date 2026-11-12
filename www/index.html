@@ -32,6 +32,7 @@
         <button data-tab="battle"><i class="ic ic-espadas"></i><span>Combate</span></button>
         <button data-tab="collection"><i class="ic ic-libro"></i><span>Colección</span></button>
         <button data-tab="shop"><i class="ic ic-moneda"></i><span>Tienda</span></button>
+        <button data-tab="ranking"><i class="ic ic-trofeo"></i><span>Ranking</span></button>
         <button data-tab="settings"><i class="ic ic-engranaje"></i><span>Ajustes</span></button>
       </nav>
       <div class="nav-right">
@@ -169,6 +170,26 @@
     </main>
 
     <!-- Ajustes -->
+    <!-- Ranking -->
+    <main id="tab-ranking" class="ranking" hidden>
+      <div class="panel">
+        <h3><i class="ic ic-estrella"></i>Tu ficha</h3>
+        <p class="muted">Así aparecerás en el ranking.</p>
+        <div class="rk-form">
+          <label>Usuario<input id="rk-name" maxlength="16" autocomplete="off" placeholder="3 a 16 letras o números"></label>
+          <label>País<select id="rk-country"></select></label>
+          <button class="btn primary" id="rk-save">Guardar</button>
+        </div>
+        <div id="rk-me" class="rk-me"></div>
+      </div>
+      <div class="panel">
+        <h3><i class="ic ic-trofeo"></i>Ranking mundial</h3>
+        <p id="rk-note" class="rk-note"></p>
+        <div id="rk-sorts" class="rk-sorts"></div>
+        <div id="rk-table" class="rk-table"></div>
+      </div>
+    </main>
+
     <main id="tab-settings" hidden>
       <div class="panel settings">
         <h3><i class="ic ic-engranaje"></i>Ajustes</h3>
@@ -179,6 +200,10 @@
         <div class="setting">
           <div><b>Sonido</b><p class="muted">Efectos al acariciar, comer, entrenar y combatir.</p></div>
           <button class="btn" id="btn-sound"></button>
+        </div>
+        <div class="setting">
+          <div><b>Música</b><p class="muted">Cada mapa de combate tiene su propio tema, y se acelera cuando alguien va justo de vida.</p></div>
+          <button class="btn" id="btn-music"></button>
         </div>
         <div class="setting">
           <div><b>Galería de arte</b><p class="muted">Los tres mapas y las quince criaturas en sus tres etapas.</p></div>
