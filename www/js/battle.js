@@ -88,7 +88,7 @@ export class Battle {
       cds: side.powers.map(() => 0), turns: 0, angle: dir > 0 ? 55 : 125, power: 60, fuel: 0,
       shield: 0, shieldLook: 'burbuja', counter: 0, exposed: 0, poison: null, burn: null,
       frozen: false, frozenNext: false, blind: false, blindNext: false, rooted: false, rootNext: false,
-      clutchUsed: false, hurt: 0, fall: 0, color: ELEMENT_COLOR[side.species.element] || '#fff6d8',
+      clutchUsed: false, hurt: 0, fall: 0, lunge: 0, hitDir: 0, color: ELEMENT_COLOR[side.species.element] || '#fff6d8',
     };
   }
 
@@ -246,6 +246,7 @@ export class Battle {
         age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40,
       });
     }
+    f.lunge = 1;                                      // se abalanza al disparar
     this.phase = 'flying';
     if (pw) sfx.special(); else sfx.shoot();
   }
@@ -318,6 +319,7 @@ export class Battle {
       const d = Math.hypot(f.x - s.x, f.y - f.r - s.y);
       if (d >= s.blast + f.r) continue;
       const k = clamp(1 - (d - f.r) / s.blast, 0, 1), foe = f !== me;
+      f.hitDir = Math.sign(f.x - s.x) || (foe ? Math.sign(f.x - me.x) : 0);   // hacia dónde lo empuja el golpe
       let dmg = s.dmg * (0.3 + 0.7 * k), tag = '';
       if (foe) {                                        // ventaja o desventaja de elemento
         const mult = matchup(me.species.element, f.species.element);
@@ -456,6 +458,7 @@ export class Battle {
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     for (const f of [this.player, this.rival]) {
       f.hurt = Math.max(0, f.hurt - dt);
+      f.lunge = Math.max(0, f.lunge - dt * 3.2);
       if (f.hp <= 0) f.fall = Math.min(1, f.fall + dt * 2.2); // se desploma
       const g = this.groundAt(f.x);
       f.y = f.y < g ? Math.min(g, f.y + 220 * dt) : g;
@@ -696,12 +699,21 @@ export class Battle {
       ctx.strokeStyle = CHARS[f.pet.char].color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.8;
       ctx.beginPath(); ctx.ellipse(0, 0, w * 0.46, 4.5, 0, 0, Math.PI * 2); ctx.stroke();
     }
-    ctx.globalAlpha = dead ? 1 - f.fall * 0.45 : f.hurt > 0 && Math.floor(f.hurt * 30) % 2 ? 0.35 : 1;
-    if (f.frozen) ctx.filter = 'saturate(0.3) brightness(1.3)';
-    const bob = dead ? 0 : Math.round(Math.sin(this.t * 3 + f.x) * 1.2);
+    // Poses por código: respira, se abalanza al disparar, retrocede y se dobla al recibir un golpe,
+    // se agacha al cargar un poder, da pasitos al caminar y salta al ganar.
+    const hk = Math.min(1, f.hurt / 0.35), lk = Math.sin(f.lunge * Math.PI);
+    const won = this.phase === 'over' && !dead, armed = f.isPlayer && this.armed >= 0 && this.canAct();
+    const walking = f.isPlayer && this.moveTarget !== null && this.turn === f;
+    const hop = won ? Math.abs(Math.sin(this.t * 8)) * 12 : walking ? Math.abs(Math.sin(this.t * 14)) * 3 : 0;
+    const breathe = dead || f.frozen ? 0 : Math.sin(this.t * 3 + f.x) * 0.02;
+    ctx.globalAlpha = dead ? 1 - f.fall * 0.45 : 1;
+    ctx.filter = f.frozen ? 'saturate(0.3) brightness(1.3)' : hk > 0.62 ? 'brightness(2.4)' : 'none';
+    ctx.translate(f.hitDir * hk * 7 + f.dir * lk * 8, -hop);
     ctx.scale(f.dir, 1);
     if (dead) ctx.rotate(-f.fall * 1.45);
-    ctx.drawImage(img, -w / 2, -f.h + bob, w, f.h);
+    else ctx.rotate(hk * 0.28 * f.hitDir * f.dir + lk * 0.14 - (armed ? 0.05 : 0));
+    ctx.scale(1 + lk * 0.14 - hk * 0.08 + (armed ? 0.04 : 0), 1 - lk * 0.1 + hk * 0.1 + breathe - (armed ? 0.06 : 0));
+    ctx.drawImage(img, -w / 2, -f.h, w, f.h);
     ctx.restore();
     if (!dead) this.drawStatus(ctx, f, w);
 

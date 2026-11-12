@@ -150,7 +150,8 @@ export class Room {
     if (this.asleep) {
       // Irse a dormir: camina hasta el centro de la sala, se acurruca y se apagan las luces poco a poco.
       b.active = false; b.held = false; this.ptr = null;
-      const bed = this.view.cx, d = bed - c.x;
+      const bedAt = this.hooks.bedX?.();
+      const bed = bedAt && bedAt > this.view.x0 + 120 && bedAt < this.view.x0 + this.view.w - 120 ? bedAt : this.view.cx, d = bed - c.x;
       if (Math.abs(d) > 6 && this.sleepK < 0.05) {
         c.dir = d > 0 ? 1 : -1;
         c.x += clamp(d, -210 * dt, 210 * dt);
@@ -210,7 +211,7 @@ export class Room {
       if ((c.t -= dt) <= 0) { c.mode = 'idle'; c.t = 1.5; }
     } else if ((c.t -= dt) <= 0 && !this.ptr) {
       if (Math.random() < (this.sad ? 0.3 : 0.75)) { c.mode = 'walk'; c.target = rand(lo, hi); }
-      else c.t = rand(1.5, 3.5);
+      else { c.t = rand(1.5, 3.5); if (Math.random() < 0.4) c.dir *= -1; }   // a veces solo mira hacia el otro lado
     }
   }
 
@@ -230,6 +231,7 @@ export class Room {
     ctx.beginPath(); ctx.ellipse(x, FLOOR + 8, w * 0.38 * (1 - Math.min(0.5, lift / 300)), 16, 0, 0, 7); ctx.fill();
     ctx.save();
     ctx.translate(x + (o.lunge || 0) * 46 * o.dir, FLOOR + 10 - lift);
+    if (o.tilt) ctx.rotate(o.tilt);
     const k = this.sleepK;                            // se va acurrucando a medida que se duerme
     const awake = 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012, curled = 0.78 + Math.sin(this.t * 1.6) * 0.035;
     ctx.scale(o.dir * (1 + sq * 0.1 * (1 - k) + 0.09 * k), awake + (curled - awake) * k);
@@ -258,6 +260,10 @@ export class Room {
     ctx.translate(-x0, 0);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.art.bg, 0, 0, SW, SH);
+    const decor = this.mini ? [] : this.hooks.decor?.() || [];
+    const put = d => { const k = d.w / d.img.width; ctx.drawImage(d.img, d.x - d.w / 2, d.y - d.img.height * k, d.w, d.img.height * k); };
+    for (const d of decor) if (d.floor) put(d);                              // alfombra: en el suelo
+    for (const d of decor) if (!d.floor && d.y <= FLOOR + 14) put(d);          // lo que queda detrás de la criatura
     if (this.sleepK > 0 && !this.mini) {              // luces que se apagan y una luna de noche
       ctx.fillStyle = `rgba(6,4,34,${0.58 * this.sleepK})`; ctx.fillRect(x0, 0, vw, SH);
       // Un charco de luz de luna donde duerme
@@ -292,7 +298,8 @@ export class Room {
     } else {
       const b = this.ball, [hx, hy] = this.ballHome();
       if (!b.active) this.drawIcon(ctx, 'pelota', hx, hy - 40, 82);
-      this.drawCreature(ctx, c.x, { dir: c.dir, squash: c.squash, lift: c.lift }, px);
+      const tilt = c.mode === 'pet' ? Math.sin(this.t * 16) * 0.07 : c.mode === 'walk' ? c.dir * 0.05 : c.mode === 'happy' ? Math.sin(this.t * 12) * 0.05 : 0;
+      this.drawCreature(ctx, c.x, { dir: c.dir, squash: c.squash, lift: c.lift, tilt: this.sleepK > 0 ? 0 : tilt }, px);
       if (b.active) {
         ctx.save(); ctx.translate(b.x, b.y - 40); ctx.rotate(b.x / 60);
         this.drawIcon(ctx, 'pelota', 0, 0, 82);
@@ -307,6 +314,12 @@ export class Room {
         ctx.beginPath(); ctx.moveTo(c.x - 14, by + 60); ctx.lineTo(c.x + 14, by + 60); ctx.lineTo(c.x, by + 82); ctx.fill();
         ctx.fillStyle = '#1b1433'; ctx.textAlign = 'center'; ctx.fillText(say, bx + tw / 2, by + 42);
       }
+    }
+
+    if (decor.length) {                               // lo que queda delante de la criatura
+      if (this.sleepK > 0) ctx.filter = `brightness(${1 - 0.5 * this.sleepK})`;
+      for (const d of decor) if (!d.floor && d.y > FLOOR + 14) put(d);
+      ctx.filter = 'none';
     }
 
     // Deseo: una nube de pensamiento con lo que pide

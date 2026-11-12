@@ -15,7 +15,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const TRAIN_ICON = { pot: 'roca', pun: 'diana', agu: 'escudo', agi: 'rayo' };
 
-let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, room;
+let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, decorArt = {}, room;
 let game = null, battle = null, rival = null, tab = 'care', startPick = 0;
 
 const spriteOf = (species, stage) => { const sp = speciesOf(species); return sprites[sp.sheet][sp.row][stage]; };
@@ -75,6 +75,7 @@ function injectArt(eggList) {
   const url = (cv, h) => scaled(cv, Math.min(h, cv.height)).toDataURL();
   let css = '';
   for (const [name, cv] of Object.entries(icons)) css += `.ic-${name}{background-image:url(${url(cv, 96)})}`;
+  for (const [name, cv] of Object.entries(decorArt)) css += `.dc-${name}{background-image:url(${url(cv, 110)})}`;
   for (const [name, cv] of Object.entries(powerIcons)) css += `.pi-${slug(name)}{background-image:url(${url(cv, 96)})}`;
   eggList.forEach((cv, i) => { css += `.egg-${i}{background-image:url(${url(cv, 150)})}`; });
   for (const sp of ROSTER) for (let st = 0; st < 3; st++) css += `.sp-${sp.id}-${st}{background-image:url(${url(spriteOf(sp.id, st), 150)})}`;
@@ -507,6 +508,8 @@ const roomHooks = {
   },
   charColor: () => (game.pet.char ? S.CHARS[game.pet.char].color : ''),
   wish: () => (game.pet.wish ? S.WISHES[game.pet.wish.type].icon : null),
+  decor: () => game.decor.map(id => ({ ...S.DECOR[id], img: decorArt[id] })).filter(d => d.img),
+  bedX: () => (game.decor.includes('cama') ? S.DECOR.cama.x : 0),
 };
 
 // ---------- Combate ----------
@@ -684,18 +687,25 @@ function renderShop() {
     <button class="btn" ${attr}>${price}<i class="ic ic-moneda"></i></button></div>`;
   setHTML($('shop-food'), Object.entries(S.FOODS).map(([id, f]) => good(id, f.name, f.desc, `<small>Tienes ${game.foods[id]}</small>`, `data-buy-food="${id}"`, f.price)).join(''));
   setHTML($('shop-items'), Object.entries(S.ITEMS).map(([id, it]) => good(it.icon, it.name, it.desc, `<small>Tienes ${game.items[id] || 0}</small>`, `data-buy-item="${id}"`, it.price)).join(''));
+  setHTML($('shop-decor'), Object.entries(S.DECOR).map(([id, d]) => {
+    const owned = game.decor.includes(id);
+    return `<div class="good${owned ? ' owned' : ''}"><i class="dc dc-${id}"></i><span><b>${d.name}</b><small>${d.desc}</small><small>${owned ? 'Ya está en tu sala' : ''}</small></span>
+      ${owned ? '' : `<button class="btn" data-buy-decor="${id}">${d.price}<i class="ic ic-moneda"></i></button>`}</div>`;
+  }).join(''));
   setHTML($('shop-egg'), good('huevomas', 'Huevo misterioso', 'Una especie que aún no tienes. Tarda un rato en abrirse.', `<small>Incubando: ${game.eggs.length}</small>`, 'data-buy-egg="1"', S.eggPrice(game)));
 }
 $('tab-shop').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
-  const res = b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem) : b.dataset.buyEgg ? S.buyEgg(game) : null;
+  const res = b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem)
+    : b.dataset.buyDecor ? S.buyDecor(game, b.dataset.buyDecor) : b.dataset.buyEgg ? S.buyEgg(game) : null;
   if (!res) return;
   if (res.error) { toast(res.error); return sfx.error(); }
   sfx.coin();
   S.save(game);
   renderAll();
   if (res.species) toast(`Compraste un huevo de ${speciesOf(res.species).element}.`);
+  if (b.dataset.buyDecor) toast(`${S.DECOR[b.dataset.buyDecor].name}: ya está en tu sala.`);
 };
 
 // ---------- Colección y ajustes ----------
@@ -750,8 +760,8 @@ setInterval(() => {
 
 try {
   let loaded = 0;
-  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 7`; return value; });
-  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid] = await Promise.all([
+  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 8`; return value; });
+  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid] = await Promise.all([
     loadSprites(SHEETS),
     Promise.all(MAPS.map(async m => ({ ...m, img: await loadImage(m.bg) }))),
     loadImage('assets/ui/sala.png'),
@@ -759,6 +769,7 @@ try {
     loadGrid('assets/ui/huevos.png', 4, 4),
     Promise.all(POWER_ICON_SHEETS.map((_, i) => loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true))),
     loadGrid('assets/ui/efectos.png', 4, 4, 'glow'),
+    loadGrid('assets/ui/decoracion.png', 4, 4, true),
   ].map(track));
   sprites = sheetGrids; maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
@@ -766,6 +777,7 @@ try {
     if (names[i].startsWith('@')) icons[names[i].slice(1)] = cv; else powerIcons[names[i]] = cv;   // @ = icono suelto de la interfaz
   }));
   vfxGrid.flat().forEach((cv, i) => { vfx[VFX_ORDER[i]] = cv; });
+  decorGrid.flat().forEach((cv, i) => { decorArt[S.DECOR_ORDER[i]] = cv; });
   despill(vfx.destello);                             // el estallido de luz debe quedar blanco y dorado, sin rosa
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);

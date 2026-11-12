@@ -63,6 +63,42 @@ export const ITEMS = {
   mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 15, icon: 'diana' },
 };
 
+// Decoración de la sala: se compra en la tienda y cada mueble ayuda en algo.
+// x, y = dónde apoya en la sala (imagen de 1536×864); w = ancho con que se dibuja.
+// Los "acogedores" (cozy) hacen que el ánimo baje más despacio; los demás tienen su propio efecto.
+export const DECOR = {
+  alfombra: { name: 'Alfombra', desc: 'Acogedor: el ánimo baja más despacio.', price: 20, cozy: true, floor: true, x: 768, y: 846, w: 440 },
+  cama: { name: 'Cama', desc: 'Dormida recobra energía un 30% más rápido.', price: 45, x: 505, y: 752, w: 215 },
+  cuenco: { name: 'Cuenco', desc: 'La barriga baja un 10% más despacio.', price: 25, x: 900, y: 806, w: 100 },
+  juguetes: { name: 'Baúl de juguetes', desc: 'Jugar le sube 6 de ánimo más.', price: 30, x: 1105, y: 712, w: 175 },
+  muneco: { name: 'Muñeco de entrenamiento', desc: 'Cada entrenamiento da 3 de experiencia más.', price: 50, x: 418, y: 706, w: 140 },
+  trofeo: { name: 'Pedestal de trofeos', desc: 'Ganas un 10% más de monedas en combate.', price: 60, x: 905, y: 606, w: 100 },
+  peluche: { name: 'Peluche', desc: 'Cumplir un deseo da 1 de vínculo más.', price: 35, x: 640, y: 604, w: 95 },
+  musica: { name: 'Caja de música', desc: 'Acogedor: el ánimo baja más despacio.', price: 30, cozy: true, x: 612, y: 814, w: 95 },
+  pecera: { name: 'Pecera', desc: 'Acogedor: el ánimo baja más despacio.', price: 40, cozy: true, x: 250, y: 726, w: 165 },
+  lampara: { name: 'Farol', desc: 'Acogedor: el ánimo baja más despacio.', price: 30, cozy: true, x: 1262, y: 716, w: 78 },
+  planta: { name: 'Planta', desc: 'Acogedor: el ánimo baja más despacio.', price: 25, cozy: true, x: 1395, y: 724, w: 165 },
+  puff: { name: 'Puf', desc: 'Acogedor: el ánimo baja más despacio.', price: 35, cozy: true, x: 1215, y: 822, w: 170 },
+  saco: { name: 'Saco de boxeo', desc: 'Entrenar gasta 5 de energía menos.', price: 45, x: 118, y: 730, w: 150 },
+  libros: { name: 'Libros', desc: 'Gana un 5% más de experiencia.', price: 55, x: 1010, y: 716, w: 92 },
+  torre: { name: 'Torre de juegos', desc: 'Jugar le sube 4 de ánimo más.', price: 40, x: 1466, y: 744, w: 125 },
+  cofre: { name: 'Cofre', desc: 'El regalo diario trae 5 monedas más.', price: 70, x: 772, y: 590, w: 96 },
+};
+export const DECOR_ORDER = Object.keys(DECOR);          // mismo orden que assets/ui/decoracion.png
+const has = (g, id) => !!g.decor?.includes(id);
+// Cada mueble acogedor frena un 6% la bajada de ánimo, hasta un 30%.
+const cozy = g => 1 - 0.06 * Math.min(5, (g.decor || []).filter(id => DECOR[id]?.cozy).length);
+export const trainCost = g => TRAIN_ENERGY - (has(g, 'saco') ? 5 : 0);
+
+export function buyDecor(g, id) {
+  const d = DECOR[id];
+  if (has(g, id)) return { error: 'Eso ya está en tu sala.' };
+  if (g.coins < d.price) return { error: 'No te alcanzan las monedas.' };
+  g.coins -= d.price;
+  g.decor.push(id);
+  return {};
+}
+
 // Misiones diarias: una de cuidado, una de entrenamiento y una de combate.
 // ok(pet) dice si tiene sentido proponerla hoy; on(evento) cuánto avanza con cada cosa que pasa.
 const yes = v => (v ? 1 : 0);
@@ -131,7 +167,7 @@ export function newGame() {
   return attach({
     v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
-    lastTrain: null, testMode: true, items: { pocion: 1, elixir: 0, escudo: 0, mira: 1 }, news: [],
+    lastTrain: null, testMode: true, items: { pocion: 1, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [],
   });
 }
 
@@ -150,6 +186,7 @@ export function load() {
     g.defeats ||= {};                     // partidas guardadas antes de que existieran estas cosas
     g.items ||= { pocion: 1, elixir: 0, escudo: 0, mira: 1 };
     g.news = [];
+    g.decor ||= [];
     for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
     return attach(g);
   } catch {
@@ -177,12 +214,12 @@ export function tick(g, now = Date.now()) {
   const elapsed = now - g.lastTick, h = elapsed / 3600000;
   if (h <= 0) return;
   for (const p of g.pets) {
-    const slow = p.asleep ? 0.5 : 1, hungry = 5 * slow * (p.quirk === 'gloton' ? 1.3 : 1);
-    const badHours = Math.max(0, h - Math.min(p.hunger / hungry, p.mood / (3 * slow)));
+    const slow = p.asleep ? 0.5 : 1, hungry = 5 * slow * (p.quirk === 'gloton' ? 1.3 : 1) * (has(g, 'cuenco') ? 0.9 : 1), sad = 3 * slow * cozy(g);
+    const badHours = Math.max(0, h - Math.min(p.hunger / hungry, p.mood / sad));
     const starving = Math.max(0, h - p.hunger / hungry); // horas con la barriga a cero
     p.hunger = clamp(p.hunger - hungry * h);
-    p.mood = clamp(p.mood - 3 * slow * h - 4 * starving);
-    p.energy = g.testMode ? 100 : clamp(p.energy + (p.asleep ? 40 : 12) * (p.quirk === 'dormilon' ? 1.5 : 1) * h); // en modo prueba no se cansa
+    p.mood = clamp(p.mood - sad * h - 4 * starving);
+    p.energy = g.testMode ? 100 : clamp(p.energy + (p.asleep ? 40 * (has(g, 'cama') ? 1.3 : 1) : 12) * (p.quirk === 'dormilon' ? 1.5 : 1) * h); // en modo prueba no se cansa
     if (badHours > 0) { p.bond = clamp(p.bond - badHours); p.axes.descuido += badHours * 0.4; }
     if (p.asleep) {
       if (p.restUntil > now) p.restUntil = Math.max(now, p.restUntil - elapsed); // el descanso cuenta doble
@@ -216,7 +253,7 @@ export function claimDaily(g) {
   const yesterday = new Date(Date.now() - 864e5).toDateString();
   g.streak = g.lastDaily === yesterday ? g.streak + 1 : 1;
   g.lastDaily = today();
-  const coins = 10 + Math.min(g.streak, 7) * 2;
+  const coins = 10 + Math.min(g.streak, 7) * 2 + (has(g, 'cofre') ? 5 : 0);
   g.coins += coins;
   g.pet.bond = clamp(g.pet.bond + 3);
   return { coins, streak: g.streak };
@@ -246,7 +283,7 @@ function grant(g, type) {
   if (type === 'pet' && ++w.got < 5) return false;
   p.wish = null;
   p.nextWish = Date.now() + wishGap(g.testMode);
-  p.bond = clamp(p.bond + 3); p.mood = clamp(p.mood + 8); p.axes.carino += 1;
+  p.bond = clamp(p.bond + 3 + (has(g, 'peluche') ? 1 : 0)); p.mood = clamp(p.mood + 8); p.axes.carino += 1;
   log(g, `Cumpliste su deseo: ${WISHES[type].text.toLowerCase()}.`);
   news(g, `¡Deseo cumplido! Sube el vínculo con ${p.name}.`);
   track(g, { type: 'wish' });
@@ -341,7 +378,7 @@ export function addExp(g, amount) {
   const p = g.pet, sp = speciesOf(p.species);
   const gains = [];
   let levels = 0;
-  p.exp += Math.round(amount * (p.quirk === 'listo' ? 1.1 : 1));
+  p.exp += Math.round(amount * (p.quirk === 'listo' ? 1.1 : 1) * (has(g, 'libros') ? 1.05 : 1));
   while (p.exp >= expNeeded(p.level)) {
     p.exp -= expNeeded(p.level);
     p.level++; levels++;
@@ -415,7 +452,7 @@ export function play(g) {
   if (p.asleep) return { error: 'Zzz…' };
   if (p.energy < PLAY_ENERGY) return { error: 'Estoy agotado…' };
   p.energy -= PLAY_ENERGY;
-  p.mood = clamp(p.mood + (p.quirk === 'jugueton' ? 28 : 18));
+  p.mood = clamp(p.mood + (p.quirk === 'jugueton' ? 28 : 18) + (has(g, 'juguetes') ? 6 : 0) + (has(g, 'torre') ? 4 : 0));
   if (p.playsToday < 5) { p.bond = clamp(p.bond + 1); p.axes.carino += 1; }
   p.playsToday++;
   track(g, { type: 'catch' });
@@ -432,7 +469,7 @@ export function canTrain(g) {
   const p = g.pet;
   if (p.asleep) return 'Zzz…';
   if (trainsLeft(g) <= 0) return 'Ya entrené 3 veces hoy.';
-  if (p.energy < TRAIN_ENERGY) return 'Estoy agotado…';
+  if (p.energy < trainCost(g)) return 'Estoy agotado…';
   if (p.hunger < 10) return 'Tengo demasiada hambre.';
   return '';
 }
@@ -441,7 +478,7 @@ export function train(g, stat, score) {
   const p = g.pet;
   const grade = score >= 0.8 ? 'perfecto' : score >= 0.4 ? 'bien' : 'flojo';
   const wasLowest = p.stats[stat] === Math.min(...STATS.map(k => p.stats[k]));
-  p.energy = clamp(p.energy - TRAIN_ENERGY);
+  p.energy = clamp(p.energy - trainCost(g));
   p.hunger = clamp(p.hunger - 8);
   p.mood = clamp(p.mood - (grade === 'flojo' ? 8 : 4));
   p.trainsToday++;
@@ -451,7 +488,7 @@ export function train(g, stat, score) {
   g.lastTrain = { stat, grade, gained, t: Date.now() };
   track(g, { type: 'train', stat, grade, gained, wasLowest });
   grant(g, 'train');
-  return { grade, gained, up: addExp(g, { perfecto: 12, bien: 8, flojo: 4 }[grade]) };
+  return { grade, gained, up: addExp(g, { perfecto: 12, bien: 8, flojo: 4 }[grade] + (has(g, 'muneco') ? 3 : 0)) };
 }
 
 // --- Carácter y evolución ---
@@ -580,7 +617,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   if (!g.seen.includes(rival.species)) g.seen.push(rival.species);
   if (win) {
     exp = 24 + rival.level * 5;
-    coins = 8 + rival.level * 2;
+    coins = Math.round((8 + rival.level * 2) * (has(g, 'trofeo') ? 1.1 : 1));
     g.coins += coins; g.wins++;
     p.mood = clamp(p.mood + 10); p.bond = clamp(p.bond + 2);
     g.defeats[rival.species] = (g.defeats[rival.species] || 0) + 1;
