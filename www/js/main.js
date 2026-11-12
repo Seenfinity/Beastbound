@@ -2,11 +2,12 @@
 
 import * as S from './state.js';
 import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
-import { loadSprites, loadGrid, loadImage, scaled } from './sprites.js';
+import { loadSprites, loadGrid, loadImage, scaled, despill } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
 import { MINI_INFO } from './minigames.js';
 import { sfx, isMuted, setMuted } from './sfx.js';
+import { playEvolution } from './evolution.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -238,10 +239,11 @@ function renderCare() {
   // Evolución
   const evo = S.evolveStatus(game);
   room.evolveReady = !!evo?.ready;
+  $('btn-evolve').hidden = !evo?.ready || !!room.mini;
   setHTML($('evo-line'), STAGES.map((name, i) =>
     `<div class="step ${i < p.stage ? 'past' : i === p.stage ? 'now' : 'future'}"><i class="sp sp-${p.species}-${i}"></i>${name}</div>`).join('<span class="arrow">›</span>'));
   $('evo-text').textContent = !evo ? 'Ya está en su forma Final.'
-    : evo.ready ? `¡Lista! Mantén pulsado sobre ${p.name} para que evolucione.`
+    : evo.ready ? `¡${p.name} puede evolucionar! Pulsa el botón dorado de la sala.`
     : `Siguiente: ${STAGES[p.stage + 1]} con nivel ${evo.req.level}` + (game.testMode ? '.' : ` y ${evo.req.days} días de vida${evo.okTime ? '' : ` (faltan ${evo.daysLeft})`}.`);
 
   const tags = list => (list.length ? list.map(e => `<span class="tag" style="--c:${ELEMENT_COLOR[e]}">${e}</span>`).join(' ') : '—');
@@ -269,7 +271,7 @@ function renderCare() {
     : rest ? `${p.name} se está recuperando del combate. Si la acuestas a dormir tarda la mitad.`
     : !p.favKnown ? 'Prueba las tres comidas: una es su favorita y otra la odia.'
     : p.bond < 30 ? 'Con el vínculo bajo puede no obedecerte en combate. Acaríciala y juega con ella.'
-    : evo?.ready ? `Mantén el dedo sobre ${p.name} para que evolucione.`
+    : evo?.ready ? `${p.name} está lista para evolucionar: pulsa el botón dorado.`
     : 'Cuanto mejor cuidada y más unida a ti, más MP tiene para sus poderes.';
 }
 
@@ -423,24 +425,35 @@ function buildTray() {
   window.addEventListener('pointercancel', end);
 }
 
+// Evolución: se guarda cómo estaba, se evoluciona y se reproduce la secuencia con lo que ha cambiado.
 function doEvolve() {
-  const p = game.pet;
+  if (!S.evolveStatus(game)?.ready || room.mini) return;
+  const p = game.pet, sp = speciesOf(p.species);
+  const stats0 = { ...p.stats }, prof0 = S.profile(p);
   const res = S.evolve(game);
-  commit();
-  sfx.evolve();
-  const c = S.CHARS[res.char], sp = speciesOf(p.species);
+  S.save(game);
+  const prof1 = S.profile(p), c = S.CHARS[res.char];
   const redeemed = res.prevChar === 'resentido' && res.char !== 'resentido';
-  setTimeout(() => modal({
-    title: `¡${p.name} evolucionó a ${STAGES[p.stage]}!`,
-    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage - 1}"></canvas>Antes</figure><span class="versus">→</span><figure><canvas data-sprite="${p.species}:${p.stage}"></canvas>Ahora</figure></div>
-      <p>Carácter: <span class="tag" style="--c:${c.color}">${c.name}</span></p>
-      <p>${redeemed ? 'Dejó atrás el rencor. ' : ''}${c.why} <b>En combate:</b> ${c.desc}</p>
-      ${p.stage === 1 ? `<p>Ya puede usar su especial: <b>${esc(sp.special.name)}</b>. ${esc(sp.special.desc)}</p>` : ''}
-      ${res.mastery && p.stage === 2 ? `<p><b>${S.MASTERY[res.mastery].name}.</b> ${S.MASTERY[res.mastery].desc}</p>` : ''}
-      <p class="muted">+1 en todas las estadísticas.</p>`,
-    actions: [{ label: 'Seguir', cls: 'primary', fn: () => room.cheer() }],
-  }), 550);
+  const extras = [];
+  if (p.stage === 2) {                                // en la forma Final llega su poder propio y su maestría
+    extras.push(`<div class="evo-new"><i class="pi pi-${slug(sp.special.name)}"></i><span><b>Nuevo poder: ${esc(sp.special.name)}</b>${esc(sp.special.desc)}</span></div>`);
+    if (res.mastery) extras.push(`<div class="evo-new"><i class="ic ic-trofeo" style="width:40px;height:40px"></i><span><b>${S.MASTERY[res.mastery].name}</b>${S.MASTERY[res.mastery].desc}</span></div>`);
+  }
+  $('btn-evolve').hidden = true;
+  playEvolution({
+    name: p.name, stage: STAGES[p.stage], color: ELEMENT_COLOR[sp.element], burst: vfx.destello,
+    before: spriteOf(p.species, p.stage - 1), after: spriteOf(p.species, p.stage),
+    stats: [
+      ...Object.keys(S.STAT_NAMES).map(k => ({ label: S.STAT_NAMES[k], before: stats0[k], after: p.stats[k] })),
+      { label: 'Vida', before: prof0.maxHp, after: prof1.maxHp },
+      { label: 'MP', before: prof0.maxMp, after: prof1.maxMp },
+    ],
+    char: { name: c.name, color: c.color, why: (redeemed ? 'Dejó atrás el rencor. ' : '') + c.why, desc: c.desc },
+    extras,
+    onDone: () => { renderAll(); room.cheer(); },
+  });
 }
+$('btn-evolve').onclick = doEvolve;
 
 const roomHooks = {
   onStroke() { S.stroke(game); renderCare(); },
@@ -648,7 +661,7 @@ function frame(now) {
     if (tab === 'care') {
       room.update(dt); room.draw();
       const busy = !!room.mini;                       // durante un minijuego se despeja la sala
-      if ($('tray').hidden !== busy) { $('tray').hidden = busy; $('plate').hidden = busy; }
+      if ($('tray').hidden !== busy) { $('tray').hidden = busy; $('plate').hidden = busy; if (busy) $('btn-evolve').hidden = true; }
     }
     else if (tab === 'battle' && battle) { battle.update(dt); battle.draw(); renderBattle(); }
   }
@@ -676,7 +689,7 @@ try {
     loadGrid('assets/ui/objetos.png', 4, 4),
     loadGrid('assets/ui/huevos.png', 4, 4),
     Promise.all(POWER_ICON_SHEETS.map((_, i) => loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true))),
-    loadGrid('assets/ui/efectos.png', 4, 4, true),
+    loadGrid('assets/ui/efectos.png', 4, 4, 'glow'),
   ].map(track));
   sprites = sheetGrids; maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
@@ -684,10 +697,11 @@ try {
     if (names[i].startsWith('@')) icons[names[i].slice(1)] = cv; else powerIcons[names[i]] = cv;   // @ = icono suelto de la interfaz
   }));
   vfxGrid.flat().forEach((cv, i) => { vfx[VFX_ORDER[i]] = cv; });
+  despill(vfx.destello);                             // el estallido de luz debe quedar blanco y dorado, sin rosa
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: pet => spriteOf(pet.species, pet.stage) }, roomHooks);
   buildTray();
-  window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; } }; // para depurar desde la consola
+  window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, vfx }; // para depurar desde la consola
   game = S.load();
   if (game?.pet) { S.tick(game); enterGame(); } else showStart();
   requestAnimationFrame(frame);

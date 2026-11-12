@@ -38,9 +38,31 @@ export function keyOut(img, smart = false) {
       if (k < W * (H - 1)) push(k + W);
     }
     for (let i = 0; i < p.length; i += 4) if (pure(i)) p[i + 3] = 0;
+    if (smart === 'glow') {
+      // Brillos: los bordes suaves quedaron mezclados con el magenta del fondo (se ven rosados).
+      // Se deshace la mezcla: pasan a ser blanco semitransparente.
+      for (let i = 0; i < p.length; i += 4) {
+        const r = p[i], g = p[i + 1], b = p[i + 2], m = Math.min(r, b);
+        if (p[i + 3] && m > 140 && Math.abs(r - b) < 30 && g < m - 30) { p[i + 3] = Math.round((255 * g) / m); p[i] = p[i + 1] = p[i + 2] = 255; }
+      }
+    }
   }
   ctx.putImageData(d, 0, 0);
   return c;
+}
+
+// Limpia a fondo el tinte magenta de un brillo ya recortado (para destellos blancos o dorados).
+export function despill(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const d = ctx.getImageData(0, 0, canvas.width, canvas.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) {
+    const r = p[i], g = p[i + 1], b = p[i + 2], m = Math.min(r, b);
+    if (!p[i + 3] || b <= g + 25 || m <= g) continue;      // solo lo que tira a rosa o morado
+    p[i + 3] = Math.round((p[i + 3] * g) / m);               // cuanto más magenta, más transparente
+    p[i] = Math.max(r, 255 - (255 - r) * 0.4); p[i + 1] = Math.max(g, 235); p[i + 2] = Math.min(b, 200);
+  }
+  ctx.putImageData(d, 0, 0);
+  return canvas;
 }
 
 // Recorta una celda [x, y, ancho, alto] y la ajusta al contorno del dibujo.

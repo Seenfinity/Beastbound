@@ -58,6 +58,7 @@
         <button class="plate" id="plate"><b id="pet-name"></b><small id="pet-sub"></small></button>
         <div class="level"><b id="pet-level"></b><div class="bar exp"><i id="exp-fill"></i></div><small id="exp-text"></small></div>
         <div id="event-card" class="event" hidden><p id="event-text"></p><div id="event-choices"></div></div>
+        <button id="btn-evolve" class="evolve-btn" hidden>¡Evolucionar!</button>
         <div class="tray" id="tray"></div>
       </section>
 
@@ -175,6 +176,11 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="evo" class="evo" hidden>
+    <canvas id="evo-canvas"></canvas>
+    <div id="evo-ui" class="evo-ui" hidden></div>
   </div>
 
   <div id="modal" class="modal" hidden>

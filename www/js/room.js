@@ -155,13 +155,12 @@ export class Room {
       return;
     }
 
-    // Mantener pulsado para evolucionar
     const p = this.ptr;
     if (p && p.on === 'pet') p.time += dt;
-    if (p && p.on === 'pet' && p.moved < 28 && this.evolveReady && p.time > 0.3) {
-      this.hold += dt / 1.5;
-      if (this.hold >= 1) { this.hold = 0; this.ptr = null; this.flash = 1; this.hooks.onEvolve(); }
-    } else this.hold = Math.max(0, this.hold - dt * 2);
+    if (this.evolveReady && (this.glint = (this.glint || 0) - dt) <= 0) {   // lista para evolucionar: suelta destellos
+      this.glint = 0.22;
+      this.parts.push({ icon: 'estrella', x: c.x + rand(-this.size * 0.5, this.size * 0.5), y: FLOOR - rand(0, this.size * 0.8), vx: rand(-15, 15), vy: rand(-150, -70), life: 0, max: rand(0.7, 1.2), size: rand(18, 34) });
+    }
 
     // Pelota
     if (b.active && !b.held) {
@@ -281,11 +280,7 @@ export class Room {
         this.drawIcon(ctx, 'pelota', 0, 0, 82);
         ctx.restore();
       }
-      if (this.hold > 0) {                                // anillo de carga de la evolución
-        ctx.strokeStyle = '#ffd76a'; ctx.lineWidth = 14; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.arc(c.x, FLOOR - this.size * 0.5, this.size * 0.7, -Math.PI / 2, -Math.PI / 2 + this.hold * Math.PI * 2); ctx.stroke();
-      }
-      const say = this.bubble?.text || (this.evolveReady && !this.hold && !this.asleep ? 'Mantén pulsado sobre mí' : '');
+      const say = this.bubble?.text || (this.evolveReady && !this.asleep ? '¡Siento que voy a evolucionar!' : '');
       if (say) {
         ctx.font = '800 30px system-ui, sans-serif';
         const tw = ctx.measureText(say).width + 48, bx = clamp(c.x - tw / 2, x0 + 12, x0 + vw - tw - 12), by = FLOOR - this.size - 96 - c.lift * 0.4;

@@ -382,8 +382,8 @@ export function profile(pet) {
   const resentful = pet.char === 'resentido';
   return {
     maxHp: Math.round(70 + s.agu * 7 + pet.stage * 10),
-    // MP para los poderes: sube con el nivel y con lo bien cuidada y unida a ti que esté.
-    maxMp: Math.round(12 + pet.level * 2 + (pet.hunger + pet.mood) / 20 + pet.bond / 10),
+    // MP para los poderes: sube con el nivel, con cada evolución y con lo bien cuidada y unida a ti que esté.
+    maxMp: Math.round(12 + pet.level * 2 + pet.stage * 4 + (pet.hunger + pet.mood) / 20 + pet.bond / 10),
     mpRegen: pet.mood > 70 ? 6 : 5,
     dmg: 22 * (1 + s.pot * 0.04) * condition * (resentful ? 1.12 : 1),
     guide: Math.round((8 + s.pun * 2) * (pet.char === 'astuto' ? 1.6 : 1) * (pet.bond >= 50 ? 1.2 : 1)),
