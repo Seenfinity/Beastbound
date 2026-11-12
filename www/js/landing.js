@@ -139,7 +139,47 @@ async function buildDuel() {
   else requestAnimationFrame(frame);
 }
 
+// ---------- La ilustración de portada, con vida ----------
+// Coordenadas sobre la ilustración original (1536 × 864). Las luces laten, los huevos se mecen y la cría respira.
+const ART = { w: 1536, h: 864 };
+const GLOWS = [   // x, y, ancho, proporción, color, clase
+  [1000, 118, 300, 3.2, '#ffd98a', ''], [617, 290, 200, 3, '#ffd98a', ''], [1412, 270, 220, 3, '#ffe2a8', ''],              // lámparas de las cúpulas
+  [592, 95, 110, 1, '#ffb347', 'flame'], [1500, 130, 90, 1, '#ffb347', 'flame'], [18, 150, 90, 1, '#ffb347', 'flame'],       // farolillos
+  [430, 425, 70, 1, '#ffb347', 'flame'], [1245, 460, 64, 1, '#ffb347', 'flame'], [466, 215, 90, 1, '#b06bff', ''],
+  [205, 70, 150, 1, '#cfd8ff', ''], [108, 610, 80, 1, '#b06bff', ''], [345, 598, 80, 1, '#6fd8ff', ''],                     // luna y cristales
+  [752, 747, 70, 1, '#7fe9ff', ''], [975, 772, 76, 1, '#7fe9ff', ''], [1207, 752, 70, 1, '#7fe9ff', ''],                    // luces de las bases
+  [466, 667, 56, 1, '#7fe9ff', ''], [590, 684, 60, 1, '#7fe9ff', ''], [1270, 683, 56, 1, '#7fe9ff', ''], [1405, 702, 62, 1, '#7fe9ff', ''],
+  [617, 505, 300, .9, '#ff9a2e', ''], [1412, 510, 300, .9, '#8fd0ff', ''],                                                   // el brillo de cada huevo
+];
+const PIECES = [  // x0, y0, x1, y1, clase, duración, retraso
+  [500, 380, 735, 620, 'egg', 2.8, 0], [1300, 380, 1524, 632, 'egg', 3.3, -1.2], [792, 205, 1208, 700, 'baby', 0, 0],
+];
+function buildArt() {
+  const art = $('hero-art'), pct = (v, of) => `${(v / of) * 100}%`, bits = [];
+  for (const [x0, y0, x1, y1, cls, t, d] of PIECES) {
+    const w = x1 - x0, h = y1 - y0;
+    bits.push(`<i class="piece ${cls}" style="left:${pct(x0, ART.w)};top:${pct(y0, ART.h)};width:${pct(w, ART.w)};height:${pct(h, ART.h)};background-size:${(ART.w / w) * 100}% ${(ART.h / h) * 100}%;background-position:${(x0 / (ART.w - w)) * 100}% ${(y0 / (ART.h - h)) * 100}%;--t:${t}s;--d:${d}s"></i>`);
+  }
+  GLOWS.forEach(([x, y, w, r, c, cls], i) => bits.push(`<i class="glow ${cls}" style="--x:${pct(x, ART.w)};--y:${pct(y, ART.h)};--w:${pct(w, ART.w)};--r:${r};--c:${c};--t:${(2.2 + (i * 0.37) % 1.9).toFixed(2)}s;--d:${(-(i * 0.71) % 3).toFixed(2)}s"></i>`));
+  for (let i = 0; i < 18; i++) bits.push(`<i class="spark" style="--x:${pct(rand(810, 1190), ART.w)};--y:${pct(rand(185, 640), ART.h)};--s:${rand(0.7, 1.7).toFixed(2)}%;--t:${rand(1.8, 3.6).toFixed(2)}s;--d:${(-rand(0, 3.5)).toFixed(2)}s"></i>`);
+  art.innerHTML = bits.join('');
+  // La capa se coloca igual que lo haría un fondo «cover», para que todo lo de encima case con el dibujo.
+  const hero = art.parentElement, narrow = matchMedia('(max-width: 860px)');
+  const place = () => {
+    const W = hero.clientWidth, H = hero.clientHeight;
+    let w, h, x, y;
+    if (narrow.matches) { h = innerHeight * 0.62; w = (h * ART.w) / ART.h; if (w < W) { w = W; h = (w * ART.h) / ART.w; } x = (W - w) * 0.66; y = 0; }
+    else { const k = Math.max(W / ART.w, H / ART.h); w = ART.w * k; h = ART.h * k; x = (W - w) * 0.62; y = (H - h) * 0.5; }
+    Object.assign(art.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+    art.classList.add('placed');
+  };
+  place();
+  new ResizeObserver(place).observe(hero);
+  addEventListener('resize', place);
+}
+
 // ---------- Arranque ----------
+buildArt();
 buildRooms();
 follow(ROSTER.find(r => r.id === 'draconoid'));
 buildDuel().catch(err => { console.error(err); $('duel').closest('.arena').classList.add('failed'); });
