@@ -238,7 +238,8 @@ function renderCare() {
   renderTray();
 
   // Momento de crianza
-  const ev = S.currentEvent(game), card = $('event-card');
+  if (!eventOpen && Date.now() - lastInput >= idleNeed && !game.pet.asleep) eventOpen = !!S.currentEvent(game);
+  const ev = eventOpen ? S.currentEvent(game) : null, card = $('event-card');
   card.hidden = !ev || !!room.mini;
   if (ev && card.dataset.id !== ev.id) {
     card.dataset.id = ev.id;
@@ -374,6 +375,7 @@ $('event-choices').onclick = e => {
   if (!b) return;
   const res = S.resolveEvent(game, +b.dataset.choice);
   if (!res) return;
+  eventOpen = false; idleNeed = idleGap();
   $('event-card').dataset.id = '';
   commit();
   room.say(res.text, 3.5);
@@ -413,6 +415,10 @@ $('plate').onclick = () => {
 
 // Despensa: la comida que tienes. Se abre con el botón «Comida»; se arrastra hasta la criatura (o se toca para dársela).
 let trayOpen = false;
+// Momentos de crianza: solo salen cuando llevas un buen rato (10-15 min) con el juego abierto sin tocar nada.
+const idleGap = () => (10 + Math.random() * 5) * 60e3;
+let lastInput = Date.now(), idleNeed = idleGap(), eventOpen = false;
+for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, () => { lastInput = Date.now(); }, { capture: true, passive: true });
 function renderTray() {
   const owned = Object.keys(S.FOODS).filter(id => game.foods[id] > 0);
   setHTML($('tray'), owned.map(id => `<div class="slot" title="${S.FOODS[id].name}: ${S.FOODS[id].desc}"><i class="ic ic-${id}" data-food="${id}"></i><b>${game.foods[id]}</b></div>`).join('')
@@ -574,7 +580,15 @@ function challenge(species = '') {
 $('btn-find').onclick = () => challenge();
 $('rivals').onclick = e => { const b = e.target.closest('[data-rival]'); if (b && !b.disabled) challenge(b.dataset.rival); };
 
-let powerButtons = [], itemButtons = [], hoverItem = '';
+let powerButtons = [], itemButtons = [], moveButtons = [], hoverItem = '';
+// Vista del combate: lejos (se ve todo el campo) o cerca. Se recuerda entre partidas.
+let viewFar = true;
+try { viewFar = localStorage.getItem('petbound-view') !== 'near'; } catch { /* sin almacenamiento */ }
+function setView(far) {
+  viewFar = far;
+  try { localStorage.setItem('petbound-view', far ? 'far' : 'near'); } catch { /* sin almacenamiento */ }
+  battle?.setView(far);
+}
 function startBattle(map) {
   const p = game.pet;
   p.energy -= S.FIGHT_ENERGY;
@@ -602,6 +616,8 @@ function startBattle(map) {
   const box = $('field').getBoundingClientRect(), tops = [$('b-powers'), $('b-items')].map(el => el.getBoundingClientRect()).filter(r => r.height).map(r => r.top);
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
   battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
+  battle.setView(viewFar, true);
+  moveButtons = [...document.querySelectorAll('#b-move .mv')];
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
   $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
   $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
@@ -636,6 +652,8 @@ function renderBattle() {
     btn.lastElementChild.textContent = n;
     btn.disabled = !n || !mine || battle.itemUsed;
   });
+  moveButtons.forEach(btn => { btn.disabled = !mine || a.fuel <= 0; });
+  $('b-view').textContent = viewFar ? 'Ver de cerca' : 'Ver todo el mapa';
   const pw = a.powers[hoverPower >= 0 ? hoverPower : battle.armed];
   $('b-hint').textContent = hoverItem ? `${S.ITEMS[hoverItem].name}: ${S.ITEMS[hoverItem].desc} Uno por turno; no gasta el disparo.`
     : pw && hoverPower >= 0 ? `${pw.name} (${pw.mp} MP): ${pw.desc}`
@@ -644,7 +662,8 @@ function renderBattle() {
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
     : a.blind ? 'Cegado: este turno no ves la guía de tiro.'
     : a.rooted ? 'Inmóvil: este turno no puedes moverte.'
-    : 'Arrastra hacia atrás y suelta para disparar · Toca el suelo para moverte · Toca el minimapa para mirar el campo';
+    : a.fuel <= 0 ? 'Arrastra hacia atrás y suelta para disparar. Ya no te quedan pasos este turno.'
+    : `Arrastra hacia atrás y suelta para disparar · Pasos cortos: flechas ◀ ▶ o toca a un lado (te quedan ${battle.stepsLeft()})${viewFar ? '' : ' · Toca el minimapa para mirar'}`;
 }
 
 function endBattle(win) {
@@ -676,6 +695,23 @@ field.addEventListener('pointerdown', e => { if (battle) { field.setPointerCaptu
 field.addEventListener('pointermove', e => { if (battle) battle.pullMove(...toWorld(e)); });
 field.addEventListener('pointerup', () => battle?.pullEnd());
 field.addEventListener('pointercancel', () => { if (battle) { battle.pull = null; battle.pan = false; } });
+field.addEventListener('wheel', e => { if (battle) { e.preventDefault(); setView(e.deltaY > 0); } }, { passive: false });   // rueda: alejar o acercar
+$('b-view').onclick = () => { setView(!viewFar); sfx.tap(); };
+// Pasos: un toque da un paso corto; mantener pulsado sigue andando. También con las flechas del teclado.
+$('b-move').addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-move]');
+  if (!b || !battle) return;
+  e.preventDefault();
+  battle.nudge(+b.dataset.move, true);
+});
+for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, () => battle?.release());
+window.addEventListener('keydown', e => {
+  if (!battle || tab !== 'battle' || e.target.closest?.('input, textarea')) return;
+  const dir = e.key === 'ArrowLeft' || e.key === 'a' ? -1 : e.key === 'ArrowRight' || e.key === 'd' ? 1 : 0;
+  if (dir) { e.preventDefault(); if (!e.repeat) battle.nudge(dir, true); }
+  else if (e.key === 'v' && !e.repeat) setView(!viewFar);
+});
+window.addEventListener('keyup', e => { if (['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(e.key)) battle?.release(); });
 $('b-items').addEventListener('pointerover', e => { hoverItem = e.target.closest('[data-item]')?.dataset.item || ''; });
 $('b-items').addEventListener('pointerleave', () => { hoverItem = ''; });
 $('b-items').onclick = e => {

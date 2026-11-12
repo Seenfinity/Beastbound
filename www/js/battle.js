@@ -8,6 +8,7 @@ import { sfx } from './sfx.js';
 
 export const W = 640;                   // ancho de lo que cabe en pantalla, en unidades de juego (el alto depende de la pantalla)
 export const WORLD = 1200;              // ancho del campo entero: la cámara lo recorre
+const STEP_LEN = 16;                    // lo que avanza un paso corto
 const SKY = 240;                        // cielo por encima de lo que cabe en pantalla, para ver los tiros altos
 const GRAVITY = 300, WIND_K = 5, STEP = 1 / 120;
 export const TURN_TIME = 30;            // segundos para apuntar y disparar; si se acaban, se pierde el turno
@@ -98,7 +99,9 @@ export class Battle {
     this.cam = { x: clamp(this.rival.x - W / 2, 0, WORLD - W), y: clamp(this.rival.y - (this.VH - pad) * 0.62, 0, H - this.VH) };
     this.look = null; this.pan = false; this.intro = 1.3;
     this.t = 0; this.acc = 0; this.shake = 0; this.flash = 0; this.wind = 0;
-    this.pull = null; this.armed = -1; this.moveTarget = null; this.volley = null;
+    this.pull = null; this.armed = -1; this.volley = null;
+    this.stepLeft = 0; this.stepDir = 1; this.hold = false;   // pasos cortos del jugador
+    this.far = false; this.zoom = 1;                 // vista lejana (todo el campo) o cercana
     this.banner = null; this.ended = false;
     this.setupHazards(map.hazards || {});
     this.startTurn(this.player);
@@ -191,19 +194,37 @@ export class Battle {
     const w = 180, floor = this.H - this.pad, y0 = Math.max(0, floor - 480), k = w / WORLD;
     return { x: (W - w) / 2, y: 6, w, h: (floor - y0) * k, k, y0 };
   }
-  inMini(vx, vy) { const m = this.mini(); return vx > m.x - 6 && vx < m.x + m.w + 6 && vy > m.y - 6 && vy < m.y + m.h + 8; }
+  miniOn() { return this.zoom > 0.8; }
+  inMini(vx, vy) { const m = this.mini(); return this.miniOn() && vx > m.x - 6 && vx < m.x + m.w + 6 && vy > m.y - 6 && vy < m.y + m.h + 8; }
   lookAt(vx) { const m = this.mini(); this.look = { x: clamp((vx - m.x) / m.k, 0, WORLD) }; }
 
+  // Vista lejana (se ve el campo entero) o cercana (la cámara sigue la acción).
+  setView(far, instant = false) {
+    this.far = far; this.look = null;
+    if (far) this.intro = 0;
+    if (instant) { this.zoom = far ? W / WORLD : 1; this.updateCam(1); }
+  }
+
+  // Pasos cortos: cada toque avanza un poco; si se mantiene pulsado, sigue andando.
+  nudge(dir, hold = false) {
+    if (!this.canAct()) return;
+    const f = this.player;
+    this.look = null; this.intro = 0; this.pull = null;
+    if (f.fuel <= 0) { if (!this.hold) this.note(f, f.rooted ? 'No puede moverse' : 'Sin pasos este turno', '#9aa0c8', 12); return; }
+    this.stepDir = dir; this.stepLeft = STEP_LEN; this.hold = hold;
+  }
+  release() { this.hold = false; }
+  stepsLeft(f = this.player) { return Math.ceil(f.fuel / STEP_LEN - 0.05); }
+
   // Tirachinas: se arrastra hacia atrás desde cualquier punto y se suelta para disparar.
-  // Un toque sin arrastrar hace que la criatura camine hacia ese punto.
+  // Un toque sin arrastrar da un paso corto hacia ese lado.
   // Las coordenadas son las de la pantalla (0..W, 0..VH); aquí se pasan al campo.
   pullStart(vx, vy) {
     this.intro = 0;
     if (this.inMini(vx, vy)) { this.pan = true; this.pull = null; return this.lookAt(vx); }
     if (!this.canAct()) return;
     this.look = null;
-    this.pull = { sx: vx, sy: vy, x: vx, y: vy, wx: vx + this.cam.x, aiming: false };
-    this.moveTarget = null;
+    this.pull = { sx: vx, sy: vy, x: vx, y: vy, wx: vx / this.zoom + this.cam.x, aiming: false };
   }
   pullMove(vx, vy) {
     if (this.pan) return this.lookAt(vx);
@@ -225,7 +246,7 @@ export class Battle {
     this.pull = null;
     if (!p || !this.canAct()) return;
     if (p.aiming) { if (this.player.power > 8) this.fire(this.armed); }
-    else this.moveTarget = clamp(p.wx, 14, WORLD - 14);
+    else if (Math.abs(p.wx - this.player.x) > 6) this.nudge(p.wx > this.player.x ? 1 : -1);
   }
   // Usa un objeto de la mochila: uno por turno y sin gastar el turno. Devuelve si se pudo usar.
   useItem(id) {
@@ -289,6 +310,7 @@ export class Battle {
         age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40, style,
       });
     }
+    this.stepLeft = 0; this.hold = false;
     f.lunge = 1;                                      // se abalanza al disparar
     this.phase = 'flying';
     if (pw) sfx.special(); else sfx.shoot();
@@ -544,6 +566,7 @@ export class Battle {
     }
     this.fx = this.fx.filter(e => (e.t += dt) < 0.45);
     for (const list of ['rings', 'pillars', 'casts']) this[list] = this[list].filter(e => (e.t += dt) < e.max);
+    this.zoom += ((this.far ? W / WORLD : 1) - this.zoom) * (1 - Math.exp(-9 * dt));
     this.updateCam(dt);
     this.texts = this.texts.filter(e => (e.t += dt) < 1.2);
     for (const q of this.parts) { q.life += dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
@@ -560,16 +583,21 @@ export class Battle {
         if (this.intro <= 0) this.clock -= dt;         // el reloj espera a que la cámara llegue
         if (this.clock <= 5 && Math.ceil(this.clock) < this.beep) { this.beep = Math.ceil(this.clock); sfx.tap(); }
         if (this.clock <= 0) {                         // se acabó el tiempo: pierde el turno
-          this.clock = 0; this.pull = null; this.armed = -1; this.moveTarget = null;
+          this.clock = 0; this.pull = null; this.armed = -1; this.stepLeft = 0; this.hold = false;
           this.say('¡Se acabó el tiempo!', 1.6); sfx.bad();
           this.phase = 'resolve'; this.timer = 1.2;
           return;
         }
         if (this.armed >= 0 && Math.random() < dt * 30) this.charge(f);
-        if (this.moveTarget !== null) {               // camina hacia donde tocaste
-          const d = this.moveTarget - f.x, before = f.x;
-          if (Math.abs(d) > 3 && f.fuel > 0) this.tryMove(f, d > 0 ? 1 : -1, dt);
-          if (Math.abs(d) <= 3 || f.fuel <= 0 || f.x === before) this.moveTarget = null;
+        if (this.stepLeft > 0 || this.hold) {         // da pasos cortos
+          const before = f.x;
+          this.tryMove(f, this.stepDir, dt);
+          const moved = Math.abs(f.x - before);
+          this.stepLeft = Math.max(0, this.stepLeft - moved);
+          if (!moved) {                               // sin pasos, o la cuesta es demasiado empinada
+            if (f.fuel > 0) this.note(f, 'Muy empinado', '#9aa0c8', 12);
+            this.stepLeft = 0; this.hold = false;
+          }
         } else if (this.pull?.aiming) f.dir = Math.cos(rad(f.angle)) >= 0 ? 1 : -1;
       } else {
         this.aiTimer -= dt;
@@ -643,17 +671,21 @@ export class Battle {
   // La cámara sigue al disparo; si no hay, a quien le toca (un poco adelantada hacia su rival)
   // o a donde el jugador esté mirando con el minimapa. Tras un impacto se queda mirándolo.
   updateCam(dt) {
-    const cam = this.cam, f = this.turn, shot = this.shots[0];
-    let fx, fy, speed = 3;
+    const cam = this.cam, f = this.turn, shot = this.shots[0], z = this.zoom, vw = W / z, lowY = this.VH - this.pad;
+    const maxX = Math.max(0, WORLD - vw), maxY = this.H - this.pad - lowY / z, minY = Math.min(0, maxY);
+    let fx, fy, speed = 3, move = true;
     if (this.intro > 0) { this.intro -= dt; fx = this.rival.x; fy = this.rival.y - this.rival.h * 0.5; }
     else if (shot) { fx = shot.x + shot.vx * 0.16; fy = shot.y; speed = 8; }
     else if (this.phase === 'over') { const win = this.rival.hp <= 0 ? this.player : this.rival; fx = win.x; fy = win.y - win.h * 0.5; }
-    else if (this.phase !== 'aim') return;
+    else if (this.phase !== 'aim') move = false;
     else if (this.look) { fx = this.look.x; fy = this.groundAt(this.look.x) - 50; speed = 10; }
-    else { fx = f.x + Math.sign(this.other(f).x - f.x) * W * 0.2; fy = f.y - f.h * 0.5; }
-    const k = 1 - Math.exp(-speed * dt);
-    cam.x += (clamp(fx - W / 2, 0, WORLD - W) - cam.x) * k;
-    cam.y += (clamp(fy - (this.VH - this.pad) * 0.6, 0, this.H - this.VH) - cam.y) * k;
+    else { fx = f.x + Math.sign(this.other(f).x - f.x) * vw * 0.2; fy = f.y - f.h * 0.5; }
+    if (move) {
+      const k = 1 - Math.exp(-speed * dt);
+      cam.x += (clamp(fx - vw / 2, 0, maxX) - cam.x) * k;
+      cam.y += (clamp(fy - (lowY * 0.6) / z, minY, maxY) - cam.y) * k;
+    }
+    cam.x = clamp(cam.x, 0, maxX); cam.y = clamp(cam.y, minY, maxY);   // al alejarse, el campo se apoya abajo
   }
 
   // --- Dibujo ---
@@ -680,7 +712,7 @@ export class Battle {
     for (const t of this.thermals) {                  // columna de aire caliente con chispas que suben
       const g = ctx.createLinearGradient(t.x - t.w / 2, 0, t.x + t.w / 2, 0);
       g.addColorStop(0, 'rgba(255,170,80,0)'); g.addColorStop(0.5, 'rgba(255,170,80,.20)'); g.addColorStop(1, 'rgba(255,170,80,0)');
-      ctx.fillStyle = g; ctx.fillRect(t.x - t.w / 2, 0, t.w, this.groundAt(t.x));
+      ctx.fillStyle = g; ctx.fillRect(t.x - t.w / 2, -2000, t.w, this.groundAt(t.x) + 2000);
       ctx.fillStyle = '#ffd08a';
       for (let i = 0; i < 9; i++) {
         const y = H - ((this.t * 70 + i * 61) % H), x = t.x + Math.sin(i * 2.3 + this.t * 2) * t.w * 0.3;
@@ -801,7 +833,7 @@ export class Battle {
     // se agacha al cargar un poder, da pasitos al caminar y salta al ganar.
     const hk = Math.min(1, f.hurt / 0.35), lk = Math.sin(f.lunge * Math.PI);
     const won = this.phase === 'over' && !dead, armed = f.isPlayer && this.armed >= 0 && this.canAct();
-    const walking = f.isPlayer && this.moveTarget !== null && this.turn === f;
+    const walking = f.isPlayer && (this.stepLeft > 0 || this.hold) && this.turn === f;
     const hop = won ? Math.abs(Math.sin(this.t * 8)) * 12 : walking ? Math.abs(Math.sin(this.t * 14)) * 3 : 0;
     const breathe = dead || f.frozen ? 0 : Math.sin(this.t * 3 + f.x) * 0.02;
     ctx.globalAlpha = dead ? 1 - f.fall * 0.45 : 1;
@@ -815,7 +847,10 @@ export class Battle {
     ctx.restore();
     if (!dead) this.drawStatus(ctx, f, w);
 
-    // Vida, MP y estados sobre la cabeza
+    // Vida, MP y estados sobre la cabeza (más grandes cuando la vista está lejos, para que se lean)
+    const ov = 1 / this.zoom ** 0.7;
+    ctx.save();
+    ctx.translate(f.x, f.y - f.h); ctx.scale(ov, ov); ctx.translate(-f.x, -(f.y - f.h));
     const bx = f.x - 18, by = f.y - f.h - 11;
     ctx.fillStyle = 'rgba(8,5,20,.8)'; ctx.fillRect(bx - 1, by - 1, 38, 9);
     ctx.fillStyle = f.isPlayer ? '#6fe36a' : '#ff5a5a';
@@ -830,11 +865,29 @@ export class Battle {
       ctx.fillStyle = '#ffd76a';
       ctx.beginPath(); ctx.moveTo(f.x - 6, ay - 9); ctx.lineTo(f.x + 6, ay - 9); ctx.lineTo(f.x, ay - 1); ctx.fill();
     }
+    ctx.restore();
+    // Pasos que le quedan este turno y flechas a los lados: se toca un lado para dar un paso.
+    if (f.isPlayer && this.canAct() && !this.pull?.aiming) {
+      const total = Math.max(1, Math.ceil(f.prof.fuel / STEP_LEN)), left = this.stepsLeft(f), pw = 5, gap = 2;
+      ctx.save();
+      ctx.translate(f.x, f.y + 8); ctx.scale(ov, ov);
+      const x0 = -((pw + gap) * total - gap) / 2;
+      ctx.fillStyle = 'rgba(8,5,20,.8)'; ctx.fillRect(x0 - 2, 0, (pw + gap) * total - gap + 4, 8);
+      for (let i = 0; i < total; i++) { ctx.fillStyle = i < left ? '#7fe9ff' : '#2a3050'; ctx.fillRect(x0 + i * (pw + gap), 2, pw, 4); }
+      if (left > 0) {
+        const off = w * 0.5 * this.zoom ** 0.7 + 12 + Math.sin(this.t * 5) * 2.5;
+        for (const d of [-1, 1]) {
+          ctx.fillStyle = '#0a0720'; ctx.beginPath(); ctx.moveTo(d * (off + 11), -22); ctx.lineTo(d * (off - 2), -33); ctx.lineTo(d * (off - 2), -11); ctx.fill();
+          ctx.fillStyle = '#7fe9ff'; ctx.beginPath(); ctx.moveTo(d * (off + 8), -22); ctx.lineTo(d * off, -29); ctx.lineTo(d * off, -15); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
   }
 
   // Proyectil: los disparos normales son un cuadradito; los de un poder llevan cola, halo y forma propia.
   drawShot(ctx, sh) {
-    const look = fxOf(sh.owner.species.element), color = look.c[1], size = sh.big ? 8 : 6;
+    const look = fxOf(sh.owner.species.element), color = look.c[1], size = (sh.big ? 8 : 6) / Math.sqrt(this.zoom);
     sh.trail.forEach((q, i) => { ctx.globalAlpha = (i + 1) / sh.trail.length * 0.6; ctx.fillStyle = color; ctx.fillRect(q[0] - 2, q[1] - 2, 4, 4); });
     ctx.globalAlpha = 1;
     if (!sh.style) {
@@ -918,9 +971,9 @@ export class Battle {
   drawEdges(ctx) {
     const cam = this.cam, VH = this.VH;
     for (const [f, c] of [[this.rival, '#ff5a5a'], [this.player, '#6fe36a']]) {
-      const vx = f.x - cam.x;
+      const vx = (f.x - cam.x) * this.zoom;
       if (vx > -10 && vx < W + 10) continue;
-      const side = vx < 0 ? -1 : 1, x = side < 0 ? 12 : W - 12, y = clamp(f.y - f.h * 0.5 - cam.y, 70, VH - this.pad - 30) + Math.sin(this.t * 5) * 2;
+      const side = vx < 0 ? -1 : 1, x = side < 0 ? 12 : W - 12, y = clamp((f.y - f.h * 0.5 - cam.y) * this.zoom, 70, VH - this.pad - 30) + Math.sin(this.t * 5) * 2;
       ctx.fillStyle = '#0a0720'; ctx.beginPath(); ctx.moveTo(x + side * 9, y); ctx.lineTo(x - side * 7, y - 11); ctx.lineTo(x - side * 7, y + 11); ctx.fill();
       ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + side * 6, y); ctx.lineTo(x - side * 5, y - 7.5); ctx.lineTo(x - side * 5, y + 7.5); ctx.fill();
       ctx.font = '800 10px system-ui, sans-serif'; ctx.textAlign = side < 0 ? 'left' : 'right';
@@ -931,21 +984,21 @@ export class Battle {
     ctx.fillStyle = '#ffffff';
     for (const sh of this.shots) {
       if (sh.y >= cam.y) continue;
-      const x = clamp(sh.x - cam.x, 10, W - 10);
+      const x = clamp((sh.x - cam.x) * this.zoom, 10, W - 10);
       ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x - 6, 13); ctx.lineTo(x + 6, 13); ctx.fill();
     }
   }
 
   draw() {
     const { ctx, w, dpr } = fit(this.canvas);
-    const s = w / W, H = this.H, VH = this.VH, img = this.map.img, cam = this.cam;
+    const s = w / W, H = this.H, VH = this.VH, img = this.map.img, cam = this.cam, z = this.zoom, vw = W / z, vh = VH / z, u = 1 / z;
     if (this.dirty) this.renderGround();
     ctx.save();
     ctx.scale(s, s);
     if (this.shake > 0.3) ctx.translate(rand(-this.shake, this.shake), rand(-this.shake, this.shake));
     // El fondo se mueve menos que el suelo: da sensación de distancia.
     const bk = Math.max((W + 170) / img.width, (VH + 70) / img.height), bw = img.width * bk, bh = img.height * bk;
-    const px = cam.x / (WORLD - W), py = H > VH ? cam.y / (H - VH) : 1;
+    const px = WORLD - vw > 1 ? cam.x / (WORLD - vw) : 0.5, py = H > VH ? clamp(cam.y / (H - VH), 0, 1) : 1;
     ctx.drawImage(img, -20 - (bw - W - 40) * px, -20 - (bh - VH - 40) * py, bw, bh);
 
     // Rachas de viento: más y más rápidas cuanto más sopla
@@ -963,10 +1016,13 @@ export class Battle {
 
     // --- El campo, visto desde la cámara ---
     ctx.save();
+    ctx.scale(z, z);
     ctx.translate(-cam.x, -cam.y);
     this.drawHazards(ctx);
-    ctx.drawImage(this.ground, cam.x * 2, cam.y * 2, W * 2, VH * 2, cam.x, cam.y, W, VH);
-    for (const f of [this.rival, this.player]) this.drawFighter(ctx, f, s * dpr);
+    const gx0 = Math.max(0, cam.x - 20), gy0 = Math.max(0, cam.y - 20), gx1 = Math.min(WORLD, cam.x + vw + 20), gy1 = Math.min(H, cam.y + vh + 20);
+    ctx.drawImage(this.ground, gx0 * 2, gy0 * 2, (gx1 - gx0) * 2, (gy1 - gy0) * 2, gx0, gy0, gx1 - gx0, gy1 - gy0);
+    if (cam.y + vh > H - 1) { ctx.fillStyle = this.map.terrain[0]; ctx.fillRect(cam.x - 30, H - 1, vw + 60, cam.y + vh - H + 30); }   // roca por debajo del campo
+    for (const f of [this.rival, this.player]) this.drawFighter(ctx, f, s * dpr * z);
 
     // Tirachinas: goma, potencia y guía de tiro (más larga cuanto más Puntería)
     const p = this.player, pl = this.pull;
@@ -984,24 +1040,21 @@ export class Battle {
       }
     }
     if (this.canAct() && pl?.aiming) {
-      const a = rad(p.angle), cx = p.x, cy = p.y - p.r, back = 10 + p.power * 0.45;
-      ctx.strokeStyle = this.armed >= 0 ? p.color : '#ffd76a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      const a = rad(p.angle), cx = p.x, cy = p.y - p.r, back = (10 + p.power * 0.45) * u;
+      ctx.strokeStyle = this.armed >= 0 ? p.color : '#ffd76a'; ctx.lineWidth = 3 * u; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(a) * back, cy + Math.sin(a) * back); ctx.stroke();
       ctx.fillStyle = '#fff6d8';
-      ctx.beginPath(); ctx.arc(cx - Math.cos(a) * back, cy + Math.sin(a) * back, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - Math.cos(a) * back, cy + Math.sin(a) * back, 4 * u, 0, Math.PI * 2); ctx.fill();
       if (!p.blind || p.sight) {
         const [mx, my] = this.muzzle(p, p.angle);
         const pts = this.trace(mx, my, p.angle, p.power, p.sight ? 500 : Math.min(60, p.prof.guide)).pts;
-        pts.forEach((q, i) => { ctx.globalAlpha = 1 - (i / pts.length) * 0.75; ctx.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); });
+        pts.forEach((q, i) => { ctx.globalAlpha = 1 - (i / pts.length) * 0.75; ctx.fillRect(q[0] - 1.5 * u, q[1] - 1.5 * u, 3 * u, 3 * u); });
         ctx.globalAlpha = 1;
       }
-      ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
-      ctx.lineWidth = 3; ctx.strokeStyle = '#120c24';
+      ctx.font = `800 ${11 * u}px system-ui, sans-serif`; ctx.textAlign = 'center';
+      ctx.lineWidth = 3 * u; ctx.strokeStyle = '#120c24';
       const label = `${Math.round(p.angle <= 90 ? p.angle : 180 - p.angle)}° · ${Math.round(p.power)}`;
-      ctx.strokeText(label, cx, p.y + 16); ctx.fillStyle = '#fff6d8'; ctx.fillText(label, cx, p.y + 16);
-    }
-    if (this.moveTarget !== null) {                    // marca de destino
-      ctx.fillStyle = '#7fe9ff'; ctx.fillRect(this.moveTarget - 1, this.groundAt(this.moveTarget) - 9, 2, 9);
+      ctx.strokeText(label, cx, p.y + 16 * u); ctx.fillStyle = '#fff6d8'; ctx.fillText(label, cx, p.y + 16 * u);
     }
 
     for (const sh of this.shots) this.drawShot(ctx, sh);
@@ -1026,8 +1079,8 @@ export class Battle {
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     for (const e of this.texts) {
       ctx.globalAlpha = Math.min(1, (1.2 - e.t) * 3);
-      ctx.font = `900 ${e.size || 15}px system-ui, sans-serif`;
-      ctx.lineWidth = 4; ctx.strokeStyle = '#120c24';
+      ctx.font = `900 ${(e.size || 15) * u ** 0.8}px system-ui, sans-serif`;
+      ctx.lineWidth = 4 * u ** 0.8; ctx.strokeStyle = '#120c24';
       ctx.strokeText(e.text, e.x, e.y - e.t * 22);
       ctx.fillStyle = e.color; ctx.fillText(e.text, e.x, e.y - e.t * 22);
     }
@@ -1039,9 +1092,9 @@ export class Battle {
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(0.6, this.flash * 2.4)})`; ctx.fillRect(-20, -20, W + 40, VH + 40); }
     ctx.lineJoin = 'round';
     this.drawEdges(ctx);
-    this.drawMini(ctx);
+    if (this.miniOn()) this.drawMini(ctx);
     if (this.banner) {
-      const m = this.mini();
+      const m = this.miniOn() ? this.mini() : { y: 0, h: 8 };
       ctx.globalAlpha = Math.min(1, this.banner.t * 2.5);
       ctx.font = '900 24px system-ui, sans-serif'; ctx.textAlign = 'center';
       ctx.lineWidth = 6; ctx.strokeStyle = '#120c24';

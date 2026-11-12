@@ -103,7 +103,7 @@ export class Room {
       this.ptr = { on: 'ball', x, y, t: performance.now() };
     } else if (this.onCreature(x, y)) {
       this.ptr = { on: 'pet', x, y, rub: 0, moved: 0, time: 0 };
-      if (this.c.mode === 'walk') { this.c.mode = 'idle'; this.c.t = 1.5; } // se queda quieta mientras la tocas
+      if (this.c.mode === 'walk' || this.c.mode === 'antic') { this.c.mode = 'idle'; this.c.t = 1.5; } // se queda quieta mientras la tocas
     } else {
       this.ptr = { on: 'floor', x, y, moved: 0, item: this.itemAt(x, y)?.id };
     }
@@ -251,6 +251,15 @@ export class Room {
       else if (c.act === 'sit') { c.sit = 0.86; c.lift = item ? this.box(item).h * 0.42 : 0; }
       else if (c.act === 'nap') { c.sit = 0.8; if (Math.floor(k / 0.9) !== Math.floor((k - dt) / 0.9)) this.parts.push({ text: 'z', x: c.x + 40, y: FLOOR - this.size * 0.7, vx: 18, vy: -50, life: 0, max: 1.5, size: 30 }); }
       if ((c.t -= dt) <= 0) { c.mode = 'idle'; c.t = rand(1.5, 3); c.use = null; }
+    } else if (c.mode === 'antic') {                 // se entretiene sola: persigue su cola, salta, se sienta, se estira…
+      const k = (c.ut += dt);
+      if (c.act === 'spin') { c.dir = Math.floor(k * 5) % 2 ? 1 : -1; c.lift = Math.abs(Math.sin(k * 10)) * 12; }
+      else if (c.act === 'hop') { c.lift = Math.abs(Math.sin(k * 6.5)) * 64; if (Math.floor(k / 0.48) !== Math.floor((k - dt) / 0.48)) this.parts.push({ icon: 'estrella', x: c.x + rand(-50, 50), y: FLOOR - this.size * 0.9, vx: rand(-30, 30), vy: -120, life: 0, max: 0.9, size: 32 }); }
+      else if (c.act === 'sit') { c.sit = 0.86; if (Math.floor(k / 1.1) !== Math.floor((k - dt) / 1.1)) c.dir *= -1; }
+      else if (c.act === 'stretch') { c.squash = Math.sin(k * 3.2) * 1.8; }
+      else if (c.act === 'sniff') { c.lunge = 0.28 + Math.sin(k * 11) * 0.07; c.tilt = c.dir * 0.1; c.x = clamp(c.x + c.dir * 34 * dt, lo, hi); }
+      else if (c.act === 'dance') { c.tilt = Math.sin(k * 9) * 0.13; c.lift = Math.abs(Math.sin(k * 9)) * 14; if (Math.floor(k / 0.6) !== Math.floor((k - dt) / 0.6)) this.parts.push({ text: '♪', x: c.x + rand(-60, 60), y: FLOOR - this.size, vx: rand(-20, 20), vy: -70, life: 0, max: 1.3, size: rand(28, 40) }); }
+      if ((c.t -= dt) <= 0) { c.mode = 'idle'; c.t = rand(1.2, 3); }
     } else if (c.mode === 'walk') {
       const d = c.target - c.x;
       if (Math.abs(d) < 6) { c.mode = 'idle'; c.t = rand(1.5, 4); }
@@ -264,6 +273,10 @@ export class Room {
     } else if ((c.t -= dt) <= 0 && !this.ptr) {
       const usable = this.sad || this.editing ? [] : this.items.filter(d => d.x > lo && d.x < hi);
       if (usable.length && Math.random() < 0.45) this.goUse(usable[Math.floor(Math.random() * usable.length)]);   // a veces va a usar un mueble
+      else if (!this.sad && !this.asleep && Math.random() < 0.4) {   // o se entretiene sola
+        c.mode = 'antic'; c.ut = 0; c.t = rand(1.6, 2.8);
+        c.act = ['spin', 'hop', 'sit', 'stretch', 'sniff', 'dance'][Math.floor(Math.random() * 6)];
+      }
       else if (Math.random() < (this.sad ? 0.3 : 0.75)) { c.mode = 'walk'; c.target = rand(lo, hi); }
       else { c.t = rand(1.5, 3.5); if (Math.random() < 0.4) c.dir *= -1; }   // a veces solo mira hacia el otro lado
     }

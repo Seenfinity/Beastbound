@@ -596,7 +596,7 @@ export function evolve(g) {
 
 export function currentEvent(g) {
   if (!g.pendingEvent) {
-    const wait = g.testMode ? 75e3 : 8 * 3600e3;
+    const wait = g.testMode ? 75e3 : 3 * 3600e3;      // además, la pantalla solo lo enseña tras un buen rato sin tocar nada
     if (Date.now() - g.lastEvent < wait) return null;
     g.pendingEvent = pick(EVENTS.filter(e => e.id !== g.lastEventId)).id;
   }
