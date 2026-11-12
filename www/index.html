@@ -11,7 +11,9 @@
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://seenfinity.github.io/petbound/assets/landing/solaris.webp">
 <link rel="preload" as="image" href="assets/landing/solaris-2x.webp">
-<link rel="stylesheet" href="landing.css?v=7">
+<link rel="stylesheet" href="landing.css?v=8">
+<script>(function(){try{var d=document.documentElement,ok=/^(es|en|zh)$/,l=new URLSearchParams(location.search).get('lang');if(!ok.test(l))l=localStorage.getItem('petbound-lang');if(!ok.test(l)){l='';var n=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||''];for(var i=0;i<n.length&&!l;i++){var c=String(n[i]).slice(0,2).toLowerCase();if(ok.test(c))l=c}l=l||'en'}if(l!=='es'){d.classList.add('i18n-wait');setTimeout(function(){d.classList.remove('i18n-wait')},4000)}}catch(e){}})()</script>
+<style>.i18n-wait body{visibility:hidden}</style>
 </head>
 <body>
 
@@ -22,6 +24,7 @@
     <a href="#crianza">Crianza</a>
     <a href="#especies">Especies</a>
     <a href="#estado">Lo que viene</a>
+    <span class="langs" translate="no"><button data-lang="es" title="Español">ES</button><button data-lang="en" title="English">EN</button><button data-lang="zh" title="中文">中文</button></span>
     <a class="go small" href="jugar.html">Jugar</a>
   </nav>
 </header>
@@ -54,7 +57,7 @@
       <p>Artillería por turnos: eliges ángulo y fuerza, y cuentas con el viento. Cada elemento pega más a unos y menos a otros, y cada bestia trae sus propios poderes. Esto de abajo no es un vídeo: es el juego, jugándose solo.</p>
     </div>
     <div class="arena">
-      <canvas id="duel" aria-label="Combate de demostración entre dos criaturas"></canvas>
+      <canvas id="duel" aria-label="Combate de demostración entre dos bestias"></canvas>
       <div class="versus" id="versus"></div>
     </div>
     <div class="maps" id="maps" role="tablist" aria-label="Mapas"></div>
@@ -71,7 +74,7 @@
       <img id="room-pet" alt="">
       <div class="rooms" id="rooms" role="tablist" aria-label="Habitaciones"></div>
     </div>
-    <div class="shelf" id="moods" aria-label="Los ánimos de la criatura"></div>
+    <div class="shelf" id="moods" aria-label="Los ánimos de la bestia"></div>
     <div class="trio">
       <div><h3>Dale de comer</h3><p>19 comidas. Unas llenan, otras animan o dan energía, y cada una cría una estadística distinta.</p></div>
       <div><h3>Entrénala</h3><p>Un minijuego por estadística: potencia, aguante, puntería y agilidad.</p></div>
@@ -84,9 +87,9 @@
     <div class="evo">
       <div class="head">
         <h2>Tres formas.</h2>
-        <p>Nace Baby, pasa a Teen en el nivel 10 y llega a su forma Final en el nivel 30, cuando desbloquea el poder propio de su especie.</p>
+        <p>Nace Baby, pasa a Mid en el nivel 10 y llega a su forma Final en el nivel 30, cuando desbloquea el poder propio de su especie.</p>
       </div>
-      <div class="shelf tall" id="stages" aria-label="Las tres formas de la criatura"></div>
+      <div class="shelf tall" id="stages" aria-label="Las tres formas de la bestia"></div>
     </div>
     <div class="incu">
       <div class="head">
@@ -144,6 +147,6 @@
   <a href="arte.html">Galería de arte</a>
 </footer>
 
-<script type="module" src="js/landing.js?v=7"></script>
+<script type="module" src="js/landing.js?v=8"></script>
 </body>
 </html>

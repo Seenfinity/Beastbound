@@ -3,6 +3,7 @@
 
 import { fit } from './sprites.js';
 import { sfx } from './sfx.js';
+import { tr } from './i18n.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -74,7 +75,7 @@ export function playEvolution(o) {
     const wide = w > h * 1.1;
     panel = clamp(panel + (t >= PANEL ? dt * 2.2 : 0), 0, 1);
     const ease = 1 - (1 - panel) ** 3;
-    // Al salir el resumen, la criatura se aparta: a la izquierda en pantallas anchas, arriba en estrechas.
+    // Al salir el resumen, la bestia se aparta: a la izquierda en pantallas anchas, arriba en estrechas.
     const cx = lerp(w / 2, wide ? w * 0.3 : w / 2, ease);
     const base = lerp(h * 0.66, wide ? h * 0.68 : h * 0.4, ease);
     const size = Math.min(w, h) * lerp(0.42, wide ? 0.42 : 0.26, ease);
@@ -106,7 +107,7 @@ export function playEvolution(o) {
     }
     ctx.restore();
 
-    // Energía que gira hacia la criatura mientras se carga
+    // Energía que gira hacia la bestia mientras se carga
     if (t >= CHARGE && !revealed) {
       spawn += dt * (40 + charge * 190);
       while (spawn >= 1) {
@@ -134,7 +135,7 @@ export function playEvolution(o) {
     for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life >= parts[i].max) parts.splice(i, 1);
     ctx.globalAlpha = 1;
 
-    // La criatura
+    // La bestia
     ctx.imageSmoothingQuality = 'high';
     if (t < CHARGE) {
       draw(ctx, o.before, cx, base, size, 1 + Math.sin(t * 8) * 0.015);
@@ -169,7 +170,7 @@ export function playEvolution(o) {
     if (white > 0) { ctx.fillStyle = `rgba(255,255,255,${white})`; ctx.fillRect(0, 0, w, h); }
 
     // Título
-    const title = t < CHARGE ? `¿Qué le pasa a ${o.name}?` : !revealed ? `¡${o.name} está evolucionando!` : `¡${o.name} evolucionó a ${o.stage}!`;
+    const title = tr(t < CHARGE ? `¿Qué le pasa a ${o.name}?` : !revealed ? `¡${o.name} está evolucionando!` : `¡${o.name} evolucionó a ${o.stage}!`);
     const fs = clamp(w * 0.045, 22, 52) * (revealed ? 1 : 0.86);
     ctx.font = `900 ${fs}px system-ui, sans-serif`;
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';

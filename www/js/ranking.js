@@ -17,7 +17,7 @@ export const flag = code => (/^[A-Z]{2}$/.test(code || '') ? String.fromCodePoin
 export const SORTS = { level: 'Nivel', coins: 'Oro', wins: 'Victorias' };
 export const validName = name => /^[A-Za-z0-9_ÁÉÍÓÚÜÑáéíóúüñ]{3,16}$/.test(name || '');
 
-// Lo que cuenta de tu partida: el nivel de tu mejor criatura, tu oro y tus combates.
+// Lo que cuenta de tu partida: el nivel de tu mejor bestia, tu oro y tus combates.
 export const myStats = g => ({ level: Math.max(1, ...g.pets.map(p => p.level)), coins: g.coins, wins: g.wins || 0, losses: g.losses || 0 });
 
 // Filas de muestra para ver cómo quedará la tabla. No son jugadores reales y la pantalla las marca como «ejemplo».

@@ -1,12 +1,15 @@
 // Portada: usa el mismo arte y el mismo motor que el juego.
 // - Un duelo real jugándose solo (dos bandos automáticos) sobre los tres mapas.
-// - Una criatura protagonista (por defecto Solaris, la de la ilustración) que se puede cambiar por cualquiera de las 15.
+// - Una bestia protagonista (por defecto Solaris, la de la ilustración) que se puede cambiar por cualquiera de las 15.
 
 import { loadMoods, loadGrid, loadImage } from './sprites.js';
 import { ROSTER, ELEMENT_COLOR, EGG_ORDER, STAGES, MOOD, MAPS, moodSheet, powersOf } from './roster.js';
 import { Battle, W } from './battle.js';
 import * as S from './state.js';
 import { hush } from './sfx.js';
+import { watch } from './i18n.js';
+
+watch();                                             // traduce la página si el idioma no es español
 
 hush(true);                                           // la portada no suena, y no toca el ajuste de sonido del juego
 
@@ -21,7 +24,7 @@ const sheetOf = id => { if (!sheets.has(id)) sheets.set(id, loadMoods(moodSheet(
 const urls = new WeakMap();
 const src = cv => { if (!urls.has(cv)) urls.set(cv, cv.toDataURL()); return urls.get(cv); };
 
-// ---------- La criatura protagonista ----------
+// ---------- La bestia protagonista ----------
 let shown = null;
 async function follow(sp) {
   shown = sp;
@@ -73,7 +76,7 @@ async function buildRoster() {
 }
 
 // ---------- Duelo en vivo ----------
-// Dos criaturas en su forma Final, con sus poderes, peleando solas con el motor del juego.
+// Dos bestias en su forma Final, con sus poderes, peleando solas con el motor del juego.
 const PAIRS = [['solaris', 'shadowon'], ['voltix', 'aquarok'], ['frostine', 'pyrorex'], ['zephyra', 'toxipuff'], ['blaziky', 'gravion'], ['draconoid', 'mechapi'], ['tropicat', 'rokky']];
 const canvas = $('duel');
 let duel = null, mapIndex = 0, pairIndex = 0, mapImgs = [], thinking = 0, visible = false, last = 0, restart = 0;
@@ -90,7 +93,7 @@ async function startDuel() {
   const [me, foe] = await Promise.all([side(a), side(b)]);
   const box = canvas.getBoundingClientRect(), VH = Math.round((W * box.height) / box.width) || 360;
   const fight = new Battle(canvas, me, foe, map, { onEnd: () => { restart = setTimeout(() => { pairIndex++; mapIndex = (mapIndex + 1) % MAPS.length; startDuel(); }, 2800); } }, VH, box.width < 520 ? 1.5 : 1.15, {}, 0);
-  // Los rótulos del juego hablan de «tu turno»: aquí son dos criaturas con nombre.
+  // Los rótulos del juego hablan de «tu turno»: aquí son dos bestias con nombre.
   const say = fight.say.bind(fight);
   fight.say = (text, time) => say(text === '¡Tu turno!' ? `Turno de ${me.pet.name}` : text === '¡Victoria!' ? `¡Gana ${me.pet.name}!` : text === 'Derrota…' ? `¡Gana ${foe.pet.name}!` : text.replace(' falló: tardará más en volver', ' falló'), time);
   fight.banner = null; fight.say('¡Tu turno!');

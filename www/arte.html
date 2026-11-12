@@ -30,17 +30,19 @@
   figcaption { font-size: 12px; color: #a59fbd; font-weight: 600; margin-top: 2px; }
   #status { color: #ffd76a; }
 </style>
+<script>(function(){try{var d=document.documentElement,ok=/^(es|en|zh)$/,l=new URLSearchParams(location.search).get('lang');if(!ok.test(l))l=localStorage.getItem('petbound-lang');if(!ok.test(l)){l='';var n=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||''];for(var i=0;i<n.length&&!l;i++){var c=String(n[i]).slice(0,2).toLowerCase();if(ok.test(c))l=c}l=l||'en'}if(l!=='es'){d.classList.add('i18n-wait');setTimeout(function(){d.classList.remove('i18n-wait')},4000)}}catch(e){}})()</script>
+<style>.i18n-wait body{visibility:hidden}</style>
 </head>
 <body>
 <main>
   <h1>Arte del juego</h1>
-  <p>Tres mapas y las quince criaturas de la primera generación, cada una en Baby, Teen y Final. <span id="status">Cargando imágenes…</span></p>
+  <p>Tres mapas y las quince bestias de la primera generación, cada una en Baby, Mid y Final. <span id="status">Cargando imágenes…</span></p>
 
   <h2>Mapas</h2>
   <p>El fondo es la imagen generada. El terreno lo dibuja el código con los colores de cada mapa, porque en el juego se rompe con los disparos.</p>
   <div id="maps" class="maps"></div>
 
-  <h2>Las 15 criaturas</h2>
+  <h2>Las 15 bestias</h2>
   <p>Mismos nombres, elementos y especialidades que definiste.</p>
   <div id="roster" class="roster"></div>
 </main>
@@ -48,12 +50,15 @@
 <script type="module">
   import { loadImage, loadMoods } from './js/sprites.js';
   import { moodSheet, STAGES, ROSTER, MAPS } from './js/roster.js';
+  import { watch } from './js/i18n.js';
+
+  watch();
 
   const moods = Object.fromEntries(await Promise.all(ROSTER.map(async c => [c.id, await loadMoods(moodSheet(c.id))])));
   const spritesOf = id => moods[id].map(row => row[0]);          // la pose tranquila de cada etapa
   const MOOD_NAMES = ['Tranquilo', 'Contento', 'Triste', 'Dormido', 'Ataque'];
 
-  // Fichas de las 15 criaturas
+  // Fichas de las 15 bestias
   const rosterEl = document.getElementById('roster');
   for (const c of ROSTER) {
     const card = document.createElement('div');

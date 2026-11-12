@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0d0b1e">
 <title>Beast Bound</title>
 <link rel="stylesheet" href="style.css">
+<script>(function(){try{var d=document.documentElement,ok=/^(es|en|zh)$/,l=new URLSearchParams(location.search).get('lang');if(!ok.test(l))l=localStorage.getItem('petbound-lang');if(!ok.test(l)){l='';var n=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||''];for(var i=0;i<n.length&&!l;i++){var c=String(n[i]).slice(0,2).toLowerCase();if(ok.test(c))l=c}l=l||'en'}if(l!=='es'){d.classList.add('i18n-wait');setTimeout(function(){d.classList.remove('i18n-wait')},4000)}}catch(e){}})()</script>
+<style>.i18n-wait body{visibility:hidden}</style>
 </head>
 <body>
 <div id="app">
@@ -24,6 +26,7 @@
     <div id="start-eggs" class="capsules"></div>
     <label class="field"><span>¿Cómo se va a llamar?</span><input id="start-name" maxlength="12" autocomplete="off"></label>
     <button id="btn-start" class="btn primary big">Abrir el huevo</button>
+    <div class="langs" translate="no"><button data-lang="es">Español</button><button data-lang="en">English</button><button data-lang="zh">中文</button></div>
   </section>
 
   <div id="game" hidden>
@@ -47,7 +50,7 @@
     <main id="tab-care" class="care">
       <aside class="col-left">
         <div class="panel">
-          <h3>Mis criaturas</h3>
+          <h3>Mis bestias</h3>
           <div id="team" class="team"></div>
         </div>
         <div class="panel">
@@ -63,7 +66,7 @@
       <div class="col-mid">
       <section class="room-wrap">
         <canvas id="room"></canvas>
-        <button class="plate" id="plate"><b id="pet-name"></b><small id="pet-sub"></small></button>
+        <button class="plate" id="plate"><b id="pet-name" translate="no"></b><small id="pet-sub"></small></button>
         <div class="level"><b id="pet-level"></b><div class="bar exp"><i id="exp-fill"></i></div><small id="exp-text"></small></div>
         <div id="event-card" class="event" hidden><p id="event-text"></p><div id="event-choices"></div></div>
         <button id="btn-decor" class="decor-btn" hidden>Decorar</button>
@@ -166,7 +169,7 @@
     <main id="tab-shop" class="shop" hidden>
       <div class="panel shop-wide"><h3><i class="ic ic-filete"></i>Comida</h3><p class="muted">Lo que come decide qué mejora al subir de nivel. Unas llenan mucho, otras apenas, y algunas animan o dan energía.</p><div id="shop-food" class="goods decor-goods"></div></div>
       <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Habitaciones</h3><p class="muted">Cambian el aspecto de la sala. Tus muebles se quedan donde los pusiste.</p><div id="shop-rooms" class="rooms"></div></div>
-      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Decoración</h3><p class="muted">Muebles y juguetes para la sala. Se quedan para siempre, cada uno ayuda en algo y tu criatura los usa. Con «Decorar», en la sala, los colocas donde quieras.</p><div id="shop-decor" class="goods decor-goods"></div></div>
+      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Decoración</h3><p class="muted">Muebles y juguetes para la sala. Se quedan para siempre, cada uno ayuda en algo y tu bestia los usa. Con «Decorar», en la sala, los colocas donde quieras.</p><div id="shop-decor" class="goods decor-goods"></div></div>
       <div class="panel"><h3><i class="ic ic-espadas"></i>Objetos de combate</h3><p class="muted">Se usan en tu turno, uno por turno, sin gastar el disparo. Son una ventaja enorme, por eso cuestan tanto.</p><div id="shop-items" class="goods"></div></div>
       <div class="panel"><h3><i class="ic ic-huevomas"></i>Huevos</h3><p class="muted">También se ganan derrotando 10 veces a una especie que no tengas.</p><div id="shop-egg" class="goods"></div></div>
     </main>
@@ -195,8 +198,12 @@
     <main id="tab-settings" hidden>
       <div class="panel settings">
         <h3><i class="ic ic-engranaje"></i>Ajustes</h3>
+        <div class="setting wide">
+          <div><b>Idioma</b><p class="muted">Se elige solo según tu dispositivo. Aquí puedes cambiarlo.</p></div>
+          <div class="langs" translate="no"><button data-lang="es">Español</button><button data-lang="en">English</button><button data-lang="zh">中文</button></div>
+        </div>
         <div class="setting">
-          <div><b>Modo prueba</b><p class="muted">Activado: no se cansa, no hay tope de entrenamientos, los huevos se abren en un minuto y evolucionar solo pide nivel. Desactivado: tiempos reales (3 días hasta Teen, 14 hasta Final).</p></div>
+          <div><b>Modo prueba</b><p class="muted">Activado: no se cansa, no hay tope de entrenamientos, los huevos se abren en un minuto y evolucionar solo pide nivel. Desactivado: tiempos reales (3 días hasta Mid, 14 hasta Final).</p></div>
           <button class="btn" id="btn-test"></button>
         </div>
         <div class="setting">
@@ -208,11 +215,11 @@
           <button class="btn" id="btn-music"></button>
         </div>
         <div class="setting">
-          <div><b>Galería de arte</b><p class="muted">Los tres mapas y las quince criaturas en sus tres etapas.</p></div>
+          <div><b>Galería de arte</b><p class="muted">Los tres mapas y las quince bestias en sus tres etapas.</p></div>
           <a class="btn" href="arte.html">Abrir</a>
         </div>
         <div class="setting">
-          <div><b>Empezar de cero</b><p class="muted">Borra todas tus criaturas, huevos y monedas. No se puede deshacer.</p></div>
+          <div><b>Empezar de cero</b><p class="muted">Borra todas tus bestias, huevos y monedas. No se puede deshacer.</p></div>
           <button class="btn danger" id="btn-reset">Borrar partida</button>
         </div>
       </div>

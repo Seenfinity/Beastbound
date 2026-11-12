@@ -10,8 +10,12 @@ import { sfx, isMuted, setMuted } from './sfx.js';
 import { music } from './music.js';
 import * as RK from './ranking.js';
 import { playEvolution } from './evolution.js';
+import { watch, locale } from './i18n.js';
+
+watch();                                             // traduce la página si el idioma no es español
 
 const $ = id => document.getElementById(id);
+const own = s => `<span translate="no">${esc(s)}</span>`;   // nombres propios: no se traducen
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -175,7 +179,7 @@ function renderRanking() {
   const cell = (r, k) => `<span class="num${k === rankSort ? ' key' : ''}">${r[k]}</span>`;
   setHTML($('rk-table'), `<div class="rk-row head"><span>#</span><span>Jugador</span><span class="num">Nivel</span><span class="num">Oro</span><span class="num">Ganadas</span><span class="num">Perdidas</span></div>`
     + rows.map(r => `<div class="rk-row${r.me ? ' me' : ''}${r.demo ? ' demo' : ''}"><span class="pos">${r.rank}</span>
-      <span class="who"><i class="flag" title="${esc(RK.countryName(r.country))}">${RK.flag(r.country)}</i><b>${esc(r.name)}</b>${r.me ? '<em>tú</em>' : r.demo ? '<em>ejemplo</em>' : ''}</span>
+      <span class="who"><i class="flag" title="${RK.flag(r.country)} ${esc(RK.countryName(r.country))}">${RK.flag(r.country)}</i><b${r.me && !prof.name ? '' : ' translate="no"'}>${esc(r.name)}</b>${r.me ? '<em>tú</em>' : r.demo ? '<em>ejemplo</em>' : ''}</span>
       ${cell(r, 'level')}${cell(r, 'coins')}${cell(r, 'wins')}<span class="num">${r.losses}</span></div>`).join(''));
 }
 $('rk-sorts').onclick = e => { const b = e.target.closest('[data-sort]'); if (b) { rankSort = b.dataset.sort; sfx.tap(); renderRanking(); } };
@@ -265,7 +269,7 @@ function renderCare() {
   const trend = S.trendOf(p), c = p.char && S.CHARS[p.char];
   setHTML($('persona'), (c
     ? `<b class="big" style="--c:${c.color}">${c.name}</b><p>${c.desc}</p>`
-    : `<b class="big">Sin definir</b><p>Se decide al evolucionar a Teen, según cómo la trates.</p>`)
+    : `<b class="big">Sin definir</b><p>Se decide al evolucionar a Mid, según cómo la trates.</p>`)
     + (trend ? `<p>Con el trato de ahora va camino de ser <span class="tag" style="--c:${S.CHARS[trend].color}">${S.CHARS[trend].name}</span></p>` : '')
     + `<p><b style="color:var(--ink)">Rasgo: ${S.QUIRKS[p.quirk].name}.</b> ${S.QUIRKS[p.quirk].desc}</p>`
     + ((p.grade && p.grade !== 'comun') || S.isRare(p) ? `<p>${p.grade && p.grade !== 'comun' ? `<span class="tag" style="--c:${gradeInfo(p.grade).color}" title="${gradeInfo(p.grade).desc}">Categoría ${gradeInfo(p.grade).name}</span> ` : ''}${S.isRare(p) ? '<span class="tag" style="--c:var(--gold)">Color raro</span>' : ''}</p>` : ''));
@@ -327,7 +331,7 @@ function renderCare() {
     <span>${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : prof.disobey > 0 ? 'Con tan poco vínculo puede no obedecerte.' : prof.clutch ? 'Aguantará un golpe mortal por ti.' : `${game.wins} ganados · ${game.losses} perdidos`}</span>`);
   renderHeal();
 
-  setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"${hueStyle(m)}></i>${esc(m.name)}</button>`).join(''));
+  setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"${hueStyle(m)}></i>${own(m.name)}</button>`).join(''));
   setHTML($('missions'), S.dailyMissions(game).map(m => `<div class="mission${m.done ? ' done' : ''}"><span>${m.text}</span>
       <small>${m.done ? 'Cumplida' : `${m.got} de ${m.goal}`} · ${m.coins}<i class="ic ic-moneda"></i></small></div>`).join('')
     + `<p class="muted">${game.missionsBonus ? '¡Las tres cumplidas! Mañana habrá nuevas.' : `Cumple las tres y ganas ${S.MISSION_BONUS} monedas más.`}</p>`);
@@ -341,7 +345,7 @@ function renderCare() {
     : 'Cuanto mejor cuidada y más unida a ti, más MP tiene para sus poderes.';
 }
 
-// Botón de curar: aparece mientras la criatura se recupera de un combate.
+// Botón de curar: aparece mientras la bestia se recupera de un combate.
 function renderHeal() {
   const rest = S.restLeft(game.pet);
   for (const b of document.querySelectorAll('.heal-btn')) {
@@ -481,7 +485,7 @@ $('btn-sleep').onclick = () => {
 
 $('plate').onclick = () => {
   const p = game.pet;
-  const when = t => new Date(t).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = t => new Date(t).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   modal({
     title: `Diario de ${p.name}`,
     body: `<p class="muted">${Math.floor(S.ageDays(p))} días de vida · ${Object.keys(S.STAT_NAMES).map(k => `${S.STAT_NAMES[k]} ${p.stats[k]}`).join(' · ')}</p>
@@ -490,7 +494,7 @@ $('plate').onclick = () => {
   });
 };
 
-// Despensa: la comida que tienes. Se abre con el botón «Comida»; se arrastra hasta la criatura (o se toca para dársela).
+// Despensa: la comida que tienes. Se abre con el botón «Comida»; se arrastra hasta la bestia (o se toca para dársela).
 let trayOpen = false;
 // Momentos de crianza: solo salen cuando llevas un buen rato (10-15 min) con el juego abierto sin tocar nada.
 const idleGap = () => (10 + Math.random() * 5) * 60e3;
@@ -520,7 +524,7 @@ function buildTray() {
     if (!drag) return;
     if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10) drag.moved = true;
     ghost.hidden = !drag.moved;
-    $('tray').classList.toggle('dragging', drag.moved);     // se aparta para que veas a la criatura
+    $('tray').classList.toggle('dragging', drag.moved);     // se aparta para que veas a la bestia
     ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
     room.hover(e);
   });
@@ -619,7 +623,7 @@ function advantage(mine, theirs) {
 function renderLobby() {
   if (battle) return;
   const p = game.pet, sp = speciesOf(p.species), prof = S.profile(p), rest = S.restLeft(p);
-  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
+  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i><div><b translate="no">${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
     Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b><br>
     ${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : 'Lista para pelear.'}<br>
     Arrastra hacia atrás y suelta para disparar. Con las flechas ◀ ▶ das pasos cortos.</div>`);
@@ -646,8 +650,8 @@ function challenge(species = '') {
   const out = matchup(sp.element, rsp.element), back = matchup(rsp.element, sp.element);
   modal({
     title: map.name,
-    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${esc(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}:${rival.hue || 0}"></canvas>${esc(rival.name)} · Nv ${rival.level}</figure></div>
-      <p>Te enfrentas a <b>${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
+    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${own(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}:${rival.hue || 0}"></canvas>${own(rival.name)} · Nv ${rival.level}</figure></div>
+      <p>Te enfrentas a <b translate="no">${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
       ${out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : ''}
       ${back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : ''}
       <p class="muted">${map.effect}</p>`,
@@ -697,8 +701,8 @@ function startBattle(map) {
   music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
-  $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
-  $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
+  $('b-name1').innerHTML = own(p.name) + tag(battle.player);
+  $('b-name2').innerHTML = tag(battle.rival) + ' ' + own(rival.name);
 }
 
 function statusOf(f) {
@@ -711,8 +715,8 @@ function renderBattle() {
   $('b-hp2').style.width = (b.hp / b.maxHp) * 100 + '%';
   $('b-mp1').style.width = (a.mp / a.maxMp) * 100 + '%';
   $('b-mp2').style.width = (b.mp / b.maxMp) * 100 + '%';
-  $('b-st1').textContent = `${Math.ceil(a.hp)} / ${a.maxHp} · ${a.mp} MP  ${statusOf(a)}`;
-  $('b-st2').textContent = `${statusOf(b)}  ${b.mp} MP · ${Math.ceil(b.hp)} / ${b.maxHp}`;
+  $('b-st1').textContent = [`${Math.ceil(a.hp)} / ${a.maxHp}`, `${a.mp} MP`, statusOf(a)].filter(Boolean).join(' · ');
+  $('b-st2').textContent = [statusOf(b), `${b.mp} MP`, `${Math.ceil(b.hp)} / ${b.maxHp}`].filter(Boolean).join(' · ');
   const wnd = Math.round(battle.windNow());
   $('b-wind').textContent = wnd === 0 ? 'calma' : (wnd < 0 ? '← ' : '') + Math.abs(wnd) + (wnd > 0 ? ' →' : '');
   const mine = battle.canAct(), left = Math.ceil(battle.clock);
@@ -754,8 +758,8 @@ function endBattle(win) {
   const hunt = r.egg ? `<p><b>¡Décima victoria contra ${esc(rsp.name)}!</b> Te ganaste su huevo: ya está en tu incubadora.</p>`
     : win && !S.owns(game, rival.species) ? `<p class="muted">Victorias contra ${esc(rsp.name)}: ${Math.min(r.defeats, S.DEFEATS_FOR_EGG)} de ${S.DEFEATS_FOR_EGG} para ganar su huevo.</p>` : '';
   const lines = win
-    ? `<p>Le ganaste a <b>${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
-    : `<p><b>${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
+    ? `<p>Le ganaste a <b translate="no">${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
+    : `<p><b translate="no">${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
   const rest = `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p><p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
   modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + rest, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
@@ -865,7 +869,7 @@ $('btn-music').onclick = () => { music.setOn(!music.isOn()); renderAll(); sfx.ta
 document.addEventListener('visibilitychange', () => music.pause(document.hidden));
 $('btn-reset').onclick = () => modal({
   title: '¿Empezar de cero?',
-  body: '<p>Perderás todas tus criaturas, huevos y monedas. No se puede deshacer.</p>',
+  body: '<p>Perderás todas tus bestias, huevos y monedas. No se puede deshacer.</p>',
   actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); music.stop(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
 });
 
@@ -905,7 +909,7 @@ try {
   // Barra de carga: avanza con cada imagen que llega.
   let loaded = 0, total = 0;
   const one = promise => { total++; return promise.then(value => { const pct = Math.round((++loaded / total) * 100); $('load-fill').style.width = pct + '%'; $('load-text').textContent = pct + ' %'; $('load-bar').setAttribute('aria-valuenow', pct); return value; }); };
-  const tips = ['Lo que come tu criatura decide qué estadística le sube al ganar nivel.', 'Un huevo bien cuidado nace con mejor categoría: vigila su temperatura y límpialo.', 'En combate, tu tiro anterior queda dibujado: corrige sobre él.', 'Cada elemento pega más a unos y menos a otros. Míralo antes de elegir rival.', 'Acariciar, jugar y cumplir deseos sube el vínculo, y con él el MP.'];
+  const tips = ['Lo que come tu bestia decide qué estadística le sube al ganar nivel.', 'Un huevo bien cuidado nace con mejor categoría: vigila su temperatura y límpialo.', 'En combate, tu tiro anterior queda dibujado: corrige sobre él.', 'Cada elemento pega más a unos y menos a otros. Míralo antes de elegir rival.', 'Acariciar, jugar y cumplir deseos sube el vínculo, y con él el MP.'];
   $('load-tip').textContent = tips[Math.floor(Math.random() * tips.length)];
   const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid, foodGrid, roomImgs] = await Promise.all([
     Promise.all(ROSTER.map(sp => one(loadMoods(moodSheet(sp.id)).then(grid => [sp.id, grid])))),

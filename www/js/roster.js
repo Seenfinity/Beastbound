@@ -3,11 +3,11 @@
 // special = el poder propio de la especie (se desbloquea en la forma Final).
 // Las claves de los poderes (dmg, blast, burn…) las interpreta battle.js.
 
-// Cada especie tiene su hoja: 3 filas (Baby, Teen, Final) × 5 columnas, una por ánimo.
+// Cada especie tiene su hoja: 3 filas (Baby, Mid, Final) × 5 columnas, una por ánimo.
 export const MOODS = ['calm', 'happy', 'sad', 'sleep', 'attack'];
 export const MOOD = Object.fromEntries(MOODS.map((m, i) => [m, i]));
 export const moodSheet = id => `assets/animos/${id}.webp`;
-export const STAGES = ['Baby', 'Teen', 'Final'];
+export const STAGES = ['Baby', 'Mid', 'Final'];
 
 export const ROSTER = [
   { id: 'blaziky', name: 'Blaziky', element: 'Fuego', role: 'Ataques explosivos', sheet: 1, row: 0, base: [4, 2, 3, 3],
@@ -160,7 +160,7 @@ export function effectOf(pw) {
   return tags.slice(0, 2).join(' · ') || 'Golpe';
 }
 
-// Los cuatro poderes de una criatura, con lo que cuestan y si ya los tiene.
+// Los cuatro poderes de una bestia, con lo que cuestan y si ya los tiene.
 export function powersOf(sp, pet) {
   const kit = POWERS[sp.element].map((p, i) => ({ ...p, ...POWER_SLOTS[i], unlocked: pet.level >= POWER_SLOTS[i].level, need: `Nivel ${POWER_SLOTS[i].level}` }));
   kit.push({ ...sp.special, ...SIGNATURE, signature: true, unlocked: pet.stage >= 2, need: 'Forma Final' });
@@ -192,7 +192,7 @@ export const POWER_ICON_SHEETS = [
   ['Perdigón', 'Blindaje', 'Taladro', 'Triple Cañón', 'Semilla', 'Raíces', 'Floración', 'Semilla Vital', 'Colmillo', 'Rugido', 'Cometa', 'Aliento Dragón', 'Rebote', 'Doble', 'Golpe Limpio', 'Bola Loca'],
   ['Destello', 'Bendición', 'Rayo Solar', 'Luz Sanadora', 'Chispa Roca', 'Pararrayos', 'Sismo Eléctrico', 'Batería', 'Puño Magma', '@tiro', '@candado', '@reloj', '@luna', '@botiquin', '@huevomas', '@trofeo'],
 ];
-// Efectos en assets/ui/efectos.png (se dibujan sobre las criaturas en combate).
+// Efectos en assets/ui/efectos.png (se dibujan sobre las bestias en combate).
 export const VFX_ORDER = ['burbuja', 'hexagono', 'anilloRayo', 'anilloLuz', 'llamas', 'burbujasVeneno', 'hielo', 'nubeOscura', 'raices', 'escudoRoto', 'estrellas', 'curar', 'destello', 'polvo', 'mana', 'debuff'];
 // Nombre de un poder convertido en algo usable como clase CSS: «Lluvia de Fuego» → «lluvia-de-fuego».
 export const slug = name => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');

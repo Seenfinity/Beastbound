@@ -124,7 +124,7 @@ export function moveDecor(g, id, x, y) {
   if (!DECOR[id]) return;
   g.decorPos[id] = { x: Math.round(Math.max(40, Math.min(1496, x))), y: Math.round(Math.max(560, Math.min(858, y))) };
 }
-// La criatura usa un mueble por su cuenta: le sube un poco el ánimo (hasta 8 veces al día).
+// La bestia usa un mueble por su cuenta: le sube un poco el ánimo (hasta 8 veces al día).
 export function useDecor(g, id) {
   const p = g.pet;
   rollDay(p);
@@ -176,7 +176,7 @@ export const MISSIONS = {
 };
 export const MISSION_BONUS = 40;
 
-// Requisitos para evolucionar: nivel y días de vida. [Baby→Teen, Teen→Final]
+// Requisitos para evolucionar: nivel y días de vida. [Baby→Mid, Mid→Final]
 export const EVOLVE = [{ level: 10, days: 3 }, { level: 30, days: 14 }];
 
 export const FIGHT_ENERGY = 20, TRAIN_ENERGY = 25, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
@@ -193,7 +193,7 @@ const fill = (text, pet) => text.replaceAll('{n}', pet.name);
 export const expNeeded = level => 25 + level * 15;
 export const ageDays = pet => (Date.now() - pet.born) / 864e5;
 
-// g.pet es siempre la criatura activa (no se guarda: se calcula).
+// g.pet es siempre la bestia activa (no se guarda: se calcula).
 function attach(g) {
   Object.defineProperty(g, 'pet', { get() { return this.pets[this.active] || null; }, enumerable: false, configurable: true });
   return g;
@@ -275,7 +275,7 @@ function rollDay(p) {
   if (p.day !== today()) { p.day = today(); p.trainsToday = 0; p.playsToday = 0; p.strokesToday = 0; p.usesToday = 0; }
 }
 
-// El tiempo pasa para todas tus criaturas, aunque el juego esté cerrado.
+// El tiempo pasa para todas tus bestias, aunque el juego esté cerrado.
 // Dormida: recobra energía más rápido, se recupera del combate al doble de velocidad y gasta menos.
 export function tick(g, now = Date.now()) {
   tickEggs(g, now);
@@ -364,7 +364,7 @@ function grant(g, type) {
 // Avisos para enseñar en pantalla (misión cumplida, deseo cumplido…). main.js los va sacando.
 function news(g, text) { (g.news ||= []).push(text); }
 
-// Las tres misiones de hoy, con su texto y recompensa. Se eligen al empezar el día según la criatura activa.
+// Las tres misiones de hoy, con su texto y recompensa. Se eligen al empezar el día según la bestia activa.
 export function dailyMissions(g) {
   if (g.missionsDay !== today() || !g.missions) {
     const p = g.pet;
@@ -408,7 +408,7 @@ export function spendItem(g, id) {
 // Solo se consiguen comprándolos o derrotando 10 veces a una misma especie, y nunca repetidos.
 
 // Un huevo tarda 3 días en incubarse y hay que cuidarlo: la temperatura se va desviando y se ensucia.
-// Cuanto más tiempo pasa en buenas condiciones, mejor categoría tiene la criatura al nacer.
+// Cuanto más tiempo pasa en buenas condiciones, mejor categoría tiene la bestia al nacer.
 export const EGG_DAYS = 3;
 export const EGG_TEMP = { ideal: 37, ok: 2, min: 30, max: 44 };   // bien entre 35 y 39 °C
 export const EGG_DIRTY = 60;                                       // a partir de aquí está sucio
@@ -476,7 +476,7 @@ export const eggPrice = g => 100 * (g.pets.length + g.eggs.length);
 export function buyEgg(g) {
   const free = ROSTER.filter(r => !owns(g, r.id));
   if (!free.length) return { error: 'Ya tienes todas las especies.' };
-  if (!hasRoom(g)) return { error: 'No te caben más huevos ni criaturas.' };
+  if (!hasRoom(g)) return { error: 'No te caben más huevos ni bestias.' };
   const price = eggPrice(g);
   if (g.coins < price) return { error: `Te faltan ${price - g.coins} monedas.` };
   g.coins -= price;
@@ -488,7 +488,7 @@ export function buyEgg(g) {
 export function hatchEgg(g, index, name) {
   const egg = g.eggs[index];
   if (!egg || !eggReady(g, egg)) return { error: 'Ese huevo aún no está listo.' };
-  if (g.pets.length >= MAX_PETS) return { error: 'No te caben más criaturas.' };
+  if (g.pets.length >= MAX_PETS) return { error: 'No te caben más bestias.' };
   tickEggs(g);
   const grade = gradeOf((egg.good || 0) / (EGG_DAYS * eggDay(g)));
   g.eggs.splice(index, 1);
@@ -659,7 +659,7 @@ export function evolve(g) {
   for (const k of STATS) p.stats[k]++;
   p.axes = { carino: 0, disciplina: 0, bravura: 0, descuido: 0 };
   p.bond = clamp(p.bond + 5);
-  log(g, `Evolucionó a ${['', 'Teen', 'Final'][p.stage]}. Carácter: ${CHARS[p.char].name}.`);
+  log(g, `Evolucionó a ${['', 'Mid', 'Final'][p.stage]}. Carácter: ${CHARS[p.char].name}.`);
   return { char: p.char, prevChar, mastery: p.mastery };
 }
 
@@ -743,7 +743,7 @@ export function makeRival(pet, species = '') {
 }
 
 // Al ganar te quedas con su botín. A la décima victoria contra una especie que no tengas, ganas su huevo.
-// hpLeft (0–1) es la vida con la que acabó tu criatura: decide cuánto tarda en recuperarse.
+// hpLeft (0–1) es la vida con la que acabó tu bestia: decide cuánto tarda en recuperarse.
 export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   const p = g.pet;
   let exp, coins = 0, stolen = 0, egg = false;

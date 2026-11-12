@@ -144,7 +144,7 @@ function empuja(view) {
   };
 }
 
-// Agilidad: caen rocas durante diez segundos; hay que mover a la criatura para esquivarlas.
+// Agilidad: caen rocas durante diez segundos; hay que mover a la bestia para esquivarlas.
 function esquiva(view) {
   const left = view.x0 + 90, right = view.x0 + view.w - 90;
   return {

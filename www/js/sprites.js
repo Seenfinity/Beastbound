@@ -1,4 +1,4 @@
-// Carga hojas de sprites generadas sobre fondo magenta y recorta cada criatura.
+// Carga hojas de sprites generadas sobre fondo magenta y recorta cada bestia.
 
 export async function loadImage(src) {
   const img = new Image();

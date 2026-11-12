@@ -1,14 +1,15 @@
-// La sala donde vive la criatura. Todo se hace tocando la escena:
+// La sala donde vive la bestia. Todo se hace tocando la escena:
 // frotarla para acariciarla, lanzarle la pelota, soltarle comida encima, mantener pulsado para evolucionar.
 
 import { fit, scaled } from './sprites.js';
 import { MOOD } from './roster.js';
 import { createMini, MINI_INFO, FLOOR } from './minigames.js';
 import { sfx } from './sfx.js';
+import { tr } from './i18n.js';
 
 const SW = 1536, SH = 864;               // tamaño de la imagen de la sala
-const SIZE = [210, 265, 325];            // alto de la criatura por etapa
-// Qué hace la criatura con cada mueble cuando va a usarlo, y qué dice al mirarlo.
+const SIZE = [210, 265, 325];            // alto de la bestia por etapa
+// Qué hace la bestia con cada mueble cuando va a usarlo, y qué dice al mirarlo.
 const ACT = {
   alfombra: 'roll', cama: 'nap', cuenco: 'eat', juguetes: 'jump', muneco: 'punch', trofeo: 'watch', peluche: 'hug', musica: 'dance',
   pecera: 'watch', lampara: 'watch', planta: 'watch', puff: 'sit', saco: 'punch', libros: 'watch', torre: 'jump', cofre: 'watch',
@@ -54,7 +55,7 @@ export class Room {
   itemAt(x, y) {                            // el mueble que está más delante bajo el dedo (la alfombra, la última)
     return [...this.items].sort((a, b) => (a.floor ? 1 : 0) - (b.floor ? 1 : 0) || b.y - a.y).find(d => { const b = this.box(d); return x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1; });
   }
-  // La criatura camina hasta un mueble para usarlo.
+  // La bestia camina hasta un mueble para usarlo.
   goUse(d) {
     if (this.asleep || this.mini || !d) return;
     const c = this.c, front = d.floor || d.y > FLOOR + 14;      // los de delante (o el suelo) los usa encima; los de detrás, desde un lado
@@ -221,7 +222,7 @@ export class Room {
       } else if (b.life > 7) b.active = false;
     }
 
-    // Qué hace la criatura
+    // Qué hace la bestia
     const speed = this.sad ? 80 : 150;
     if (b.active && !b.held && c.mode !== 'eat') {            // persigue la pelota
       const d = b.x - c.x;
@@ -326,6 +327,7 @@ export class Room {
   }
 
   text(ctx, str, x, y, size, color = '#fff', stroke = '#120c24') {
+    str = tr(str);
     ctx.font = `900 ${size}px system-ui, sans-serif`;
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.lineWidth = size * 0.26; ctx.strokeStyle = stroke; ctx.strokeText(str, x, y);
@@ -354,7 +356,7 @@ export class Room {
       }
     };
     for (const d of decor) if (d.floor) put(d);                              // alfombra: en el suelo
-    for (const d of decor) if (!d.floor && d.y <= FLOOR + 14) put(d);          // lo que queda detrás de la criatura
+    for (const d of decor) if (!d.floor && d.y <= FLOOR + 14) put(d);          // lo que queda detrás de la bestia
     if (this.sleepK > 0 && !this.mini) {              // luces que se apagan y una luna de noche
       ctx.fillStyle = `rgba(6,4,34,${0.58 * this.sleepK})`; ctx.fillRect(x0, 0, vw, SH);
       // Un charco de luz de luna donde duerme
@@ -396,7 +398,7 @@ export class Room {
         this.drawIcon(ctx, 'pelota', 0, 0, 82);
         ctx.restore();
       }
-      const say = this.editing ? '' : this.bubble?.text || (this.evolveReady && !this.asleep ? '¡Siento que voy a evolucionar!' : '');
+      const say = tr(this.editing ? '' : this.bubble?.text || (this.evolveReady && !this.asleep ? '¡Siento que voy a evolucionar!' : ''));
       if (say) {
         ctx.font = '800 30px system-ui, sans-serif';
         const tw = ctx.measureText(say).width + 48, bx = clamp(c.x - tw / 2, x0 + 12, x0 + vw - tw - 12), by = FLOOR - this.size - 96 - c.lift * 0.4;
@@ -407,7 +409,7 @@ export class Room {
       }
     }
 
-    if (decor.length) {                               // lo que queda delante de la criatura
+    if (decor.length) {                               // lo que queda delante de la bestia
       if (this.sleepK > 0) ctx.filter = `brightness(${1 - 0.5 * this.sleepK})`;
       for (const d of decor) if (!d.floor && d.y > FLOOR + 14) put(d);
       ctx.filter = 'none';

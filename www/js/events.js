@@ -1,6 +1,6 @@
 // Momentos de crianza: situaciones cortas con dos respuestas.
 // Cada respuesta empuja el carácter (cariño, disciplina, bravura) y toca ánimo, vínculo, etc.
-// {n} se sustituye por el nombre de la criatura.
+// {n} se sustituye por el nombre de la bestia.
 
 export const EVENTS = [
   { id: 'llanto', text: '{n} ha encontrado a un bicho más pequeño llorando.',

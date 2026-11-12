@@ -5,6 +5,7 @@ import { fit, scaled } from './sprites.js';
 import { ELEMENT_COLOR, matchup, MOOD } from './roster.js';
 import { CHARS } from './state.js';
 import { sfx } from './sfx.js';
+import { tr } from './i18n.js';
 
 export const W = 640;                   // ancho de lo que cabe en pantalla, en unidades de juego (el alto depende de la pantalla)
 export const WORLD = 1200;              // ancho del campo entero: la cámara lo recorre
@@ -75,7 +76,7 @@ function makeTerrain(H) {                              // H: la altura a la que 
 
 export class Battle {
   // Cada bando: { pet, prof, species, sprite, powers }. hooks: { onEnd(win) }
-  // H es el alto del campo; scale agranda a las criaturas en pantallas estrechas.
+  // H es el alto del campo; scale agranda a las bestias en pantallas estrechas.
   // art: { vfx: {nombre: lienzo}, icon(nombreDePoder) → lienzo } para los efectos e iconos.
   // pad: franja de abajo que tapan los botones; el suelo se levanta para que no quede debajo.
   constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}, pad = 0) {
@@ -379,7 +380,7 @@ export class Battle {
     if (pw) sfx.special(); else sfx.shoot();
   }
 
-  // Al lanzar un poder: ondas, partículas de su elemento y su emblema sobre la criatura.
+  // Al lanzar un poder: ondas, partículas de su elemento y su emblema sobre la bestia.
   cast(f, pw, style) {
     const look = fxOf(f.species.element), cy = f.y - f.h * 0.5;
     this.rings.push({ x: f.x, y: cy, r: f.h * 1.5, t: 0, max: 0.5, c: look.c[1], w: 4 });
@@ -533,7 +534,7 @@ export class Battle {
     ctx.drawImage(img, -img.width / 2, -img.height / 2);
     ctx.restore();
   }
-  // Mientras hay un poder preparado, la criatura se carga con partículas de su elemento.
+  // Mientras hay un poder preparado, la bestia se carga con partículas de su elemento.
   charge(f) {
     const look = fxOf(f.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
     this.parts.push({ k: kind, x: f.x + rand(-f.h * 0.5, f.h * 0.5), y: f.y - rand(0, f.h * 0.5), vx: rand(-8, 8), vy: -rand(28, 70), g: 0, life: 0, max: rand(0.5, 0.95), c: look.c[Math.floor(rand(0, 3))], s: rand(2, 4), a: rand(0, 6) });
@@ -847,7 +848,7 @@ export class Battle {
     }
   }
 
-  // Lo que le pasa a la criatura se ve encima de ella, con los dibujos de la hoja de efectos.
+  // Lo que le pasa a la bestia se ve encima de ella, con los dibujos de la hoja de efectos.
   drawStatus(ctx, f, w) {
     const t = this.t, cx = f.x, top = f.y - f.h, mid = f.y - f.h * 0.5, big = Math.max(w, f.h);
     if (f.rooted || f.rootNext) this.vfx(ctx, 'raices', cx, f.y - big * 0.1, big * 1.3, { sy: 0.8 });
@@ -1176,7 +1177,7 @@ export class Battle {
       ctx.strokeText(label, cx, p.y + 16 * u); ctx.fillStyle = pl.sameAngle && pl.samePower ? '#7dff9b' : '#fff6d8'; ctx.fillText(label, cx, p.y + 16 * u);
       if (last) {                                      // debajo, el tiro anterior: en verde lo que coincide
         ctx.font = `800 ${9.5 * u}px system-ui, sans-serif`;
-        const before = `antes ${show(last.angle, last.power)}${pl.sameAngle && pl.samePower ? ' · igual' : pl.sameAngle ? ' · mismo ángulo' : pl.samePower ? ' · misma fuerza' : ''}`;
+        const before = tr(`antes ${show(last.angle, last.power)}${pl.sameAngle && pl.samePower ? ' · igual' : pl.sameAngle ? ' · mismo ángulo' : pl.samePower ? ' · misma fuerza' : ''}`);
         ctx.strokeText(before, cx, p.y + 28 * u); ctx.fillStyle = pl.sameAngle || pl.samePower ? '#7dff9b' : '#c9cbe6'; ctx.fillText(before, cx, p.y + 28 * u);
       }
     }
@@ -1205,8 +1206,9 @@ export class Battle {
       ctx.globalAlpha = Math.min(1, (1.2 - e.t) * 3);
       ctx.font = `900 ${(e.size || 15) * u ** 0.8}px system-ui, sans-serif`;
       ctx.lineWidth = 4 * u ** 0.8; ctx.strokeStyle = '#120c24';
-      ctx.strokeText(e.text, e.x, e.y - e.t * 22);
-      ctx.fillStyle = e.color; ctx.fillText(e.text, e.x, e.y - e.t * 22);
+      const text = tr(e.text);
+      ctx.strokeText(text, e.x, e.y - e.t * 22);
+      ctx.fillStyle = e.color; ctx.fillText(text, e.x, e.y - e.t * 22);
     }
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1223,8 +1225,9 @@ export class Battle {
       ctx.globalAlpha = Math.min(1, this.banner.t * 2.5);
       ctx.font = '900 24px system-ui, sans-serif'; ctx.textAlign = 'center';
       ctx.lineWidth = 6; ctx.strokeStyle = '#120c24';
-      ctx.strokeText(this.banner.text, W / 2, m.y + m.h + 36);
-      ctx.fillStyle = '#ffd76a'; ctx.fillText(this.banner.text, W / 2, m.y + m.h + 36);
+      const text = tr(this.banner.text);
+      ctx.strokeText(text, W / 2, m.y + m.h + 36);
+      ctx.fillStyle = '#ffd76a'; ctx.fillText(text, W / 2, m.y + m.h + 36);
     }
     ctx.globalAlpha = 1;
     ctx.restore();
