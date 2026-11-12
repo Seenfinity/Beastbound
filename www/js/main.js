@@ -405,7 +405,7 @@ function buildTray() {
     if (game.foods[food] <= 0) return toast(`No te queda ${S.FOODS[food].name.toLowerCase()}. Cómpralo con el botón de abajo.`);
     e.preventDefault();
     drag = { food, sx: e.clientX, sy: e.clientY, moved: false };
-    ghost.className = `ic ghost ic-${food}`;
+    ghost.className = `ic drag-ghost ic-${food}`;
   });
   window.addEventListener('pointermove', e => {
     if (!drag) return;

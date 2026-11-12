@@ -98,7 +98,8 @@ canvas { display: block; }
 .slot.empty > .ic { filter: grayscale(1) opacity(.45); }
 .slot button { width: 100%; background: #2a3270; border: 0; border-radius: 8px; font-size: 11px; font-weight: 800; padding: 3px 0; display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
 .slot button .ic { width: 13px; height: 13px; cursor: pointer; }
-.ghost { position: fixed; z-index: 30; width: 64px; height: 64px; margin: -32px 0 0 -32px; pointer-events: none; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .5)); }
+/* Imagen de la comida que sigue al dedo al arrastrarla (ojo: no es el botón secundario, que es .btn.ghost) */
+.drag-ghost { position: fixed; z-index: 30; width: 64px; height: 64px; margin: -32px 0 0 -32px; pointer-events: none; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .5)); }
 
 .meter { display: grid; grid-template-columns: 22px 62px 1fr; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .meter .ic { width: 20px; height: 20px; }
@@ -309,6 +310,9 @@ canvas { display: block; }
   #tabs { order: 3; flex-basis: 100%; }
   #tabs button { flex: 1; justify-content: center; padding: 8px 4px; font-size: 12px; flex-direction: column; gap: 2px; }
   .level { width: 112px; }
+  .evolve-btn { bottom: 108px; font-size: 17px; padding: 10px 22px; white-space: nowrap; }  /* por encima de la bandeja de comida */
+  .powers { justify-content: center; }
+  .pw { min-width: 0; flex: 1 1 44%; }
   .slot { width: 62px; }
   .slot .ic { width: 36px; height: 36px; }
   .dome { width: 96px; height: 128px; }
