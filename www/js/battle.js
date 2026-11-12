@@ -60,10 +60,10 @@ function makeTerrain(H) {                              // H: la altura a la que 
     return { x, high };
   };
   const spawns = [spawn(true), spawn(false)];
-  const n = 2 + Math.floor(rand(0, 2));
+  const n = 1 + Math.floor(rand(0, 2));               // uno o dos obstáculos entre ambos
   for (let i = 0; i < n; i++) {
     const x = 430 + ((WORLD - 860) * (i + rand(0.2, 0.8))) / n;
-    feats.push(Math.random() < 0.65 ? { x, w: rand(34, 70), h: rand(80, 210) } : { x, w: rand(50, 90), h: -rand(30, 60) });
+    feats.push(Math.random() < 0.65 ? { x, w: rand(40, 76), h: rand(60, 150) } : { x, w: rand(50, 90), h: -rand(30, 60) });
   }
   for (let x = 0; x < WORLD; x++) {
     let y = base + Math.sin(x * f1 + p1) * a1 + Math.sin(x * f2 + p2) * a2;
@@ -98,7 +98,8 @@ export class Battle {
     // Cámara: empieza enseñando al rival y luego viaja hasta quien tenga el turno.
     this.cam = { x: clamp(this.rival.x - W / 2, 0, WORLD - W), y: clamp(this.rival.y - (this.VH - pad) * 0.62, 0, H - this.VH) };
     this.look = null; this.pan = false; this.intro = 1.3;
-    this.t = 0; this.acc = 0; this.shake = 0; this.flash = 0; this.wind = 0;
+    this.t = 0; this.acc = 0; this.shake = 0; this.flash = 0; this.wind = 0; this.round = 0;
+    this.lastAim = null; this.lastPath = [];         // tu tiro anterior: para repetirlo o corregirlo
     this.pull = null; this.armed = -1; this.volley = null;
     this.stepLeft = 0; this.stepDir = 1; this.hold = false;   // pasos cortos del jugador
     this.far = false; this.zoom = 1;                 // vista lejana (todo el campo) o cercana
@@ -123,9 +124,9 @@ export class Battle {
   setupHazards(h) {
     // Todo se reparte por la zona central, entre los dos bandos.
     const spread = (n, make) => Array.from({ length: n }, (_, i) => make(rand(340 + ((WORLD - 680) * i) / n, 340 + ((WORLD - 680) * (i + 0.9)) / n)));
-    this.rocks = spread((h.rocks || 0) * 2, x => ({ x, y: Math.max(40, this.groundAt(x) - rand(80, 210)), rx: rand(26, 40), ry: rand(13, 18) }));
-    this.thermals = spread((h.thermals || 0) * 2, x => ({ x, w: rand(34, 48) }));
-    this.birds = Array.from({ length: (h.birds || 0) * 2 }, (_, i) => this.newBird(i, true));
+    this.rocks = spread(h.rocks ? h.rocks + 1 : 0, x => ({ x, y: Math.max(40, this.groundAt(x) - rand(80, 210)), rx: rand(26, 40), ry: rand(13, 18) }));
+    this.thermals = spread(h.thermals ? h.thermals + 1 : 0, x => ({ x, w: rand(34, 48) }));
+    this.birds = Array.from({ length: h.birds || 0 }, (_, i) => this.newBird(i, true));
     this.gusty = !!h.gusty;
     this.snow = h.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(18, 46) })) : [];
   }
@@ -135,7 +136,7 @@ export class Battle {
   }
   rockAt(x, y) { return this.rocks.find(r => ((x - r.x) / r.rx) ** 2 + ((y - r.y) / r.ry) ** 2 < 1); }
   lift(x) { return this.thermals.some(t => Math.abs(x - t.x) < t.w / 2) ? 560 : 0; } // empuje hacia arriba
-  windNow() { return this.wind + (this.gusty ? Math.sin(this.t * 1.9) * 4 : 0); }
+  windNow() { return this.wind + (this.gusty ? Math.sin(this.t * 1.9) * 2.5 : 0); }
 
   groundAt(x) { return this.terrain[clamp(Math.round(x), 0, WORLD - 1)]; }
   other(f) { return f === this.player ? this.rival : this.player; }
@@ -158,7 +159,8 @@ export class Battle {
     f.fuel = f.rooted ? 0 : f.prof.fuel;
     f.cds = f.cds.map(c => Math.max(0, c - 1));
     if (f.turns++ > 0) f.mp = Math.min(f.maxMp, f.mp + f.prof.mpRegen);
-    this.wind = Math.round(rand(-10, 10));
+    // El viento dura toda la ronda (tu turno y el del rival) y cambia poco: lo aprendido en un tiro sirve para el siguiente.
+    if (f.isPlayer) this.wind = this.round++ ? clamp(this.wind + Math.round(rand(-3, 3)), -8, 8) : Math.round(rand(-6, 6));
     this.phase = 'aim';
     this.clock = TURN_TIME; this.beep = 6;
     this.itemUsed = false; f.sight = false;
@@ -234,11 +236,17 @@ export class Battle {
     const dx = p.sx - vx, dy = p.sy - vy, len = Math.hypot(dx, dy);
     p.aiming = len > 12;
     if (!p.aiming) return;
-    const f = this.player;
+    p.aimed = true;
+    const f = this.player, last = this.lastAim;
     let a = (Math.atan2(-dy, dx) * 180) / Math.PI;
     if (a < 0) a = dx >= 0 ? 0 : 180;
     f.angle = clamp(a, 0, 180);
-    f.power = clamp(len / 1.6, 5, 100);
+    f.power = clamp(len / 2.1, 5, 100);
+    // Imán: cerca del ángulo o la fuerza del tiro anterior, se queda clavado en ellos.
+    p.sameAngle = !!last && Math.abs(f.angle - last.angle) < 1.3;
+    p.samePower = !!last && Math.abs(f.power - last.power) < 2;
+    if (p.sameAngle) f.angle = last.angle;
+    if (p.samePower) f.power = last.power;
   }
   pullEnd() {
     if (this.pan) { this.pan = false; return; }
@@ -246,7 +254,7 @@ export class Battle {
     this.pull = null;
     if (!p || !this.canAct()) return;
     if (p.aiming) { if (this.player.power > 8) this.fire(this.armed); }
-    else if (Math.abs(p.wx - this.player.x) > 6) this.nudge(p.wx > this.player.x ? 1 : -1);
+    else if (!p.aimed && Math.abs(p.wx - this.player.x) > 6) this.nudge(p.wx > this.player.x ? 1 : -1);   // un toque; volver al inicio solo cancela
   }
   // Usa un objeto de la mochila: uno por turno y sin gastar el turno. Devuelve si se pudo usar.
   useItem(id) {
@@ -274,7 +282,7 @@ export class Battle {
     if (index >= 0 && !this.canUse(f, index)) index = -1;
     const pw = index >= 0 ? f.powers[index] : null, sp = pw || {};
     const m = pw ? f.prof.mastery : '';
-    if (f.isPlayer) this.armed = -1;
+    if (f.isPlayer) { this.armed = -1; this.lastAim = { angle: f.angle, power: f.power }; this.lastPath = []; }
     let angle = f.angle;
     if (f.isPlayer && Math.random() < f.prof.disobey) {
       angle += (Math.random() < 0.5 ? -1 : 1) * rand(5, 9);
@@ -284,7 +292,7 @@ export class Battle {
     }
     let dmg = f.prof.dmg * (sp.dmg ?? 1) * (m === 'pot' ? 1.25 : 1);
     if (f.pet.char === 'feroz' && f.hp < f.maxHp / 2) dmg *= 1.2;
-    const blast = (sp.blast ?? 30) * (m === 'pun' ? 1.3 : 1);
+    const blast = (sp.blast ?? 36) * (m === 'pun' ? 1.3 : 1);
     if (pw) {
       f.mp -= pw.mp;
       f.cds[index] = Math.max(1, pw.cd - (m === 'agi' ? 1 : 0)) + 1; // +1 porque baja al empezar su próximo turno
@@ -307,7 +315,7 @@ export class Battle {
       const v = speedOf(f.power) * (sp.fast ?? 1);
       this.shots.push({
         x, y, vx: Math.cos(rad(a)) * v, vy: -Math.sin(rad(a)) * v, dmg, blast, owner: f, sp,
-        age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40, style,
+        age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40, style, rec: f.isPlayer && i === Math.floor((n - 1) / 2),
       });
     }
     this.stepLeft = 0; this.hold = false;
@@ -411,6 +419,13 @@ export class Battle {
     if (look.flash) this.puff('destello', s.x, s.y, s.blast * 3.2, 0.45);
     if (s.style) this.impact(s);
     sfx.boom();
+    if (me.isPlayer && s.rec !== false) {               // si no le das, te dice por cuánto: corto o largo
+      const foe = this.rival, miss = Math.hypot(foe.x - s.x, foe.y - foe.r - s.y) >= s.blast + foe.r;
+      if (miss && s.rec) {
+        const over = (s.x - foe.x) * Math.sign(foe.x - me.x) > 0, by = Math.round(Math.abs(s.x - foe.x));
+        this.texts.push({ x: s.x, y: s.y - 26, text: `${over ? 'Largo' : 'Corto'} por ${by}`, t: -0.6, color: '#fff6d8', size: 14 });
+      }
+    }
     for (const f of [this.player, this.rival]) {
       const d = Math.hypot(f.x - s.x, f.y - f.r - s.y);
       if (d >= s.blast + f.r) continue;
@@ -527,8 +542,8 @@ export class Battle {
     // Como un jugador: el primer tiro es a ojo y va corrigiendo mientras el objetivo no se mueva.
     if (f.aimedAt === undefined || Math.abs(tgt.x - f.aimedAt) > 30) f.tries = 0;
     f.aimedAt = tgt.x;
-    const learn = Math.max(0.45, 1 - 0.2 * f.tries++);
-    const err = Math.max(1, 7 - f.pet.level * 0.45) * learn * clamp(520 / Math.abs(tgt.x - f.x), 0.5, 1) * (f.blind ? 2.5 : 1);
+    const learn = Math.max(0.5, 1 - 0.12 * f.tries++);
+    const err = clamp(11 - f.pet.level * 0.25, 3.5, 11) * learn * (f.blind ? 2.2 : 1);
     f.angle = clamp(best.angle + rand(-err, err), 0, 180);
     f.power = clamp(best.power + rand(-err, err) * 1.2, 10, 100);
   }
@@ -612,6 +627,7 @@ export class Battle {
       s.vy += (GRAVITY - this.lift(s.x)) * dt;
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (Math.round(s.age / dt) % 3 === 0) { s.trail.push([s.x, s.y]); if (s.trail.length > 10) s.trail.shift(); }
+      if (s.rec && Math.round(s.age / dt) % 5 === 0) this.lastPath.push([s.x, s.y]);   // el camino de tu tiro se queda dibujado
       if (Math.round(s.age / dt) % (s.style ? 2 : 6) === 0) {   // estela con el aspecto de su elemento (más densa en los poderes)
         const look = fxOf(s.owner.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
         this.parts.push({ k: kind, x: s.x, y: s.y, vx: rand(-12, 12), vy: rand(-12, 12), g: kind === 'drop' || kind === 'rock' ? 160 : kind === 'ember' || kind === 'flame' ? -40 : 0, life: 0, max: rand(0.25, 0.5), c: look.c[Math.floor(rand(0, 3))], s: s.style ? rand(3, 5.5) : rand(1.5, 3), a: rand(0, 6) });
@@ -652,7 +668,7 @@ export class Battle {
     if (this.phase === 'flying' && !this.shots.length) {
       const v = this.volley;
       if (v && !v.hit) {                             // falló el poder: tarda más en volver
-        v.f.cds[v.index] += 2;
+        v.f.cds[v.index] += 1;
         if (v.f.isPlayer) this.say(`${v.name} falló: tardará más en volver`, 1.8);
       }
       this.volley = null;
@@ -1044,22 +1060,44 @@ export class Battle {
         ctx.drawImage(icon, p.x - size / 2, iy, size, size);
       }
     }
+    if (this.canAct() && this.lastPath.length > 1) {   // el camino de tu tiro anterior, para corregir sobre él
+      ctx.fillStyle = 'rgba(255,255,255,.34)';
+      for (const q of this.lastPath) ctx.fillRect(q[0] - u, q[1] - u, 2 * u, 2 * u);
+      const end = this.lastPath[this.lastPath.length - 1];
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5 * u;
+      ctx.beginPath(); ctx.moveTo(end[0] - 5 * u, end[1] - 5 * u); ctx.lineTo(end[0] + 5 * u, end[1] + 5 * u); ctx.moveTo(end[0] + 5 * u, end[1] - 5 * u); ctx.lineTo(end[0] - 5 * u, end[1] + 5 * u); ctx.stroke();
+    }
     if (this.canAct() && pl?.aiming) {
-      const a = rad(p.angle), cx = p.x, cy = p.y - p.r, back = (10 + p.power * 0.45) * u;
+      const a = rad(p.angle), cx = p.x, cy = p.y - p.r, back = (10 + p.power * 0.45) * u, last = this.lastAim;
+      if (last) {                                      // la goma del tiro anterior, en fantasma
+        const la = rad(last.angle), lb = (10 + last.power * 0.45) * u;
+        ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 2 * u; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(la) * lb, cy + Math.sin(la) * lb); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,.5)';
+        ctx.beginPath(); ctx.arc(cx - Math.cos(la) * lb, cy + Math.sin(la) * lb, 3 * u, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.strokeStyle = this.armed >= 0 ? p.color : '#ffd76a'; ctx.lineWidth = 3 * u; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(a) * back, cy + Math.sin(a) * back); ctx.stroke();
       ctx.fillStyle = '#fff6d8';
       ctx.beginPath(); ctx.arc(cx - Math.cos(a) * back, cy + Math.sin(a) * back, 4 * u, 0, Math.PI * 2); ctx.fill();
       if (!p.blind || p.sight) {
         const [mx, my] = this.muzzle(p, p.angle);
-        const pts = this.trace(mx, my, p.angle, p.power, p.sight ? 500 : Math.min(60, p.prof.guide)).pts;
+        // La guía enseña buena parte del vuelo (más con Puntería); el final hay que calcularlo. Con la Mira se ve entera.
+        const whole = this.trace(mx, my, p.angle, p.power, 2000).pts;
+        const pts = whole.slice(0, Math.ceil(whole.length * (p.sight ? 1 : clamp(0.42 + p.prof.guide / 75, 0.5, 0.85))));
         pts.forEach((q, i) => { ctx.globalAlpha = 1 - (i / pts.length) * 0.75; ctx.fillRect(q[0] - 1.5 * u, q[1] - 1.5 * u, 3 * u, 3 * u); });
         ctx.globalAlpha = 1;
       }
       ctx.font = `800 ${11 * u}px system-ui, sans-serif`; ctx.textAlign = 'center';
       ctx.lineWidth = 3 * u; ctx.strokeStyle = '#120c24';
-      const label = `${Math.round(p.angle <= 90 ? p.angle : 180 - p.angle)}° · ${Math.round(p.power)}`;
-      ctx.strokeText(label, cx, p.y + 16 * u); ctx.fillStyle = '#fff6d8'; ctx.fillText(label, cx, p.y + 16 * u);
+      const show = (ang, pow) => `${Math.round(ang <= 90 ? ang : 180 - ang)}° · ${Math.round(pow)}`;
+      const label = show(p.angle, p.power);
+      ctx.strokeText(label, cx, p.y + 16 * u); ctx.fillStyle = pl.sameAngle && pl.samePower ? '#7dff9b' : '#fff6d8'; ctx.fillText(label, cx, p.y + 16 * u);
+      if (last) {                                      // debajo, el tiro anterior: en verde lo que coincide
+        ctx.font = `800 ${9.5 * u}px system-ui, sans-serif`;
+        const before = `antes ${show(last.angle, last.power)}${pl.sameAngle && pl.samePower ? ' · igual' : pl.sameAngle ? ' · mismo ángulo' : pl.samePower ? ' · misma fuerza' : ''}`;
+        ctx.strokeText(before, cx, p.y + 28 * u); ctx.fillStyle = pl.sameAngle || pl.samePower ? '#7dff9b' : '#c9cbe6'; ctx.fillText(before, cx, p.y + 28 * u);
+      }
     }
 
     for (const sh of this.shots) this.drawShot(ctx, sh);

@@ -658,7 +658,7 @@ function renderBattle() {
   $('b-hint').textContent = hoverItem ? `${S.ITEMS[hoverItem].name}: ${S.ITEMS[hoverItem].desc} Uno por turno; no gasta el disparo.`
     : pw && hoverPower >= 0 ? `${pw.name} (${pw.mp} MP): ${pw.desc}`
     : !battle.canAct() ? battle.map.effect
-    : pw ? `${pw.name}: ${pw.desc} Si falla, tarda más en volver.`
+    : pw ? `${pw.name}: ${pw.desc} Si falla, tarda un turno más en volver.`
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
     : a.blind ? 'Cegado: este turno no ves la guía de tiro.'
     : a.rooted ? 'Inmóvil: este turno no puedes moverte.'
