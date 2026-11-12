@@ -1,7 +1,7 @@
 // Arranque, pestañas y paneles. Las reglas están en state.js, la sala en room.js y el combate en battle.js.
 
 import * as S from './state.js';
-import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst } from './roster.js';
+import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
 import { loadSprites, loadGrid, loadImage, scaled } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
@@ -14,7 +14,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const TRAIN_ICON = { pot: 'roca', pun: 'diana', agu: 'escudo', agi: 'rayo' };
 
-let sprites, maps, icons = {}, room;
+let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, room;
 let game = null, battle = null, rival = null, tab = 'care', startPick = 0;
 
 const spriteOf = (species, stage) => { const sp = speciesOf(species); return sprites[sp.sheet][sp.row][stage]; };
@@ -71,6 +71,7 @@ function injectArt(eggList) {
   const url = (cv, h) => scaled(cv, Math.min(h, cv.height)).toDataURL();
   let css = '';
   for (const [name, cv] of Object.entries(icons)) css += `.ic-${name}{background-image:url(${url(cv, 96)})}`;
+  for (const [name, cv] of Object.entries(powerIcons)) css += `.pi-${slug(name)}{background-image:url(${url(cv, 96)})}`;
   eggList.forEach((cv, i) => { css += `.egg-${i}{background-image:url(${url(cv, 150)})}`; });
   for (const sp of ROSTER) for (let st = 0; st < 3; st++) css += `.sp-${sp.id}-${st}{background-image:url(${url(spriteOf(sp.id, st), 150)})}`;
   const style = document.createElement('style');
@@ -191,7 +192,7 @@ function renderCare() {
   $('exp-fill').style.width = (p.exp / need) * 100 + '%';
   $('exp-text').textContent = `${Math.floor(p.exp)} / ${need}`;
   setMeter('m-hunger', p.hunger); setMeter('m-energy', p.energy); setMeter('m-mood', p.mood); setMeter('m-bond', p.bond);
-  $('btn-sleep').textContent = p.asleep ? 'Despertar' : 'Acostar a dormir';
+  setHTML($('btn-sleep'), `<i class="ic ic-luna"></i> ${p.asleep ? 'Despertar' : 'Acostar a dormir'}`);
   $('sleep-note').textContent = p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
   $('mood-line').textContent = p.asleep ? 'Está durmiendo' : p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
     : p.bond < 30 ? 'Aún no confía en ti' : p.mood > 75 && p.hunger > 60 ? '¡Está feliz!' : 'Está bien';
@@ -253,8 +254,8 @@ function renderCare() {
   // Poderes: tres de su elemento (por nivel) y el propio de la especie (forma Final)
   const prof = S.profile(p), rest = S.restLeft(p);
   $('mp-max').textContent = `· ${prof.maxMp} MP`;
-  setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><b>${pw.name}</b>
-    <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need} · ${pw.desc}</small></div>`).join(''));
+  setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><i class="pi pi-${slug(pw.name)}"></i><span><b>${pw.name}</b>
+    <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need} · ${pw.desc}</small></span></div>`).join(''));
 
   setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"></i></div>
     <span>Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
@@ -277,7 +278,7 @@ function renderHeal() {
   const rest = S.restLeft(game.pet);
   for (const b of document.querySelectorAll('.heal-btn')) {
     b.hidden = !rest;
-    if (rest) setHTML(b, `Curar ahora · ${S.healCost(game)}<i class="ic ic-moneda"></i>`);
+    if (rest) setHTML(b, `<i class="ic ic-botiquin"></i> Curar ahora · ${S.healCost(game)}<i class="ic ic-moneda"></i>`);
   }
 }
 for (const b of document.querySelectorAll('.heal-btn')) {
@@ -300,7 +301,7 @@ function renderEggs() {
       <i class="egg-img ${eggClass(e.species)}"></i>
       <span><b>${esc(speciesOf(e.species).element)}</b>${ready ? '¡Listo! Toca para abrirlo' : 'Se abre en ' + duration(S.eggReadyAt(game, e) - Date.now())}</span></button>`;
   }).join('') : `<p class="muted">Sin huevos. Compra uno, o derrota ${S.DEFEATS_FOR_EGG} veces a una especie que no tengas.</p>`);
-  setHTML($('btn-buy-egg'), `Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i>`);
+  setHTML($('btn-buy-egg'), `<i class="ic ic-huevomas"></i> Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i>`);
 }
 
 $('btn-buy-egg').onclick = () => {
@@ -533,11 +534,11 @@ function startBattle(map) {
     const sp = speciesOf(pet.species);
     return { pet, prof: S.profile(pet), species: sp, sprite: spriteOf(pet.species, pet.stage), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
   };
-  battle = new Battle($('field'), side(p), side(rival), map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1);
+  battle = new Battle($('field'), side(p), side(rival), map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] });
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
   $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
   $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
-  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small><span></span></button>`).join('')
+  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
     || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
   powerButtons = [...document.querySelectorAll('#b-powers .pw')];
 }
@@ -556,6 +557,10 @@ function renderBattle() {
   $('b-st2').textContent = `${statusOf(b)}  ${b.mp} MP · ${Math.ceil(b.hp)} / ${b.maxHp}`;
   const wnd = Math.round(battle.windNow());
   $('b-wind').textContent = wnd === 0 ? 'calma' : (wnd < 0 ? '← ' : '') + Math.abs(wnd) + (wnd > 0 ? ' →' : '');
+  const mine = battle.canAct(), left = Math.ceil(battle.clock);
+  $('b-clock').textContent = mine ? left : '–';
+  $('b-clock-box').classList.toggle('hurry', mine && left <= 5);
+  $('b-clock-box').classList.toggle('off', !mine);
   powerButtons.forEach((btn, i) => {
     const armed = battle.armed === i;
     btn.disabled = !armed && !battle.canUse(a, i);
@@ -663,16 +668,22 @@ setInterval(() => {
 
 try {
   let loaded = 0;
-  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 5`; return value; });
-  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid] = await Promise.all([
+  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 7`; return value; });
+  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid] = await Promise.all([
     loadSprites(SHEETS),
     Promise.all(MAPS.map(async m => ({ ...m, img: await loadImage(m.bg) }))),
     loadImage('assets/ui/sala.png'),
     loadGrid('assets/ui/objetos.png', 4, 4),
     loadGrid('assets/ui/huevos.png', 4, 4),
+    Promise.all(POWER_ICON_SHEETS.map((_, i) => loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true))),
+    loadGrid('assets/ui/efectos.png', 4, 4, true),
   ].map(track));
   sprites = sheetGrids; maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
+  POWER_ICON_SHEETS.forEach((names, s) => powerGrids[s].flat().forEach((cv, i) => {
+    if (names[i].startsWith('@')) icons[names[i].slice(1)] = cv; else powerIcons[names[i]] = cv;   // @ = icono suelto de la interfaz
+  }));
+  vfxGrid.flat().forEach((cv, i) => { vfx[VFX_ORDER[i]] = cv; });
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: pet => spriteOf(pet.species, pet.stage) }, roomHooks);
   buildTray();

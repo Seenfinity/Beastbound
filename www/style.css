@@ -190,7 +190,9 @@ canvas { display: block; }
 
 /* Poderes, MP, rivales y recuperación */
 .pw-list { display: grid; gap: 5px; }
-.pw-list div { background: rgba(8, 6, 24, .45); border-left: 3px solid var(--gold); border-radius: 8px; padding: 4px 8px; }
+.pw-list div { background: rgba(8, 6, 24, .45); border-left: 3px solid var(--gold); border-radius: 8px; padding: 4px 8px 4px 4px; display: flex; align-items: center; gap: 8px; }
+.pw-list .pi { width: 36px; height: 36px; }
+.pw-list .locked .pi { filter: grayscale(1) brightness(.6); }
 .pw-list b { font-size: 13px; }
 .pw-list small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; }
 .pw-list .locked { border-left-color: var(--line); opacity: .6; }
@@ -204,16 +206,24 @@ canvas { display: block; }
 .bar.mp { height: 7px; }
 .bar.mp i { background: var(--blue); }
 .bar.mp.foe i { margin-left: auto; }
+.pi { display: block; width: 44px; height: 44px; flex: none; background: center / contain no-repeat; }
+.mid { display: flex; gap: 8px; align-items: stretch; }
+.clock { display: flex; align-items: center; gap: 4px; background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 2px 10px; font-size: 18px; min-width: 70px; justify-content: center; }
+.clock .ic { width: 22px; height: 22px; }
+.clock.hurry { border-color: var(--red); color: var(--red); animation: pulse .5s ease-in-out infinite alternate; }
+.clock.off { opacity: .45; }
 .powers { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; pointer-events: none; }
-.pw { pointer-events: auto; position: relative; min-width: 96px; background: rgba(12, 14, 40, .88); border: 2px solid var(--gold); border-radius: 12px; padding: 6px 10px; display: grid; text-align: left; box-shadow: 0 3px 0 #090b22; }
+.pw { pointer-events: auto; position: relative; min-width: 150px; background: rgba(12, 14, 40, .88); border: 2px solid var(--gold); border-radius: 12px; padding: 5px 10px 5px 5px; display: flex; align-items: center; gap: 8px; text-align: left; box-shadow: 0 3px 0 #090b22; }
+.pw .pw-t { display: grid; }
+.pw:disabled .pi { filter: grayscale(.8) brightness(.75); }
 .pw b { font-size: 13px; }
 .pw small { font-size: 11px; color: var(--blue); font-weight: 800; }
 .pw em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 700; }
 .pw.armed em { color: #5a3a00; }
 #btn-sleep { font-size: 13px; padding: 8px; }
 .pw-list i { font-style: normal; color: var(--gold); font-weight: 800; }
-.pw span { position: absolute; right: -6px; top: -8px; background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 24px; text-align: center; font-weight: 900; font-size: 12px; }
-.pw span:empty { display: none; }
+.pw > span:last-child { position: absolute; right: -6px; top: -8px; background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 24px; text-align: center; font-weight: 900; font-size: 12px; }
+.pw > span:last-child:empty { display: none; }
 .pw:disabled { border-color: var(--line); opacity: .55; }
 .pw.armed { background: var(--gold); color: #2a1a00; box-shadow: 0 0 0 3px rgba(255, 200, 61, .35), 0 0 22px var(--gold); }
 .pw.armed small { color: #5a3a00; }

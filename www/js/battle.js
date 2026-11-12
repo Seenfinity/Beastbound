@@ -8,6 +8,7 @@ import { sfx } from './sfx.js';
 
 export const W = 640;                   // ancho del campo en unidades de juego (el alto depende de la pantalla)
 const GRAVITY = 300, WIND_K = 5, STEP = 1 / 120;
+export const TURN_TIME = 30;            // segundos para apuntar y disparar; si se acaban, se pierde el turno
 const SIZE = [{ h: 48, r: 15 }, { h: 60, r: 19 }, { h: 74, r: 23 }]; // alto y radio de golpe por etapa
 
 const rad = d => (d * Math.PI) / 180;
@@ -59,8 +60,10 @@ function makeTerrain(H) {
 export class Battle {
   // Cada bando: { pet, prof, species, sprite, powers }. hooks: { onEnd(win) }
   // H es el alto del campo; scale agranda a las criaturas en pantallas estrechas.
-  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1) {
-    this.canvas = canvas; this.map = map; this.hooks = hooks; this.H = H; this.scale = scale;
+  // art: { vfx: {nombre: lienzo}, icon(nombreDePoder) → lienzo } para los efectos e iconos.
+  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}) {
+    this.canvas = canvas; this.map = map; this.hooks = hooks; this.H = H; this.scale = scale; this.art = art;
+    this.clock = TURN_TIME; this.beep = 6;
     this.terrain = makeTerrain(H);
     this.ground = document.createElement('canvas');
     this.ground.width = W * 2; this.ground.height = H * 2;
@@ -81,7 +84,7 @@ export class Battle {
       ...side, isPlayer, x, y: this.groundAt(x), dir, r: z.r * this.scale, h: z.h * this.scale,
       hp: side.prof.maxHp, maxHp: side.prof.maxHp, mp: side.prof.maxMp, maxMp: side.prof.maxMp,
       cds: side.powers.map(() => 0), turns: 0, angle: dir > 0 ? 55 : 125, power: 60, fuel: 0,
-      shield: 0, counter: 0, exposed: 0, poison: null, burn: null,
+      shield: 0, shieldLook: 'burbuja', counter: 0, exposed: 0, poison: null, burn: null,
       frozen: false, frozenNext: false, blind: false, blindNext: false, rooted: false, rootNext: false,
       clutchUsed: false, hurt: 0, fall: 0, color: ELEMENT_COLOR[side.species.element] || '#fff6d8',
     };
@@ -128,6 +131,7 @@ export class Battle {
     if (f.turns++ > 0) f.mp = Math.min(f.maxMp, f.mp + f.prof.mpRegen);
     this.wind = Math.round(rand(-10, 10));
     this.phase = 'aim';
+    this.clock = TURN_TIME; this.beep = 6;
     if (f.isPlayer) sfx.turn();
     this.say(f.frozen ? `${f.pet.name} está congelado` : f.blind ? `${f.pet.name} está cegado: apunta peor` : f.rooted ? `${f.pet.name} no puede moverse` : f.isPlayer ? '¡Tu turno!' : `Turno de ${f.pet.name}`);
     if (!f.isPlayer) { this.aiTimer = 1.5; this.aiReady = false; }
@@ -209,6 +213,7 @@ export class Battle {
       f.cds[index] = Math.max(1, pw.cd - (m === 'agi' ? 1 : 0)) + 1; // +1 porque baja al empezar su próximo turno
       if (sp.shield) f.shield = sp.shield;
       if (m === 'agu') f.shield = Math.max(f.shield, 0.3);
+      f.shieldLook = ['Metal', 'Tierra', 'Eléctrico/Tierra'].includes(f.species.element) ? 'hexagono' : 'burbuja';
       if (sp.counter) f.counter = sp.counter;
       if (sp.heal) this.heal(f, Math.round(f.maxHp * sp.heal));
       if (sp.gust) this.wind = (foe.x > f.x ? 1 : -1) * 8;
@@ -241,6 +246,7 @@ export class Battle {
     if (real <= 0) return;
     f.hp += real;
     this.note(f, `+${real}`, '#7dff9b');
+    this.puff('curar', f.x, f.y - f.h * 0.6, f.h * 1.1, 0.9, -26);
   }
 
   hurt(f, amount, from, tag = '') {
@@ -289,6 +295,7 @@ export class Battle {
     this.spray(s.x, s.y, me.species.element, s.blast);
     this.shake = Math.min(9, s.blast / 5);
     this.flash = look.flash || 0.14;
+    if (look.flash) this.puff('destello', s.x, s.y, s.blast * 3.2, 0.45);
     sfx.boom();
     for (const f of [this.player, this.rival]) {
       const d = Math.hypot(f.x - s.x, f.y - f.r - s.y);
@@ -313,9 +320,32 @@ export class Battle {
       if (sp.blind) { f.blindNext = true; this.note(f, '¡Cegado!', '#c9a8ff', 13); }
       if (sp.root) { f.rootNext = true; this.note(f, '¡Inmóvil!', '#d9b06a', 13); }
       if (sp.expose) { f.exposed = sp.expose; this.note(f, '¡Debilitado!', '#ff7a7a', 13); }
-      if (sp.shock) { const lost = Math.min(f.mp, sp.shock); f.mp -= lost; if (lost) this.note(f, `-${lost} MP`, '#7fe9ff', 12); }
+      if (sp.shock) { const lost = Math.min(f.mp, sp.shock); f.mp -= lost; if (lost) { this.note(f, `-${lost} MP`, '#7fe9ff', 12); this.puff('mana', f.x, f.y - f.h * 0.7, f.h * 0.7, 0.8, -34); } }
       if (sp.push) f.x = clamp(f.x + (f.x >= me.x ? 1 : -1) * sp.push, 14, W - 14);
     }
+  }
+
+  // Un efecto dibujado (de la hoja de efectos) que aparece, crece un poco y se desvanece.
+  puff(name, x, y, size, time = 0.6, rise = 0) {
+    const img = this.art.vfx?.[name];
+    if (img) this.parts.push({ k: 'img', img, x, y, vx: 0, vy: rise, g: 0, life: 0, max: time, s: size, c: '#fff' });
+  }
+  vfx(ctx, name, x, y, size, o = {}) {
+    const img = this.art.vfx?.[name];
+    if (!img) return;
+    const k = size / Math.max(img.width, img.height);
+    ctx.save();
+    ctx.translate(x, y);
+    if (o.rot) ctx.rotate(o.rot);
+    ctx.scale((o.sx || 1) * k, (o.sy || 1) * k);
+    ctx.globalAlpha = o.alpha ?? 1;
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.restore();
+  }
+  // Mientras hay un poder preparado, la criatura se carga con partículas de su elemento.
+  charge(f) {
+    const look = fxOf(f.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
+    this.parts.push({ k: kind, x: f.x + rand(-f.h * 0.5, f.h * 0.5), y: f.y - rand(0, f.h * 0.5), vx: rand(-8, 8), vy: -rand(28, 70), g: 0, life: 0, max: rand(0.5, 0.95), c: look.c[Math.floor(rand(0, 3))], s: rand(2, 4), a: rand(0, 6) });
   }
 
   // Partículas del impacto, distintas para cada elemento.
@@ -420,6 +450,15 @@ export class Battle {
     if (this.phase === 'aim') {
       const f = this.turn;
       if (f.isPlayer) {
+        this.clock -= dt;
+        if (this.clock <= 5 && Math.ceil(this.clock) < this.beep) { this.beep = Math.ceil(this.clock); sfx.tap(); }
+        if (this.clock <= 0) {                         // se acabó el tiempo: pierde el turno
+          this.clock = 0; this.pull = null; this.armed = -1; this.moveTarget = null;
+          this.say('¡Se acabó el tiempo!', 1.6); sfx.bad();
+          this.phase = 'resolve'; this.timer = 1.2;
+          return;
+        }
+        if (this.armed >= 0 && Math.random() < dt * 30) this.charge(f);
         if (this.moveTarget !== null) {               // camina hacia donde tocaste
           const d = this.moveTarget - f.x, before = f.x;
           if (Math.abs(d) > 3 && f.fuel > 0) this.tryMove(f, d > 0 ? 1 : -1, dt);
@@ -556,63 +595,19 @@ export class Battle {
     }
   }
 
-  // Lo que le pasa a la criatura se ve encima de ella.
+  // Lo que le pasa a la criatura se ve encima de ella, con los dibujos de la hoja de efectos.
   drawStatus(ctx, f, w) {
-    const t = this.t, cx = f.x, top = f.y - f.h, mid = f.y - f.h * 0.5;
-    ctx.save();
-    ctx.lineCap = 'round';
-    if (f.frozen || f.frozenNext) {                    // bloque de hielo
-      ctx.fillStyle = 'rgba(160,220,255,.42)'; ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(cx - w * 0.55, top - 3, w * 1.1, f.h + 5, 4); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx - w * 0.36, top + 4); ctx.lineTo(cx - w * 0.12, top + f.h * 0.42);
-      ctx.moveTo(cx - w * 0.2, top + 3); ctx.lineTo(cx - w * 0.06, top + f.h * 0.22); ctx.stroke();
+    const t = this.t, cx = f.x, top = f.y - f.h, mid = f.y - f.h * 0.5, big = Math.max(w, f.h);
+    if (f.rooted || f.rootNext) this.vfx(ctx, 'raices', cx, f.y - big * 0.1, big * 1.3, { sy: 0.8 });
+    if (f.frozen || f.frozenNext) this.vfx(ctx, 'hielo', cx, f.y - big * 0.36, big * 1.4, { alpha: 0.92 });
+    if (f.poison) this.vfx(ctx, 'burbujasVeneno', cx + Math.sin(t * 2) * 3, top + f.h * 0.28 + Math.sin(t * 3) * 3, big * 0.95, { alpha: 0.92 });
+    if (f.blind || f.blindNext) this.vfx(ctx, 'nubeOscura', cx + f.dir * w * 0.08 + Math.sin(t * 2.2) * 2, top + f.h * 0.34, big * 1.05, { sy: 0.78, rot: Math.sin(t * 1.5) * 0.08 });
+    if (f.exposed > 0) {
+      this.vfx(ctx, 'escudoRoto', cx - f.dir * w * 0.46, top + f.h * 0.2, big * 0.44, { alpha: 0.75 + 0.25 * Math.sin(t * 9) });
+      this.vfx(ctx, 'debuff', cx + f.dir * w * 0.5, top + f.h * 0.22 + Math.sin(t * 6) * 2.5, big * 0.32);
     }
-    if (f.rooted || f.rootNext) {                      // raíces que le sujetan las patas
-      ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 2;
-      for (const i of [-1, -0.45, 0.45, 1]) {
-        ctx.beginPath(); ctx.moveTo(cx + i * w * 0.52, f.y + 2);
-        ctx.quadraticCurveTo(cx + i * w * 0.5, f.y - f.h * 0.24, cx + i * w * 0.22, f.y - f.h * 0.14); ctx.stroke();
-        ctx.fillStyle = '#6fd45a'; ctx.fillRect(cx + i * w * 0.22 - 1.5, f.y - f.h * 0.14 - 3, 3, 3);
-      }
-    }
-    if (f.burn) {                                      // llamas que suben por el cuerpo
-      for (let i = 0; i < 5; i++) {
-        const y = f.y - ((t * 40 + i * 19) % (f.h * 0.95)), x = cx + Math.sin(i * 2.1 + t * 3) * w * 0.38, k = 1 - (f.y - y) / f.h;
-        ctx.fillStyle = i % 2 ? '#ffd23f' : '#ff7a1f'; ctx.fillRect(x - 1.5 - k, y - 1.5 - k, 3 + k * 2, 3 + k * 2);
-      }
-    }
-    if (f.poison) {                                    // burbujas verdes
-      ctx.strokeStyle = '#9be33c'; ctx.fillStyle = 'rgba(155,227,60,.3)'; ctx.lineWidth = 1;
-      for (let i = 0; i < 4; i++) {
-        const y = f.y - ((t * 22 + i * 23) % f.h), x = cx + Math.sin(i * 1.7 + t * 2) * w * 0.42;
-        ctx.beginPath(); ctx.arc(x, y, 2 + (i % 2) * 1.2, 0, 6.3); ctx.fill(); ctx.stroke();
-      }
-    }
-    if (f.blind || f.blindNext) {                      // nube oscura sobre los ojos
-      const ey = top + f.h * 0.34;
-      ctx.fillStyle = 'rgba(38,14,78,.88)';
-      for (let i = 0; i < 6; i++) {
-        const a = t * 2.4 + i * 1.05;
-        ctx.beginPath(); ctx.arc(cx + f.dir * w * 0.1 + Math.cos(a) * w * 0.24, ey + Math.sin(a * 1.3) * f.h * 0.07, f.h * 0.13, 0, 6.3); ctx.fill();
-      }
-      ctx.fillStyle = '#c9a8ff';
-      for (let i = 0; i < 3; i++) { const a = t * 4 + i * 2.1; ctx.fillRect(cx + Math.cos(a) * w * 0.34, ey + Math.sin(a) * f.h * 0.12, 2, 2); }
-    }
-    if (f.exposed > 0) {                               // grietas rojas: recibe más daño
-      ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 9);
-      ctx.beginPath(); ctx.moveTo(cx - w * 0.2, top + f.h * 0.22); ctx.lineTo(cx + w * 0.05, top + f.h * 0.42);
-      ctx.lineTo(cx - w * 0.1, top + f.h * 0.58); ctx.lineTo(cx + w * 0.16, top + f.h * 0.8); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    if (f.shield > 0) {                                // burbuja protectora
-      ctx.strokeStyle = 'rgba(120,205,255,.95)'; ctx.fillStyle = 'rgba(77,184,255,.16)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(cx, mid, w * 0.62, f.h * 0.62, 0, 0, 6.3); ctx.fill(); ctx.stroke();
-    }
-    if (f.counter > 0) {                               // anillo eléctrico que devuelve el golpe
-      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 30;
-      ctx.beginPath(); ctx.ellipse(cx, mid, w * 0.68, f.h * 0.68, 0, 0, 6.3); ctx.stroke();
-    }
-    ctx.restore();
+    if (f.shield > 0) this.vfx(ctx, f.shieldLook, cx, mid, big * 1.5 * (1 + Math.sin(t * 4) * 0.03), { rot: f.shieldLook === 'hexagono' ? t * 0.5 : Math.sin(t * 1.3) * 0.06, alpha: 0.95 });
+    if (f.counter > 0) this.vfx(ctx, 'anilloRayo', cx, mid, big * 1.55, { rot: -t * 1.6 });
   }
 
   drawParts(ctx) {
@@ -622,7 +617,10 @@ export class Battle {
       const u = p.life / p.max;
       ctx.globalAlpha = Math.max(0, 1 - u);
       ctx.fillStyle = ctx.strokeStyle = p.c;
-      if (p.k === 'bubble') {
+      if (p.k === 'img') {
+        const k = (p.s * (0.7 + u * 0.4)) / Math.max(p.img.width, p.img.height);
+        ctx.drawImage(p.img, p.x - (p.img.width * k) / 2, p.y - (p.img.height * k) / 2, p.img.width * k, p.img.height * k);
+      } else if (p.k === 'bubble') {
         ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x + Math.sin(p.life * 8 + p.a) * 2, p.y, p.s, 0, 6.3); ctx.stroke();
         ctx.globalAlpha *= 0.35; ctx.fill();
       } else if (p.k === 'wisp') {
@@ -663,6 +661,10 @@ export class Battle {
     const img = scaled(f.sprite, f.h * px);
     const w = (img.width / img.height) * f.h;
     const dead = f.hp <= 0;
+    if (f.burn && !dead) {                            // arde: llamas por detrás que asoman alrededor
+      const big = Math.max(w, f.h);
+      this.vfx(ctx, 'llamas', f.x, f.y - big * 0.55, big * 1.45, { sy: 1 + Math.sin(this.t * 14) * 0.07, sx: 1 + Math.cos(this.t * 11) * 0.05 });
+    }
     ctx.save();
     ctx.translate(f.x, f.y + 2);
     ctx.fillStyle = 'rgba(8,5,20,.45)';
@@ -726,10 +728,18 @@ export class Battle {
 
     // Tirachinas: goma, potencia y guía de tiro (más larga cuanto más Puntería)
     const p = this.player, pl = this.pull;
-    if (this.canAct() && this.armed >= 0) {            // poder preparado
-      ctx.strokeStyle = p.color; ctx.lineWidth = 2; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(this.t * 8);
-      ctx.beginPath(); ctx.arc(p.x, p.y - p.r, p.r + 9, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
+    if (this.canAct() && this.armed >= 0) {            // poder preparado: se carga con su elemento
+      const look = fxOf(p.species.element), pulse = 0.55 + 0.25 * Math.sin(this.t * 7);
+      const glow = ctx.createRadialGradient(p.x, p.y - p.h * 0.35, 2, p.x, p.y - p.h * 0.35, p.h * 0.95);
+      glow.addColorStop(0, look.c[1] + Math.round(pulse * 150).toString(16).padStart(2, '0'));
+      glow.addColorStop(1, look.c[0] + '00');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x - p.h, p.y - p.h * 1.4, p.h * 2, p.h * 1.6);
+      const icon = this.art.icon?.(p.powers[this.armed].name);
+      if (icon) {
+        const size = 26, iy = p.y - p.h - 46 + Math.sin(this.t * 4) * 3;
+        ctx.drawImage(icon, p.x - size / 2, iy, size, size);
+      }
     }
     if (this.canAct() && pl?.aiming) {
       const a = rad(p.angle), cx = p.x, cy = p.y - p.r, back = 10 + p.power * 0.45;

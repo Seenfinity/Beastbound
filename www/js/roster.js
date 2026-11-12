@@ -180,3 +180,16 @@ export const MAPS = [
 export const EGG_ORDER = ['Fuego', 'Agua', 'Eléctrico', 'Tierra', 'Viento', 'Oscuridad', 'Hielo', 'Veneno', 'Metal', 'Naturaleza', 'Dragón', 'Normal', 'Luz', 'Eléctrico/Tierra'];
 // Orden de los objetos en assets/ui/objetos.png.
 export const ICON_ORDER = ['filete', 'bayas', 'semillas', 'pelota', 'moneda', 'corazon', 'espadas', 'pesa', 'diana', 'roca', 'rayo', 'escudo', 'estrella', 'libro', 'engranaje', 'casa'];
+
+// Iconos de poder en assets/ui/poderes-1..4.png, de izquierda a derecha y de arriba abajo.
+// Los que empiezan por @ no son poderes sino iconos sueltos de la interfaz.
+export const POWER_ICON_SHEETS = [
+  ['Ascuas', 'Llamarada', 'Lluvia de Fuego', 'Bomba Fénix', 'Burbuja', 'Oleaje', 'Marea Sanadora', 'Caracola', 'Chispa', 'Descarga', 'Tormenta', 'Rayo', 'Pedrusco', 'Muro', 'Terremoto', 'Muralla'],
+  ['Brisa', 'Empujón', 'Tornado', 'Vendaval', 'Sombra', 'Acecho', 'Eclipse', 'Golpe Sombrío', 'Escarcha', 'Granizo', 'Glaciar', 'Ventisca', 'Esporas', 'Ácido', 'Miasma', 'Nube Tóxica'],
+  ['Perdigón', 'Blindaje', 'Taladro', 'Triple Cañón', 'Semilla', 'Raíces', 'Floración', 'Semilla Vital', 'Colmillo', 'Rugido', 'Cometa', 'Aliento Dragón', 'Rebote', 'Doble', 'Golpe Limpio', 'Bola Loca'],
+  ['Destello', 'Bendición', 'Rayo Solar', 'Luz Sanadora', 'Chispa Roca', 'Pararrayos', 'Sismo Eléctrico', 'Batería', 'Puño Magma', '@tiro', '@candado', '@reloj', '@luna', '@botiquin', '@huevomas', '@trofeo'],
+];
+// Efectos en assets/ui/efectos.png (se dibujan sobre las criaturas en combate).
+export const VFX_ORDER = ['burbuja', 'hexagono', 'anilloRayo', 'anilloLuz', 'llamas', 'burbujasVeneno', 'hielo', 'nubeOscura', 'raices', 'escudoRoto', 'estrellas', 'curar', 'destello', 'polvo', 'mana', 'debuff'];
+// Nombre de un poder convertido en algo usable como clase CSS: «Lluvia de Fuego» → «lluvia-de-fuego».
+export const slug = name => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');

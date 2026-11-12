@@ -11,16 +11,33 @@ export async function loadImage(src) {
 }
 
 // Vuelve transparente el fondo magenta de la hoja.
-export function keyOut(img) {
+// smart: solo borra el magenta conectado con el borde (más el magenta puro encerrado en huecos),
+// para no comerse los morados que haya dentro de los dibujos.
+export function keyOut(img, smart = false) {
   const c = document.createElement('canvas');
   c.width = img.width; c.height = img.height;
   const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
   const d = ctx.getImageData(0, 0, c.width, c.height);
-  const p = d.data;
-  for (let i = 0; i < p.length; i += 4) {
-    const r = p[i], g = p[i + 1], b = p[i + 2], m = Math.min(r, b);
-    if (m > 110 && g < m * 0.45 && Math.abs(r - b) < 60) p[i + 3] = 0;
+  const p = d.data, W = c.width, H = c.height;
+  const loose = i => { const r = p[i], g = p[i + 1], b = p[i + 2], m = Math.min(r, b); return m > 110 && g < m * 0.45 && Math.abs(r - b) < 60; };
+  const pure = i => p[i] > 205 && p[i + 2] > 205 && p[i + 1] < 70;
+  if (!smart) {
+    for (let i = 0; i < p.length; i += 4) if (loose(i)) p[i + 3] = 0;
+  } else {
+    const seen = new Uint8Array(W * H), stack = [];
+    const push = k => { if (!seen[k] && loose(k * 4)) { seen[k] = 1; stack.push(k); } };
+    for (let x = 0; x < W; x++) { push(x); push((H - 1) * W + x); }
+    for (let y = 0; y < H; y++) { push(y * W); push(y * W + W - 1); }
+    while (stack.length) {
+      const k = stack.pop(), x = k % W;
+      p[k * 4 + 3] = 0;
+      if (x > 0) push(k - 1);
+      if (x < W - 1) push(k + 1);
+      if (k >= W) push(k - W);
+      if (k < W * (H - 1)) push(k + W);
+    }
+    for (let i = 0; i < p.length; i += 4) if (pure(i)) p[i + 3] = 0;
   }
   ctx.putImageData(d, 0, 0);
   return c;
@@ -159,8 +176,8 @@ export function fit(canvas) {
 }
 
 // Carga una hoja en rejilla y devuelve sus figuras como [fila][columna].
-export async function loadGrid(url, rows, cols) {
-  return sliceGrid(keyOut(await loadImage(url)), rows, cols);
+export async function loadGrid(url, rows, cols, smart = false) {
+  return sliceGrid(keyOut(await loadImage(url), smart), rows, cols);
 }
 
 // Carga todas las hojas de criaturas y devuelve sprites[hoja][fila][etapa].
