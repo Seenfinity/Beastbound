@@ -1,0 +1,5 @@
+# Configuración local y archivos del sistema: no forman parte del juego
+.claude/
+.voight-agent-id
+.DS_Store
+node_modules/
