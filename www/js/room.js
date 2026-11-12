@@ -33,6 +33,7 @@ export class Room {
   }
   get size() { return SIZE[this.pet.stage]; }
   get sad() { return this.pet.mood < 25 || this.pet.hunger < 25; }
+  get asleep() { return !!this.pet.asleep; }
   ballHome() { return [this.view.x0 + this.view.w - 150, FLOOR + 62]; }
   onCreature(x, y, pad = 0) { return Math.abs(x - this.c.x) < this.size * 0.45 + pad && y > FLOOR - this.size - pad && y < FLOOR + 30 + pad; }
 
@@ -63,6 +64,10 @@ export class Room {
   down(x, y) {
     if (!this.pet) return;
     if (this.mini) { if (!this.result) this.mini.down(x, y); return; }
+    if (this.asleep) {                               // dormida: solo responde con un ronquido
+      if (this.onCreature(x, y)) this.say(this.hooks.onTap(), 1.6);
+      return;
+    }
     const b = this.ball, [hx, hy] = this.ballHome();
     const bx = b.active ? b.x : hx, by = b.active ? b.y : hy;
     if (Math.hypot(x - bx, y - by) < 85) {
@@ -141,6 +146,14 @@ export class Room {
     const c = this.c, b = this.ball, lo = this.view.x0 + 130, hi = this.view.x0 + this.view.w - 130;
     c.x = clamp(c.x, lo, hi);
     c.squash *= 0.86; c.lift = 0;
+    if (this.asleep) {                               // dormida: quieta, respirando y soltando zetas
+      c.mode = 'idle'; c.t = 1; b.active = false; b.held = false; this.hold = 0; this.ptr = null;
+      if ((this.zz = (this.zz || 0) - dt) <= 0) {
+        this.zz = 1.1;
+        this.parts.push({ text: 'z', x: c.x + c.dir * this.size * 0.3, y: FLOOR - this.size * 0.7, vx: 22 * c.dir, vy: -55, life: 0, max: 1.8, size: rand(28, 44) });
+      }
+      return;
+    }
 
     // Mantener pulsado para evolucionar
     const p = this.ptr;
@@ -207,8 +220,10 @@ export class Room {
     ctx.beginPath(); ctx.ellipse(x, FLOOR + 8, w * 0.38 * (1 - Math.min(0.5, lift / 300)), 16, 0, 0, 7); ctx.fill();
     ctx.save();
     ctx.translate(x + (o.lunge || 0) * 46 * o.dir, FLOOR + 10 - lift);
-    ctx.scale(o.dir * (1 + sq * 0.1), 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012);
-    if (this.sad) ctx.filter = 'saturate(0.55) brightness(0.85)';
+    if (this.asleep) ctx.scale(o.dir * 1.08, 0.8 + Math.sin(this.t * 1.6) * 0.035); // acurrucada, respiración lenta
+    else ctx.scale(o.dir * (1 + sq * 0.1), 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012);
+    if (this.asleep) ctx.filter = 'brightness(0.78)';
+    else if (this.sad) ctx.filter = 'saturate(0.55) brightness(0.85)';
     if (o.hurt && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.4;
     ctx.drawImage(img, -w / 2, -h, w, h);
     ctx.restore();
@@ -232,6 +247,7 @@ export class Room {
     ctx.translate(-x0, 0);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.art.bg, 0, 0, SW, SH);
+    if (this.asleep && !this.mini) { ctx.fillStyle = 'rgba(6,4,34,.55)'; ctx.fillRect(x0, 0, vw, SH); } // luces apagadas
 
     const color = this.hooks.charColor();
     if (color || this.evolveReady) {                      // aura: color del carácter, o dorada si puede evolucionar
@@ -269,7 +285,7 @@ export class Room {
         ctx.strokeStyle = '#ffd76a'; ctx.lineWidth = 14; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.arc(c.x, FLOOR - this.size * 0.5, this.size * 0.7, -Math.PI / 2, -Math.PI / 2 + this.hold * Math.PI * 2); ctx.stroke();
       }
-      const say = this.bubble?.text || (this.evolveReady && !this.hold ? 'Mantén pulsado sobre mí' : '');
+      const say = this.bubble?.text || (this.evolveReady && !this.hold && !this.asleep ? 'Mantén pulsado sobre mí' : '');
       if (say) {
         ctx.font = '800 30px system-ui, sans-serif';
         const tw = ctx.measureText(say).width + 48, bx = clamp(c.x - tw / 2, x0 + 12, x0 + vw - tw - 12), by = FLOOR - this.size - 96 - c.lift * 0.4;
@@ -281,9 +297,9 @@ export class Room {
     }
 
     for (const p of this.parts) {
-      if (!p.icon) continue;
       ctx.globalAlpha = Math.min(1, (p.max - p.life) * 3);
-      this.drawIcon(ctx, p.icon, p.x, p.y, p.size);
+      if (p.text) this.text(ctx, p.text, p.x, p.y, p.size, '#cfe0ff');
+      else if (p.icon) this.drawIcon(ctx, p.icon, p.x, p.y, p.size);
     }
     ctx.globalAlpha = 1;
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${this.flash})`; ctx.fillRect(x0, 0, vw, SH); }

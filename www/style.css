@@ -208,6 +208,10 @@ canvas { display: block; }
 .pw { pointer-events: auto; position: relative; min-width: 96px; background: rgba(12, 14, 40, .88); border: 2px solid var(--gold); border-radius: 12px; padding: 6px 10px; display: grid; text-align: left; box-shadow: 0 3px 0 #090b22; }
 .pw b { font-size: 13px; }
 .pw small { font-size: 11px; color: var(--blue); font-weight: 800; }
+.pw em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 700; }
+.pw.armed em { color: #5a3a00; }
+#btn-sleep { font-size: 13px; padding: 8px; }
+.pw-list i { font-style: normal; color: var(--gold); font-weight: 800; }
 .pw span { position: absolute; right: -6px; top: -8px; background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 24px; text-align: center; font-weight: 900; font-size: 12px; }
 .pw span:empty { display: none; }
 .pw:disabled { border-color: var(--line); opacity: .55; }

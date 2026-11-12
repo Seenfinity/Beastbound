@@ -129,6 +129,34 @@ export const POWERS = {
     P('Sismo Eléctrico', 'Área enorme que quita MP.', { dmg: 0.9, blast: 52, shock: 8 })],
 };
 
+// Lo que hace un poder, en una o dos palabras (para los botones del combate).
+export function effectOf(pw) {
+  const tags = [];
+  if (pw.burn) tags.push('Quema');
+  if (pw.poison) tags.push('Envenena');
+  if (pw.freeze) tags.push('Congela');
+  if (pw.blind) tags.push('Ciega');
+  if (pw.root) tags.push('Inmoviliza');
+  if (pw.expose) tags.push('Debilita');
+  if (pw.shock) tags.push('Quita MP');
+  if (pw.shield) tags.push('Escudo');
+  if (pw.counter) tags.push('Devuelve daño');
+  if (pw.heal) tags.push('Te cura');
+  if (pw.drain) tags.push('Roba vida');
+  if (pw.push) tags.push('Empuja');
+  if (pw.gust) tags.push('Viento a favor');
+  if (pw.mound) tags.push('Levanta muro');
+  if (pw.pierce) tags.push('Perfora');
+  if (pw.bounce) tags.push('Rebota');
+  if (pw.count) tags.push(`${pw.count} disparos`);
+  if (pw.crit) tags.push('Crítico');
+  if (pw.noWind) tags.push('Ignora viento');
+  if (pw.fast && !pw.noWind) tags.push('Muy rápido');
+  if ((pw.blast || 0) >= 44) tags.push('Área grande');
+  if ((pw.dmg || 1) >= 1.2) tags.push('Daño alto');
+  return tags.slice(0, 2).join(' · ') || 'Golpe';
+}
+
 // Los cuatro poderes de una criatura, con lo que cuestan y si ya los tiene.
 export function powersOf(sp, pet) {
   const kit = POWERS[sp.element].map((p, i) => ({ ...p, ...POWER_SLOTS[i], unlocked: pet.level >= POWER_SLOTS[i].level, need: `Nivel ${POWER_SLOTS[i].level}` }));

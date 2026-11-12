@@ -1,7 +1,7 @@
 // Arranque, pestañas y paneles. Las reglas están en state.js, la sala en room.js y el combate en battle.js.
 
 import * as S from './state.js';
-import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, matchup, strongAgainst, weakAgainst } from './roster.js';
+import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst } from './roster.js';
 import { loadSprites, loadGrid, loadImage, scaled } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
@@ -191,7 +191,9 @@ function renderCare() {
   $('exp-fill').style.width = (p.exp / need) * 100 + '%';
   $('exp-text').textContent = `${Math.floor(p.exp)} / ${need}`;
   setMeter('m-hunger', p.hunger); setMeter('m-energy', p.energy); setMeter('m-mood', p.mood); setMeter('m-bond', p.bond);
-  $('mood-line').textContent = p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
+  $('btn-sleep').textContent = p.asleep ? 'Despertar' : 'Acostar a dormir';
+  $('sleep-note').textContent = p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
+  $('mood-line').textContent = p.asleep ? 'Está durmiendo' : p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
     : p.bond < 30 ? 'Aún no confía en ti' : p.mood > 75 && p.hunger > 60 ? '¡Está feliz!' : 'Está bien';
 
   // Personalidad: la actual y hacia dónde va con el trato de ahora
@@ -252,7 +254,7 @@ function renderCare() {
   const prof = S.profile(p), rest = S.restLeft(p);
   $('mp-max').textContent = `· ${prof.maxMp} MP`;
   setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><b>${pw.name}</b>
-    <small>${pw.unlocked ? `${pw.mp} MP · ${pw.desc}` : `${pw.need} · ${pw.desc}`}</small></div>`).join(''));
+    <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need} · ${pw.desc}</small></div>`).join(''));
 
   setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"></i></div>
     <span>Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
@@ -262,7 +264,8 @@ function renderCare() {
   setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"></i>${esc(m.name)}</button>`).join(''));
   renderEggs();
 
-  $('tip').textContent = rest ? `${p.name} se está recuperando del combate. Mientras tanto puedes cuidarla, entrenarla o pelear con otra criatura.`
+  $('tip').textContent = p.asleep ? `${p.name} está durmiendo. Se despierta sola cuando esté recuperada, o puedes despertarla tú.`
+    : rest ? `${p.name} se está recuperando del combate. Si la acuestas a dormir tarda la mitad.`
     : !p.favKnown ? 'Prueba las tres comidas: una es su favorita y otra la odia.'
     : p.bond < 30 ? 'Con el vínculo bajo puede no obedecerte en combate. Acaríciala y juega con ella.'
     : evo?.ready ? `Mantén el dedo sobre ${p.name} para que evolucione.`
@@ -357,6 +360,14 @@ $('train-list').onclick = e => {
   $('room').scrollIntoView({ block: 'center', behavior: 'smooth' });
 };
 
+$('btn-sleep').onclick = () => {
+  if (room.mini) return;
+  const res = S.toggleSleep(game);
+  sfx.tap();
+  commit();
+  if (!res.asleep) room.say('¡Buenos días!');
+};
+
 $('plate').onclick = () => {
   const p = game.pet;
   const when = t => new Date(t).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -434,6 +445,7 @@ const roomHooks = {
   onStroke() { S.stroke(game); renderCare(); },
   onTap() {
     const p = game.pet;
+    if (p.asleep) return 'Zzz…';
     return p.hunger < 25 ? 'Tengo hambre…' : p.mood < 25 ? 'Estoy triste…' : p.energy < 20 ? 'Estoy cansado…'
       : p.bond < 30 ? 'Aún no me fío de ti.' : pick(['¡Hola!', '¿Jugamos?', 'Lánzame la pelota', '¡Aquí estoy!', 'Ráscame']);
   },
@@ -484,6 +496,7 @@ function renderLobby() {
 function challenge(species = '') {
   S.tick(game);
   const p = game.pet, sp = speciesOf(p.species);
+  if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
   if (S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   if (p.energy < S.FIGHT_ENERGY) return toast(`${p.name} está agotado. Déjalo descansar.`);
   rival = S.makeRival(p, species);
@@ -524,7 +537,7 @@ function startBattle(map) {
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
   $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
   $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
-  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><b>${esc(pw.name)}</b><small>${pw.mp} MP</small><span></span></button>`).join('')
+  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small><span></span></button>`).join('')
     || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
   powerButtons = [...document.querySelectorAll('#b-powers .pw')];
 }
@@ -549,8 +562,9 @@ function renderBattle() {
     btn.classList.toggle('armed', armed);
     btn.lastElementChild.textContent = a.cds[i] > 0 ? a.cds[i] : '';
   });
-  const pw = a.powers[battle.armed];
-  $('b-hint').textContent = !battle.canAct() ? battle.map.effect
+  const pw = a.powers[hoverPower >= 0 ? hoverPower : battle.armed];
+  $('b-hint').textContent = pw && hoverPower >= 0 ? `${pw.name} (${pw.mp} MP): ${pw.desc}`
+    : !battle.canAct() ? battle.map.effect
     : pw ? `${pw.name}: ${pw.desc} Si falla, tarda más en volver.`
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
     : a.blind ? 'Cegado: este turno no ves la guía de tiro.'
@@ -587,6 +601,10 @@ field.addEventListener('pointerdown', e => { if (battle) { field.setPointerCaptu
 field.addEventListener('pointermove', e => { if (battle) battle.pullMove(...toWorld(e)); });
 field.addEventListener('pointerup', () => battle?.pullEnd());
 field.addEventListener('pointercancel', () => { if (battle) battle.pull = null; });
+// Al pasar por encima de un poder (o mantenerlo pulsado) se lee qué hace.
+let hoverPower = -1;
+$('b-powers').addEventListener('pointerover', e => { const b = e.target.closest('[data-power]'); hoverPower = b ? +b.dataset.power : -1; });
+$('b-powers').addEventListener('pointerleave', () => { hoverPower = -1; });
 $('b-powers').onclick = e => { const b = e.target.closest('[data-power]'); if (b && battle) { battle.arm(+b.dataset.power); sfx.tap(); } };
 $('b-quit').onclick = () => modal({
   title: '¿Rendirte?',

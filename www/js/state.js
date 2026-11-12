@@ -115,19 +115,38 @@ function rollDay(p) {
 }
 
 // El tiempo pasa para todas tus criaturas, aunque el juego esté cerrado.
+// Dormida: recobra energía más rápido, se recupera del combate al doble de velocidad y gasta menos.
 export function tick(g, now = Date.now()) {
-  const h = (now - g.lastTick) / 3600000;
+  const elapsed = now - g.lastTick, h = elapsed / 3600000;
   if (h <= 0) return;
   for (const p of g.pets) {
-    const badHours = Math.max(0, h - Math.min(p.hunger / 5, p.mood / 3));
-    const starving = Math.max(0, h - p.hunger / 5); // horas con la barriga a cero
-    p.hunger = clamp(p.hunger - 5 * h);
-    p.mood = clamp(p.mood - 3 * h - 4 * starving);
-    p.energy = g.testMode ? 100 : clamp(p.energy + 12 * h); // en modo prueba no se cansa
+    const slow = p.asleep ? 0.5 : 1;
+    const badHours = Math.max(0, h - Math.min(p.hunger / (5 * slow), p.mood / (3 * slow)));
+    const starving = Math.max(0, h - p.hunger / (5 * slow)); // horas con la barriga a cero
+    p.hunger = clamp(p.hunger - 5 * slow * h);
+    p.mood = clamp(p.mood - 3 * slow * h - 4 * starving);
+    p.energy = g.testMode ? 100 : clamp(p.energy + (p.asleep ? 40 : 12) * h); // en modo prueba no se cansa
     if (badHours > 0) { p.bond = clamp(p.bond - badHours); p.axes.descuido += badHours * 0.4; }
+    if (p.asleep) {
+      if (p.restUntil > now) p.restUntil = Math.max(now, p.restUntil - elapsed); // el descanso cuenta doble
+      if (restLeft(p) === 0 && p.energy >= 100 && now - p.sleptAt > 4000) {       // se despierta sola al estar lista
+        p.asleep = false;
+        p.mood = clamp(p.mood + 5);
+        p.diary.unshift({ t: now, text: 'Se despertó descansada.' });
+      }
+    }
     rollDay(p);
   }
   g.lastTick = now;
+}
+
+// Acostarla o despertarla. Dormida no se puede jugar, entrenar ni pelear con ella.
+export function toggleSleep(g) {
+  const p = g.pet, want = !p.asleep;   // se decide antes de avanzar el tiempo: al avanzar puede despertarse sola
+  tick(g);
+  p.asleep = want;
+  if (p.asleep) p.sleptAt = Date.now();
+  return { asleep: p.asleep };
 }
 
 export function claimDaily(g) {
@@ -205,6 +224,7 @@ export function addExp(g, amount) {
 export function feed(g, food) {
   tick(g);
   const p = g.pet, f = FOODS[food];
+  if (p.asleep) return { error: 'Zzz…' };
   if (g.foods[food] <= 0) return { error: `No te queda ${f.name.toLowerCase()}.` };
   if (p.hunger >= 96) return { error: 'No tengo hambre.' };
   const attentive = p.hunger < 35;
@@ -250,6 +270,7 @@ export function stroke(g) {
 export function play(g) {
   tick(g);
   const p = g.pet;
+  if (p.asleep) return { error: 'Zzz…' };
   if (p.energy < PLAY_ENERGY) return { error: 'Estoy agotado…' };
   p.energy -= PLAY_ENERGY;
   p.mood = clamp(p.mood + 18);
@@ -265,6 +286,7 @@ export function trainsLeft(g) {
 export function canTrain(g) {
   tick(g);
   const p = g.pet;
+  if (p.asleep) return 'Zzz…';
   if (trainsLeft(g) <= 0) return 'Ya entrené 3 veces hoy.';
   if (p.energy < TRAIN_ENERGY) return 'Estoy agotado…';
   if (p.hunger < 10) return 'Tengo demasiada hambre.';
@@ -306,7 +328,7 @@ export function evolveStatus(g) {
   const req = EVOLVE[p.stage];
   const okLevel = p.level >= req.level;
   const okTime = g.testMode || ageDays(p) >= req.days;
-  return { ready: okLevel && okTime, okLevel, okTime, req, daysLeft: Math.max(0, Math.ceil(req.days - ageDays(p))) };
+  return { ready: okLevel && okTime && !p.asleep, okLevel, okTime, req, daysLeft: Math.max(0, Math.ceil(req.days - ageDays(p))) };
 }
 
 export function evolve(g) {
