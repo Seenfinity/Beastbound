@@ -26,6 +26,11 @@ canvas { display: block; }
 .logo { font-size: 56px; font-weight: 900; font-style: italic; letter-spacing: -.02em; line-height: 1;
   background: linear-gradient(180deg, #fff3b0 0%, var(--gold) 45%, #ff9a2e 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 3px 0 #2a2f8a) drop-shadow(0 0 16px rgba(120, 140, 255, .6)); padding: 4px 8px 8px 0; }
+.load-bar { width: min(420px, 78vw); height: 18px; margin: 22px auto 8px; border-radius: 999px; background: #080a1c; border: 2px solid var(--line); overflow: hidden; box-shadow: 0 0 22px rgba(95, 123, 255, .35); }
+.load-bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #5f7bff, #7fe9ff 55%, #ffd76a); box-shadow: 0 0 12px rgba(127, 233, 255, .7); transition: width .25s ease-out; }
+.load-pct { font-weight: 900; font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; margin: 0; }
+#load-tip { max-width: 440px; margin: 14px auto 0; min-height: 2.6em; }
+.load-bar.failed { border-color: var(--red); } .load-bar.failed i { background: var(--red); box-shadow: none; }
 .logo.small { font-size: 26px; padding: 0 6px 2px 0; filter: drop-shadow(0 2px 0 #2a2f8a) drop-shadow(0 0 10px rgba(120, 140, 255, .5)); }
 
 .panel { background: linear-gradient(180deg, rgba(34, 42, 96, .92), rgba(18, 22, 54, .94)); border: 2px solid var(--line); border-radius: 16px; padding: 12px;

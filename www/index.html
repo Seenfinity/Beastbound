@@ -2,236 +2,128 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d0b1e">
-<title>PetBound</title>
-<link rel="stylesheet" href="style.css">
+<title>PetBound: cría tu criatura y llévala al combate</title>
+<meta name="description" content="Incuba un huevo, cría a la criatura que salga, hazla evolucionar y llévala a duelos de artillería por turnos. Gratis, en el navegador.">
+<meta property="og:title" content="PetBound: cría tu criatura y llévala al combate">
+<meta property="og:description" content="Incuba un huevo, cría a la criatura que salga y llévala a duelos de artillería por turnos. Gratis, en el navegador.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://seenfinity.github.io/petbound/assets/landing/castillo.webp">
+<link rel="stylesheet" href="landing.css">
 </head>
 <body>
-<div id="app">
 
-  <section id="screen-loading" class="screen centered">
-    <h1 class="logo">PetBound</h1>
-    <p id="load-text" class="muted">Cargando criaturas…</p>
-  </section>
+<header class="top">
+  <a class="brand" href="./">PetBound</a>
+  <nav>
+    <a href="#vida">Cómo se juega</a>
+    <a href="#especies">Las 15 especies</a>
+    <a href="#estado">Estado del proyecto</a>
+    <a class="go small" href="jugar.html">Jugar</a>
+  </nav>
+</header>
 
-  <!-- Primer huevo -->
-  <section id="screen-start" class="screen centered" hidden>
-    <h1 class="logo">PetBound</h1>
-    <p class="lead">Hay tres huevos en la incubadora y solo se ve su elemento. Elige uno: es el único que te llevas. Los demás tendrás que ganártelos.</p>
-    <div id="start-eggs" class="capsules"></div>
-    <label class="field"><span>¿Cómo se va a llamar?</span><input id="start-name" maxlength="12" autocomplete="off"></label>
-    <button id="btn-start" class="btn primary big">Abrir el huevo</button>
-  </section>
-
-  <div id="game" hidden>
-    <header class="nav">
-      <span class="logo small">PetBound</span>
-      <nav id="tabs">
-        <button data-tab="care"><i class="ic ic-casa"></i><span>Cuidar</span></button>
-        <button data-tab="battle"><i class="ic ic-espadas"></i><span>Combate</span></button>
-        <button data-tab="collection"><i class="ic ic-libro"></i><span>Colección</span></button>
-        <button data-tab="shop"><i class="ic ic-moneda"></i><span>Tienda</span></button>
-        <button data-tab="ranking"><i class="ic ic-trofeo"></i><span>Ranking</span></button>
-        <button data-tab="settings"><i class="ic ic-engranaje"></i><span>Ajustes</span></button>
-      </nav>
-      <div class="nav-right">
-        <span class="chip test" id="chip-test">Modo prueba</span>
-        <span class="chip"><i class="ic ic-moneda"></i><b id="coins">0</b></span>
+<main>
+  <!-- Portada: el huevo se abre al tocarlo -->
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Tu criatura está en ese huevo.</h1>
+      <p class="lede">Tócalo para abrirlo. Después críala, hazla evolucionar y llévala a duelos de artillería por turnos.</p>
+      <div class="actions">
+        <a class="go" href="jugar.html">Jugar gratis</a>
+        <span class="fine">En el navegador, sin instalar nada.</span>
       </div>
-    </header>
-
-    <!-- Cuidar -->
-    <main id="tab-care" class="care">
-      <aside class="col-left">
-        <div class="panel">
-          <h3>Mis criaturas</h3>
-          <div id="team" class="team"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-trofeo"></i>Misiones de hoy</h3>
-          <div id="missions" class="missions"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-huevomas"></i>Zona de incubación <small id="eggs-count"></small></h3>
-          <div id="incubator" class="incubator"></div>
-        </div>
-      </aside>
-
-      <div class="col-mid">
-      <section class="room-wrap">
-        <canvas id="room"></canvas>
-        <button class="plate" id="plate"><b id="pet-name"></b><small id="pet-sub"></small></button>
-        <div class="level"><b id="pet-level"></b><div class="bar exp"><i id="exp-fill"></i></div><small id="exp-text"></small></div>
-        <div id="event-card" class="event" hidden><p id="event-text"></p><div id="event-choices"></div></div>
-        <button id="btn-decor" class="decor-btn" hidden>Decorar</button>
-        <button id="btn-evolve" class="evolve-btn" hidden>¡Evolucionar!</button>
-        <div class="tray" id="tray" hidden></div>
-        <button class="food-btn" id="btn-food"><i class="ic ic-filete"></i><span>Comida</span><b id="food-count">0</b></button>
-      </section>
-      <section class="row-mid">
-        <div class="panel">
-          <h3><i class="ic ic-pesa"></i>Entrenar</h3>
-          <p class="muted" id="train-note"></p>
-          <div id="train-list" class="train-list"></div>
-          <p id="train-result" class="muted"></p>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-rayo"></i>Poderes <small id="mp-max"></small></h3>
-          <div id="powers-info" class="pw-list"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-libro"></i>Sobre la especie</h3>
-          <div id="species-info"></div>
-        </div>
-      </section>
-      </div>
-
-      <aside class="col-right">
-        <div class="panel">
-          <h3>Necesidades</h3>
-          <div class="meter hunger" id="m-hunger"><i class="ic ic-filete"></i><span>Barriga</span><div class="bar"><i></i></div></div>
-          <div class="meter energy" id="m-energy"><i class="ic ic-rayo"></i><span>Energía</span><div class="bar"><i></i></div></div>
-          <div class="meter mood" id="m-mood"><i class="ic ic-estrella"></i><span>Ánimo</span><div class="bar"><i></i></div></div>
-          <div class="meter bond" id="m-bond"><i class="ic ic-corazon"></i><span>Vínculo</span><div class="bar"><i></i></div></div>
-          <p id="mood-line" class="mood-line"></p>
-          <p id="wish-line" class="wish-line" hidden></p>
-          <button class="btn" id="btn-sleep"></button>
-          <p class="muted" id="sleep-note"></p>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-estrella"></i>Personalidad</h3>
-          <div id="persona"></div>
-          <h4 class="sub">Gustos</h4>
-          <div id="tastes" class="tastes"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-espadas"></i>Combate</h3>
-          <div id="battle-prev"></div>
-          <button class="btn heal-btn" hidden></button>
-          <button class="btn primary" id="btn-go-battle">Ir al combate</button>
-        </div>
-      </aside>
-
-      <footer class="tip" id="tip"></footer>
-    </main>
-
-    <!-- Combate -->
-    <main id="tab-battle" hidden>
-      <div id="lobby" class="lobby">
-        <div class="col">
-          <div class="panel lobby-card">
-            <h3><i class="ic ic-espadas"></i>Duelo 1 contra 1</h3>
-            <div id="lobby-info"></div>
-            <button class="btn heal-btn" hidden></button>
-            <button class="btn primary big" id="btn-find">Rival al azar</button>
-          </div>
-          <div class="panel">
-            <h3>Mapas</h3>
-            <div id="lobby-maps" class="maps"></div>
-          </div>
-        </div>
-        <div class="panel">
-          <h3>Elegir rival</h3>
-          <p class="muted">Derrota 10 veces a una especie que no tengas y te ganas su huevo. Fíjate en las ventajas de elemento.</p>
-          <div id="rivals" class="rivals"></div>
-        </div>
-      </div>
-      <div id="arena" hidden>
-        <div class="vs">
-          <div class="side"><b id="b-name1"></b><div class="bar hp"><i id="b-hp1"></i></div><div class="bar mp"><i id="b-mp1"></i></div><small id="b-st1"></small></div>
-          <div class="mid"><div class="wind"><small>Viento</small><b id="b-wind"></b></div><div class="clock" id="b-clock-box"><i class="ic ic-reloj"></i><b id="b-clock"></b></div></div>
-          <div class="side right"><b id="b-name2"></b><div class="bar hp foe"><i id="b-hp2"></i></div><div class="bar mp foe"><i id="b-mp2"></i></div><small id="b-st2"></small></div>
-        </div>
-        <div class="field-wrap">
-          <canvas id="field"></canvas>
-          <div id="b-items" class="items"></div>
-          <div id="b-powers" class="powers"></div>
-          <div id="b-move" class="move"><button class="mv" data-move="-1" aria-label="Paso a la izquierda">◀</button><button class="mv" data-move="1" aria-label="Paso a la derecha">▶</button></div>
-          <button id="b-quit" class="quit">Rendirse</button>
-          <button id="b-view" class="quit view"></button>
-          <p id="b-hint" class="hint"></p>
-        </div>
-      </div>
-    </main>
-
-    <!-- Colección -->
-    <main id="tab-collection" hidden>
-      <div class="panel"><h3><i class="ic ic-libro"></i>Colección <small id="dex-count"></small></h3><div id="dex" class="dex"></div></div>
-    </main>
-
-    <!-- Tienda -->
-    <main id="tab-shop" class="shop" hidden>
-      <div class="panel shop-wide"><h3><i class="ic ic-filete"></i>Comida</h3><p class="muted">Lo que come decide qué mejora al subir de nivel. Unas llenan mucho, otras apenas, y algunas animan o dan energía.</p><div id="shop-food" class="goods decor-goods"></div></div>
-      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Habitaciones</h3><p class="muted">Cambian el aspecto de la sala. Tus muebles se quedan donde los pusiste.</p><div id="shop-rooms" class="rooms"></div></div>
-      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Decoración</h3><p class="muted">Muebles y juguetes para la sala. Se quedan para siempre, cada uno ayuda en algo y tu criatura los usa. Con «Decorar», en la sala, los colocas donde quieras.</p><div id="shop-decor" class="goods decor-goods"></div></div>
-      <div class="panel"><h3><i class="ic ic-espadas"></i>Objetos de combate</h3><p class="muted">Se usan en tu turno, uno por turno, sin gastar el disparo. Son una ventaja enorme, por eso cuestan tanto.</p><div id="shop-items" class="goods"></div></div>
-      <div class="panel"><h3><i class="ic ic-huevomas"></i>Huevos</h3><p class="muted">También se ganan derrotando 10 veces a una especie que no tengas.</p><div id="shop-egg" class="goods"></div></div>
-    </main>
-
-    <!-- Ajustes -->
-    <!-- Ranking -->
-    <main id="tab-ranking" class="ranking" hidden>
-      <div class="panel">
-        <h3><i class="ic ic-estrella"></i>Tu ficha</h3>
-        <p class="muted">Así aparecerás en el ranking.</p>
-        <div class="rk-form">
-          <label>Usuario<input id="rk-name" maxlength="16" autocomplete="off" placeholder="3 a 16 letras o números"></label>
-          <label>País<select id="rk-country"></select></label>
-          <button class="btn primary" id="rk-save">Guardar</button>
-        </div>
-        <div id="rk-me" class="rk-me"></div>
-      </div>
-      <div class="panel">
-        <h3><i class="ic ic-trofeo"></i>Ranking mundial</h3>
-        <p id="rk-note" class="rk-note"></p>
-        <div id="rk-sorts" class="rk-sorts"></div>
-        <div id="rk-table" class="rk-table"></div>
-      </div>
-    </main>
-
-    <main id="tab-settings" hidden>
-      <div class="panel settings">
-        <h3><i class="ic ic-engranaje"></i>Ajustes</h3>
-        <div class="setting">
-          <div><b>Modo prueba</b><p class="muted">Activado: no se cansa, no hay tope de entrenamientos, los huevos se abren en un minuto y evolucionar solo pide nivel. Desactivado: tiempos reales (3 días hasta Teen, 14 hasta Final).</p></div>
-          <button class="btn" id="btn-test"></button>
-        </div>
-        <div class="setting">
-          <div><b>Sonido</b><p class="muted">Efectos al acariciar, comer, entrenar y combatir.</p></div>
-          <button class="btn" id="btn-sound"></button>
-        </div>
-        <div class="setting">
-          <div><b>Música</b><p class="muted">Cada mapa de combate tiene su propio tema, y se acelera cuando alguien va justo de vida.</p></div>
-          <button class="btn" id="btn-music"></button>
-        </div>
-        <div class="setting">
-          <div><b>Galería de arte</b><p class="muted">Los tres mapas y las quince criaturas en sus tres etapas.</p></div>
-          <a class="btn" href="arte.html">Abrir</a>
-        </div>
-        <div class="setting">
-          <div><b>Empezar de cero</b><p class="muted">Borra todas tus criaturas, huevos y monedas. No se puede deshacer.</p></div>
-          <button class="btn danger" id="btn-reset">Borrar partida</button>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <div id="evo" class="evo" hidden>
-    <canvas id="evo-canvas"></canvas>
-    <div id="evo-ui" class="evo-ui" hidden></div>
-  </div>
-
-  <div id="modal" class="modal" hidden>
-    <div class="sheet">
-      <h3 id="modal-title"></h3>
-      <div id="modal-body"></div>
-      <div id="modal-actions" class="col"></div>
     </div>
-  </div>
-  <div id="toast" class="toast" hidden></div>
-  <i id="ghost" class="ic drag-ghost" hidden></i>
-</div>
-<script type="module" src="js/main.js"></script>
+    <div class="hero-egg">
+      <button class="dome" id="egg-btn" aria-label="Abrir el huevo">
+        <span class="flash" aria-hidden="true"></span>
+        <img id="egg-img" alt="" width="150" height="180">
+        <img id="baby-img" alt="" hidden>
+      </button>
+      <div class="pedestal" aria-hidden="true"></div>
+      <p class="hatch-line" id="hatch-line" aria-live="polite">Huevo misterioso</p>
+      <button class="again" id="again" hidden>Abrir otro huevo</button>
+    </div>
+  </section>
+
+  <!-- La vida de la criatura que salió -->
+  <section class="life unknown" id="vida">
+    <div class="block">
+      <div class="copy">
+        <h2>Crece según la cuides.</h2>
+        <p>Lo que come decide qué estadísticas le suben. Cómo la tratas decide su carácter: feroz, leal, astuta, serena o resentida. Dos huevos iguales pueden acabar siendo criaturas muy distintas.</p>
+        <p>Y se le nota en la cara. Está contenta cuando la acaricias o juega, triste si pasa hambre, y se echa a dormir cuando la acuestas.</p>
+      </div>
+      <div class="stage" id="moods" aria-label="Los ánimos de la criatura"></div>
+    </div>
+
+    <div class="block flip">
+      <div class="copy">
+        <h2>Evoluciona dos veces.</h2>
+        <p>Nace Baby, pasa a Teen en el nivel 10 y llega a su forma Final en el nivel 30. Con cada forma desbloquea poderes de su elemento, y en la Final, el poder propio de su especie.</p>
+      </div>
+      <div class="stage wide" id="stages" aria-label="Las tres formas de la criatura"></div>
+    </div>
+
+    <div class="duel" id="duel">
+      <div class="duel-copy">
+        <h2>Y pelea.</h2>
+        <p>Duelos de artillería por turnos: eliges ángulo y fuerza, y cuentas con el viento. Cada elemento pega más a unos y menos a otros, y cada mapa tiene sus trampas y su música.</p>
+        <a class="go" href="jugar.html">Jugar gratis</a>
+      </div>
+      <div class="duel-field" aria-hidden="true">
+        <img id="duel-me" alt="">
+        <svg class="arc" viewBox="0 0 600 200" preserveAspectRatio="none"><path d="M40 170 Q300 -70 560 150" /></svg>
+        <img id="duel-foe" alt="">
+      </div>
+    </div>
+  </section>
+
+  <!-- Las 15 especies -->
+  <section class="roster" id="especies">
+    <h2>Quince especies, catorce elementos.</h2>
+    <p class="sub">Toca una para que la página la siga a ella. En el juego empiezas eligiendo entre tres huevos y la especie es sorpresa; las demás se ganan.</p>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- Qué hay y qué falta -->
+  <section class="status" id="estado">
+    <h2>Dónde está el proyecto.</h2>
+    <div class="cols">
+      <div>
+        <h3>Ya se puede jugar</h3>
+        <ul>
+          <li>Crianza completa: comida, entrenamiento, sueño, deseos y carácter.</li>
+          <li>Incubación de huevos, con mejor categoría cuanto mejor los cuides.</li>
+          <li>Combates contra rivales del juego en tres mapas.</li>
+          <li>La partida se guarda en tu dispositivo.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Lo que viene</h3>
+        <ul>
+          <li>Cuentas, para llevar tu partida a cualquier dispositivo.</li>
+          <li>Ranking mundial y combates contra otros jugadores.</li>
+          <li>Un modo de aventura contra criaturas salvajes.</li>
+          <li>Versión para Android.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">Es una versión de prueba: está activado un modo que acelera los tiempos para poder verlo todo rápido. Se apaga en Ajustes.</p>
+  </section>
+
+  <section class="last">
+    <h2>El huevo no se abre solo.</h2>
+    <a class="go big" href="jugar.html">Jugar gratis</a>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>PetBound</span>
+  <a href="arte.html">Galería de arte</a>
+</footer>
+
+<script type="module" src="js/landing.js"></script>
 </body>
 </html>

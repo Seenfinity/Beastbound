@@ -902,20 +902,23 @@ setInterval(() => {
 }, 1000);
 
 try {
-  let loaded = 0;
-  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 10`; return value; });
+  // Barra de carga: avanza con cada imagen que llega.
+  let loaded = 0, total = 0;
+  const one = promise => { total++; return promise.then(value => { const pct = Math.round((++loaded / total) * 100); $('load-fill').style.width = pct + '%'; $('load-text').textContent = pct + ' %'; $('load-bar').setAttribute('aria-valuenow', pct); return value; }); };
+  const tips = ['Lo que come tu criatura decide qué estadística le sube al ganar nivel.', 'Un huevo bien cuidado nace con mejor categoría: vigila su temperatura y límpialo.', 'En combate, tu tiro anterior queda dibujado: corrige sobre él.', 'Cada elemento pega más a unos y menos a otros. Míralo antes de elegir rival.', 'Acariciar, jugar y cumplir deseos sube el vínculo, y con él el MP.'];
+  $('load-tip').textContent = tips[Math.floor(Math.random() * tips.length)];
   const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid, foodGrid, roomImgs] = await Promise.all([
-    Promise.all(ROSTER.map(async sp => [sp.id, await loadMoods(moodSheet(sp.id))])),
-    Promise.all(MAPS.map(async m => ({ ...m, img: await loadImage(m.bg) }))),
-    loadImage('assets/ui/sala.png'),
-    loadGrid('assets/ui/objetos.png', 4, 4),
-    loadGrid('assets/ui/huevos.png', 4, 4),
-    Promise.all(POWER_ICON_SHEETS.map((_, i) => loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true))),
-    loadGrid('assets/ui/efectos.png', 4, 4, 'glow'),
-    loadGrid('assets/ui/decoracion.png', 4, 4, true),
-    loadGrid('assets/ui/comida.png', 4, 4, true),
-    Promise.all(Object.entries(S.ROOMS).map(async ([id, r]) => [id, await loadImage(r.bg)])),
-  ].map(track));
+    Promise.all(ROSTER.map(sp => one(loadMoods(moodSheet(sp.id)).then(grid => [sp.id, grid])))),
+    Promise.all(MAPS.map(m => one(loadImage(m.bg).then(img => ({ ...m, img }))))),
+    one(loadImage('assets/ui/sala.png')),
+    one(loadGrid('assets/ui/objetos.png', 4, 4)),
+    one(loadGrid('assets/ui/huevos.png', 4, 4)),
+    Promise.all(POWER_ICON_SHEETS.map((_, i) => one(loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true)))),
+    one(loadGrid('assets/ui/efectos.png', 4, 4, 'glow')),
+    one(loadGrid('assets/ui/decoracion.png', 4, 4, true)),
+    one(loadGrid('assets/ui/comida.png', 4, 4, true)),
+    Promise.all(Object.entries(S.ROOMS).map(([id, r]) => one(loadImage(r.bg).then(img => [id, img])))),
+  ]);
   sprites = Object.fromEntries(sheetGrids); maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
   POWER_ICON_SHEETS.forEach((names, s) => powerGrids[s].flat().forEach((cv, i) => {
@@ -935,5 +938,7 @@ try {
   requestAnimationFrame(frame);
 } catch (err) {
   console.error(err);
-  $('load-text').textContent = 'No se pudieron cargar las imágenes. Abre el juego desde el servidor local.';
+  $('load-bar').classList.add('failed');
+  $('load-text').textContent = 'No se pudo cargar';
+  $('load-tip').textContent = 'Alguna imagen no llegó. Revisa tu conexión y recarga la página.';
 }
