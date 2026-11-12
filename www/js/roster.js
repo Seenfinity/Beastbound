@@ -3,7 +3,10 @@
 // special = el poder propio de la especie (se desbloquea en la forma Final).
 // Las claves de los poderes (dmg, blast, burn…) las interpreta battle.js.
 
-export const SHEETS = [1, 2, 3, 4, 5].map(n => `assets/criaturas/hoja-${n}.png`);
+// Cada especie tiene su hoja: 3 filas (Baby, Teen, Final) × 5 columnas, una por ánimo.
+export const MOODS = ['calm', 'happy', 'sad', 'sleep', 'attack'];
+export const MOOD = Object.fromEntries(MOODS.map((m, i) => [m, i]));
+export const moodSheet = id => `assets/animos/${id}.webp`;
 export const STAGES = ['Baby', 'Teen', 'Final'];
 
 export const ROSTER = [

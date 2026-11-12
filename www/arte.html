@@ -15,7 +15,7 @@
   .maps { display: grid; gap: 14px; grid-template-columns: 1fr; }
   .roster { display: grid; gap: 12px; grid-template-columns: 1fr; }
   @media (min-width: 760px) { .roster { grid-template-columns: 1fr 1fr; } }
-  @media (min-width: 1100px) { .maps, .roster { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1100px) { .maps { grid-template-columns: repeat(3, 1fr); } }
   .map h3, .card h3 { margin: 0 0 8px; font-size: 16px; }
   .map canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; }
   .card { background: #1a1630; border: 1px solid #2c2650; border-radius: 14px; padding: 12px; }
@@ -46,11 +46,12 @@
 </main>
 
 <script type="module">
-  import { loadImage, keyOut, sliceGrid } from './js/sprites.js';
-  import { SHEETS, STAGES, ROSTER, MAPS } from './js/roster.js';
+  import { loadImage, loadMoods } from './js/sprites.js';
+  import { moodSheet, STAGES, ROSTER, MAPS } from './js/roster.js';
 
-  const sheets = (await Promise.all(SHEETS.map(loadImage))).map(img => sliceGrid(keyOut(img)));
-  const spritesOf = id => { const c = ROSTER.find(r => r.id === id); return sheets[c.sheet][c.row]; };
+  const moods = Object.fromEntries(await Promise.all(ROSTER.map(async c => [c.id, await loadMoods(moodSheet(c.id))])));
+  const spritesOf = id => moods[id].map(row => row[0]);          // la pose tranquila de cada etapa
+  const MOOD_NAMES = ['Tranquilo', 'Contento', 'Triste', 'Dormido', 'Ataque'];
 
   // Fichas de las 15 criaturas
   const rosterEl = document.getElementById('roster');
@@ -58,18 +59,22 @@
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<h3>${c.name}<small>${c.element} · ${c.role}</small></h3><div class="stages"></div>`;
-    spritesOf(c.id).forEach((sp, i) => {
+    moods[c.id].forEach((row, i) => {                // una tira por etapa con sus cinco ánimos
       const fig = document.createElement('figure');
+      fig.style.gridColumn = '1 / -1';
       const cv = document.createElement('canvas');
-      cv.width = cv.height = 440;
+      cv.width = 1500; cv.height = 300;
+      cv.style.width = '100%'; cv.style.aspectRatio = '5 / 1';
       const g = cv.getContext('2d');
-      g.imageSmoothingEnabled = false;
-      g.fillStyle = 'rgba(0,0,0,.35)';
-      g.beginPath(); g.ellipse(220, 414, Math.min(200, sp.width * 0.42), 11, 0, 0, Math.PI * 2); g.fill();
-      const k = Math.min(1, 430 / sp.width, 400 / sp.height);
-      g.drawImage(sp, 220 - sp.width * k / 2, 410 - sp.height * k, sp.width * k, sp.height * k);
+      const unit = Math.min(270 / Math.max(...row.map(sp => sp.height)), 290 / Math.max(...row.map(sp => sp.width)));
+      row.forEach((sp, m) => {
+        const cx = 150 + m * 300;
+        g.fillStyle = 'rgba(0,0,0,.35)';
+        g.beginPath(); g.ellipse(cx, 284, Math.min(130, sp.width * unit * 0.42), 8, 0, 0, Math.PI * 2); g.fill();
+        g.drawImage(sp, cx - sp.width * unit / 2, 282 - sp.height * unit, sp.width * unit, sp.height * unit);
+      });
       const cap = document.createElement('figcaption');
-      cap.textContent = STAGES[i];
+      cap.textContent = `${STAGES[i]}: ${MOOD_NAMES.join(' · ')}`;
       fig.append(cv, cap);
       card.querySelector('.stages').append(fig);
     });

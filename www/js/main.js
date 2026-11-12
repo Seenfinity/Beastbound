@@ -1,8 +1,8 @@
 // Arranque, pestañas y paneles. Las reglas están en state.js, la sala en room.js y el combate en battle.js.
 
 import * as S from './state.js';
-import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
-import { loadSprites, loadGrid, loadImage, scaled, despill, tinted } from './sprites.js';
+import { MOODS, moodSheet, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
+import { loadMoods, loadGrid, loadImage, scaled, despill, tinted } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
 import { MINI_INFO } from './minigames.js';
@@ -18,9 +18,9 @@ const TRAIN_ICON = { pot: 'roca', pun: 'diana', agu: 'escudo', agi: 'rayo' };
 let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, decorArt = {}, roomArt = {}, room;
 let game = null, battle = null, rival = null, tab = 'care', startPick = 0;
 
-const spriteOf = (species, stage) => { const sp = speciesOf(species); return sprites[sp.sheet][sp.row][stage]; };
+const spriteOf = (species, stage, mood = 0) => sprites[species][stage][mood] || sprites[species][stage][0];   // mood: índice de MOODS
 // Cada individuo tiene su propio color: el mismo dibujo con el tono girado.
-const petSprite = pet => tinted(spriteOf(pet.species, pet.stage), pet.hue || 0);
+const petSprite = (pet, mood = 0) => tinted(spriteOf(pet.species, pet.stage, mood), pet.hue || 0);
 const hueStyle = pet => (pet.hue ? ` style="filter:hue-rotate(${pet.hue}deg)"` : '');
 const eggClass = species => 'egg-' + EGG_ORDER.indexOf(speciesOf(species).element);
 const elColor = species => ELEMENT_COLOR[speciesOf(species).element];
@@ -545,7 +545,7 @@ function renderLobby() {
   setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
     Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b><br>
     ${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : 'Lista para pelear.'}<br>
-    Arrastra hacia atrás y suelta para disparar. Toca el suelo para moverte.</div>`);
+    Arrastra hacia atrás y suelta para disparar. Con las flechas ◀ ▶ das pasos cortos.</div>`);
   $('btn-find').disabled = !!rest;
   renderHeal();
   setHTML($('lobby-maps'), maps.map(m => `<div><img src="${m.bg}" alt="">${m.name}<small>${m.effect}</small></div>`).join(''));
@@ -604,7 +604,7 @@ function startBattle(map) {
   wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
   const side = pet => {
     const sp = speciesOf(pet.species);
-    return { pet, prof: S.profile(pet), species: sp, sprite: petSprite(pet), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
+    return { pet, prof: S.profile(pet), species: sp, sprite: petSprite(pet), sprites: MOODS.map((_, m) => petSprite(pet, m)), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
   };
   const mine = side(p), VH = Math.round((W * h) / w);
   $('b-powers').innerHTML = mine.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
@@ -823,7 +823,7 @@ try {
   let loaded = 0;
   const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 10`; return value; });
   const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid, foodGrid, roomImgs] = await Promise.all([
-    loadSprites(SHEETS),
+    Promise.all(ROSTER.map(async sp => [sp.id, await loadMoods(moodSheet(sp.id))])),
     Promise.all(MAPS.map(async m => ({ ...m, img: await loadImage(m.bg) }))),
     loadImage('assets/ui/sala.png'),
     loadGrid('assets/ui/objetos.png', 4, 4),
@@ -834,7 +834,7 @@ try {
     loadGrid('assets/ui/comida.png', 4, 4, true),
     Promise.all(Object.entries(S.ROOMS).map(async ([id, r]) => [id, await loadImage(r.bg)])),
   ].map(track));
-  sprites = sheetGrids; maps = mapImgs;
+  sprites = Object.fromEntries(sheetGrids); maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
   POWER_ICON_SHEETS.forEach((names, s) => powerGrids[s].flat().forEach((cv, i) => {
     if (names[i].startsWith('@')) icons[names[i].slice(1)] = cv; else powerIcons[names[i]] = cv;   // @ = icono suelto de la interfaz

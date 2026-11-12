@@ -202,10 +202,12 @@ export async function loadGrid(url, rows, cols, smart = false) {
   return sliceGrid(keyOut(await loadImage(url), smart), rows, cols);
 }
 
-// Carga todas las hojas de criaturas y devuelve sprites[hoja][fila][etapa].
-export async function loadSprites(urls) {
-  const imgs = await Promise.all(urls.map(loadImage));
-  return imgs.map(img => sliceGrid(keyOut(img)));
+// Carga la hoja de ánimos de una especie y devuelve [etapa][ánimo].
+// Cada figura anota su tamaño respecto a la pose tranquila (rel) para dibujarlas todas a la misma escala.
+export async function loadMoods(url) {
+  const grid = sliceGrid(keyOut(await loadImage(url)), 3, 5);
+  for (const row of grid) for (const cv of row) { cv.rel = cv.height / row[0].height; cv.calmW = row[0].width; }
+  return grid;
 }
 
 // Versión reducida de un sprite (se guarda para no recalcularla en cada fotograma).
@@ -223,6 +225,7 @@ export function scaled(sprite, height) {
     const ctx = c.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(sprite, 0, 0, c.width, c.height);
+    c.rel = sprite.rel; c.calmW = sprite.calmW;
     sizes.set(h, c);
   }
   return c;
@@ -242,6 +245,7 @@ export function tinted(sprite, hue) {
     if (!('filter' in ctx)) return sprite;           // navegador sin filtros en lienzo: se queda con el color normal
     ctx.filter = `hue-rotate(${hue}deg)`;
     ctx.drawImage(sprite, 0, 0);
+    c.rel = sprite.rel; c.calmW = sprite.calmW;
     byHue.set(hue, c);
   }
   return c;

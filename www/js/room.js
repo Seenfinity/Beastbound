@@ -2,6 +2,7 @@
 // frotarla para acariciarla, lanzarle la pelota, soltarle comida encima, mantener pulsado para evolucionar.
 
 import { fit, scaled } from './sprites.js';
+import { MOOD } from './roster.js';
 import { createMini, MINI_INFO, FLOOR } from './minigames.js';
 import { sfx } from './sfx.js';
 
@@ -290,8 +291,23 @@ export class Room {
     ctx.drawImage(img, x - (img.width * k) / 2, y - (img.height * k) / 2, img.width * k, img.height * k);
   }
 
+  // Qué cara pone: dormida, triste, contenta (mimos, comida, juegos), de ataque (minijuegos) o tranquila.
+  moodNow(o = {}) {
+    const c = this.c;
+    if (this.mini) return (o.lunge || 0) > 0.35 ? MOOD.attack : o.hurt ? MOOD.sad : MOOD.calm;
+    if (this.sleepK > 0.45 || (c.mode === 'use' && c.act === 'nap')) return MOOD.sleep;
+    if (this.sad) return MOOD.sad;
+    if (['happy', 'pet', 'eat'].includes(c.mode) || this.food) return MOOD.happy;
+    if (c.mode === 'use' && c.act === 'punch') return MOOD.attack;
+    if (c.mode === 'use' && ['dance', 'jump', 'hug', 'roll', 'eat'].includes(c.act)) return MOOD.happy;
+    if (c.mode === 'antic' && ['hop', 'dance', 'spin'].includes(c.act)) return MOOD.happy;
+    if (this.ball.active && !this.ball.held) return MOOD.happy;
+    return MOOD.calm;
+  }
+
   drawCreature(ctx, x, o, px) {
-    const sp = this.art.sprite(this.pet), h = this.size, w = (sp.width / sp.height) * h;
+    const mood = this.moodNow(o), lying = mood === MOOD.sleep;
+    const sp = this.art.sprite(this.pet, mood), h = this.size * (sp.rel || 1), w = (sp.width / sp.height) * h;
     const img = scaled(sp, h * px);
     const sq = o.squash || 0, lift = o.lift || 0;
     ctx.fillStyle = 'rgba(8,5,30,.4)';
@@ -300,10 +316,10 @@ export class Room {
     ctx.translate(x + (o.lunge || 0) * 46 * o.dir, FLOOR + 10 - lift);
     if (o.tilt) ctx.rotate(o.tilt);
     const k = this.sleepK;                            // se va acurrucando a medida que se duerme
-    const awake = (1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012) * (o.sit || 1), curled = 0.78 + Math.sin(this.t * 1.6) * 0.035;
-    ctx.scale(o.dir * (1 + sq * 0.1 * (1 - k) + 0.09 * k), awake + (curled - awake) * k);
+    const awake = (1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012) * (lying ? 1 : o.sit || 1), curled = (lying ? 1 : 0.78) + Math.sin(this.t * 1.6) * 0.035;   // el dibujo dormido ya está tumbado
+    ctx.scale(o.dir * (1 + sq * 0.1 * (1 - k) + (lying ? 0 : 0.09 * k)), awake + (curled - awake) * k);
     if (k > 0) ctx.filter = `brightness(${1 - 0.22 * k})`;
-    else if (this.sad) ctx.filter = 'saturate(0.55) brightness(0.85)';
+    else if (this.sad) ctx.filter = 'saturate(0.8) brightness(0.92)';
     if (o.hurt && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.4;
     ctx.drawImage(img, -w / 2, -h, w, h);
     ctx.restore();

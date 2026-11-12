@@ -2,7 +2,7 @@
 // poderes con MP, ventajas entre elementos y efectos propios de cada mapa.
 
 import { fit, scaled } from './sprites.js';
-import { ELEMENT_COLOR, matchup } from './roster.js';
+import { ELEMENT_COLOR, matchup, MOOD } from './roster.js';
 import { CHARS } from './state.js';
 import { sfx } from './sfx.js';
 
@@ -814,9 +814,14 @@ export class Battle {
   }
 
   drawFighter(ctx, f, px) {
-    const img = scaled(f.sprite, f.h * px);
-    const w = (img.width / img.height) * f.h;
     const dead = f.hp <= 0;
+    // Qué pose pone: ataque mientras dispara y vuela su tiro, triste si le duele o va muy mal, contenta si gana.
+    const firing = f.lunge > 0 || (this.phase === 'flying' && this.turn === f);
+    const mood = dead ? MOOD.sad : firing ? MOOD.attack : this.phase === 'over' ? MOOD.happy : f.hurt > 0 || f.hp < f.maxHp * 0.3 ? MOOD.sad : MOOD.calm;
+    const pose = f.sprites?.[mood] || f.sprite, ph = f.h * (pose.rel || 1);
+    const img = scaled(pose, ph * px);
+    const pw = (img.width / img.height) * ph;                               // ancho de esta pose
+    const w = pose.calmW ? (pose.calmW / pose.height) * ph : pw;           // ancho de la pose tranquila: para sombras y adornos
     if (f.burn && !dead) {                            // arde: llamas por detrás que asoman alrededor
       const big = Math.max(w, f.h);
       this.vfx(ctx, 'llamas', f.x, f.y - big * 0.55, big * 1.45, { sy: 1 + Math.sin(this.t * 14) * 0.07, sx: 1 + Math.cos(this.t * 11) * 0.05 });
@@ -843,7 +848,7 @@ export class Battle {
     if (dead) ctx.rotate(-f.fall * 1.45);
     else ctx.rotate(hk * 0.28 * f.hitDir * f.dir + lk * 0.14 - (armed ? 0.05 : 0));
     ctx.scale(1 + lk * 0.14 - hk * 0.08 + (armed ? 0.04 : 0), 1 - lk * 0.1 + hk * 0.1 + breathe - (armed ? 0.06 : 0));
-    ctx.drawImage(img, -w / 2, -f.h, w, f.h);
+    ctx.drawImage(img, -w / 2 - (pw - w) * 0.35, -ph, pw, ph);                // lo que sobresale (alas, aliento) reparte hacia delante
     ctx.restore();
     if (!dead) this.drawStatus(ctx, f, w);
 
