@@ -1,6 +1,6 @@
 // Portada: usa el mismo arte y el mismo motor que el juego.
 // - Un duelo real jugándose solo (dos bandos automáticos) sobre los tres mapas.
-// - Una criatura protagonista (por defecto el Draconoid de la ilustración) que se puede cambiar por cualquiera de las 15.
+// - Una criatura protagonista (por defecto Solaris, la de la ilustración) que se puede cambiar por cualquiera de las 15.
 
 import { loadMoods, loadGrid, loadImage } from './sprites.js';
 import { ROSTER, ELEMENT_COLOR, EGG_ORDER, STAGES, MOOD, MAPS, moodSheet, powersOf } from './roster.js';
@@ -74,7 +74,7 @@ async function buildRoster() {
 
 // ---------- Duelo en vivo ----------
 // Dos criaturas en su forma Final, con sus poderes, peleando solas con el motor del juego.
-const PAIRS = [['draconoid', 'pyrorex'], ['voltix', 'aquarok'], ['frostine', 'shadowon'], ['solaris', 'toxipuff'], ['blaziky', 'gravion'], ['zephyra', 'mechapi'], ['tropicat', 'rokky']];
+const PAIRS = [['solaris', 'shadowon'], ['voltix', 'aquarok'], ['frostine', 'pyrorex'], ['zephyra', 'toxipuff'], ['blaziky', 'gravion'], ['draconoid', 'mechapi'], ['tropicat', 'rokky']];
 const canvas = $('duel');
 let duel = null, mapIndex = 0, pairIndex = 0, mapImgs = [], thinking = 0, visible = false, last = 0, restart = 0;
 
@@ -143,16 +143,17 @@ async function buildDuel() {
 // Coordenadas sobre la ilustración original (1536 × 864). Las luces laten, los huevos se mecen y la cría respira.
 const ART = { w: 1536, h: 864 };
 const GLOWS = [   // x, y, ancho, proporción, color, clase
-  [1000, 118, 300, 3.2, '#ffd98a', ''], [617, 290, 200, 3, '#ffd98a', ''], [1412, 270, 220, 3, '#ffe2a8', ''],              // lámparas de las cúpulas
-  [592, 95, 110, 1, '#ffb347', 'flame'], [1500, 130, 90, 1, '#ffb347', 'flame'], [18, 150, 90, 1, '#ffb347', 'flame'],       // farolillos
-  [430, 425, 70, 1, '#ffb347', 'flame'], [1245, 460, 64, 1, '#ffb347', 'flame'], [466, 215, 90, 1, '#b06bff', ''],
-  [205, 70, 150, 1, '#cfd8ff', ''], [108, 610, 80, 1, '#b06bff', ''], [345, 598, 80, 1, '#6fd8ff', ''],                     // luna y cristales
-  [752, 747, 70, 1, '#7fe9ff', ''], [975, 772, 76, 1, '#7fe9ff', ''], [1207, 752, 70, 1, '#7fe9ff', ''],                    // luces de las bases
-  [466, 667, 56, 1, '#7fe9ff', ''], [590, 684, 60, 1, '#7fe9ff', ''], [1270, 683, 56, 1, '#7fe9ff', ''], [1405, 702, 62, 1, '#7fe9ff', ''],
-  [617, 505, 300, .9, '#ff9a2e', ''], [1412, 510, 300, .9, '#8fd0ff', ''],                                                   // el brillo de cada huevo
+  [970, 108, 300, 3, '#ffd98a', ''], [565, 312, 190, 3, '#ffd98a', ''], [1380, 343, 190, 3, '#ffe2a8', ''],                // lámparas de las cúpulas
+  [430, 80, 120, 1, '#ffb347', 'flame'], [25, 565, 130, 1, '#ffb347', 'flame'], [1418, 228, 84, 1, '#ffb347', 'flame'],     // farolillos
+  [420, 180, 84, 1, '#7fe9c8', ''], [605, 170, 84, 1, '#b06bff', ''], [665, 45, 70, 1, '#6fa8ff', ''],                      // frascos
+  [211, 144, 120, 1, '#cfd8ff', ''], [225, 330, 240, 1, '#8f7bff', 'soft'],                                                // luna y ciudad
+  [730, 745, 84, 1, '#7fe9ff', ''], [967, 763, 88, 1, '#7fe9ff', ''], [1196, 747, 84, 1, '#7fe9ff', ''],                    // luces de las bases
+  [437, 660, 58, 1, '#7fe9ff', ''], [578, 667, 60, 1, '#7fe9ff', ''], [1297, 687, 54, 1, '#7fe9ff', ''], [1413, 690, 56, 1, '#7fe9ff', ''], [1492, 687, 50, 1, '#7fe9ff', ''],
+  [562, 505, 300, .9, '#ff9a2e', ''], [1380, 525, 300, .9, '#8fd0ff', ''],                                                  // el brillo de cada huevo
+  [992, 208, 160, 2.6, '#ffe08a', ''], [942, 535, 170, 1, '#ffd24a', ''], [975, 400, 560, 1, '#ffd98a', 'soft'],            // halo, sol del cascarón y contraluz
 ];
-const PIECES = [  // x0, y0, x1, y1, clase, duración, retraso
-  [500, 380, 735, 620, 'egg', 2.8, 0], [1300, 380, 1524, 632, 'egg', 3.3, -1.2], [792, 205, 1208, 700, 'baby', 0, 0],
+const PIECES = [  // x0, y0, x1, y1, clase, duración, retraso: solo los dos huevos sin abrir se mecen
+  [466, 392, 662, 618, 'egg', 2.6, 0], [1283, 422, 1480, 642, 'egg', 3.1, -1.2],
 ];
 function buildArt() {
   const art = $('hero-art'), pct = (v, of) => `${(v / of) * 100}%`, bits = [];
@@ -161,15 +162,16 @@ function buildArt() {
     bits.push(`<i class="piece ${cls}" style="left:${pct(x0, ART.w)};top:${pct(y0, ART.h)};width:${pct(w, ART.w)};height:${pct(h, ART.h)};background-size:${(ART.w / w) * 100}% ${(ART.h / h) * 100}%;background-position:${(x0 / (ART.w - w)) * 100}% ${(y0 / (ART.h - h)) * 100}%;--t:${t}s;--d:${d}s"></i>`);
   }
   GLOWS.forEach(([x, y, w, r, c, cls], i) => bits.push(`<i class="glow ${cls}" style="--x:${pct(x, ART.w)};--y:${pct(y, ART.h)};--w:${pct(w, ART.w)};--r:${r};--c:${c};--t:${(2.2 + (i * 0.37) % 1.9).toFixed(2)}s;--d:${(-(i * 0.71) % 3).toFixed(2)}s"></i>`));
-  // Destellos: muchos en la cúpula central (morados) y unos pocos en las de los lados (cálidos y fríos).
-  const spark = (x0, x1, y0, y1, c) => bits.push(`<i class="spark" style="--x:${pct(rand(x0, x1), ART.w)};--y:${pct(rand(y0, y1), ART.h)};--s:${rand(1, 2.6).toFixed(2)}%;--c:${c};--t:${rand(1.5, 3.2).toFixed(2)}s;--d:${(-rand(0, 3.2)).toFixed(2)}s"></i>`);
-  for (let i = 0; i < 22; i++) {                     // alrededor de la cría, sin taparle la cara
+  // Destellos: muchos en la cúpula central (dorados), sin tapar a la cría ni su huevo, y unos pocos en las de los lados.
+  const spark = (x, y, c) => bits.push(`<i class="spark" style="--x:${pct(x, ART.w)};--y:${pct(y, ART.h)};--s:${rand(1.1, 2.6).toFixed(2)}%;--c:${c};--t:${rand(1.6, 3.4).toFixed(2)}s;--d:${(-rand(0, 3.4)).toFixed(2)}s"></i>`);
+  const inside = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 < 1;
+  for (let i = 0; i < 20; i++) {
     let x, y;
-    do { x = rand(805, 1195); y = rand(180, 650); } while (((x - 995) / 150) ** 2 + ((y - 410) / 190) ** 2 < 1);
-    spark(x, x, y, y, '#d9c2ff');
+    do { x = rand(745, 1195); y = rand(190, 640); } while (inside(x, y, 965, 360, 175, 190) || inside(x, y, 950, 545, 150, 115));
+    spark(x, y, '#ffe9a8');
   }
-  for (let i = 0; i < 6; i++) spark(525, 705, 330, 600, '#ffcf8a');
-  for (let i = 0; i < 6; i++) spark(1320, 1500, 320, 620, '#bfe6ff');
+  for (let i = 0; i < 5; i++) spark(rand(455, 675), rand(370, 600), '#ffcf8a');
+  for (let i = 0; i < 5; i++) spark(rand(1275, 1495), rand(400, 630), '#bfe6ff');
   // Motas de luz que suben flotando por la sala.
   for (let i = 0; i < 30; i++) bits.push(`<i class="mote" style="--x:${pct(rand(0, ART.w), ART.w)};--y:${pct(rand(260, 860), ART.h)};--s:${rand(0.45, 1.1).toFixed(2)}%;--c:${['#ffd98a', '#c9a8ff', '#8fd0ff'][i % 3]};--dx:${rand(-3, 3).toFixed(1)}vw;--t:${rand(6, 12).toFixed(1)}s;--d:${(-rand(0, 12)).toFixed(1)}s"></i>`);
   bits.push('<i class="shine"></i>');
@@ -192,7 +194,7 @@ function buildArt() {
 // ---------- Arranque ----------
 buildArt();
 buildRooms();
-follow(ROSTER.find(r => r.id === 'draconoid'));
+follow(ROSTER.find(r => r.id === 'solaris'));
 buildDuel().catch(err => { console.error(err); $('duel').closest('.arena').classList.add('failed'); });
 buildEggs().catch(console.error);
 // Las quince hojas se cargan cuando el visitante se acerca a esa sección.

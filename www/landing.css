@@ -36,11 +36,11 @@ h3 { font-size: 19px; font-weight: 900; }
 
 /* Portada: la ilustración manda; el texto va sobre su lado tranquilo.
    La ilustración es una capa propia para poder ponerle encima luces, destellos y el balanceo de los huevos. */
-:root { --art: url(assets/landing/portada-2x.webp); }
+:root { --art: url(assets/landing/solaris-2x.webp); }
 .hero { position: relative; min-height: min(100svh, 920px); display: flex; align-items: center; padding: 100px var(--pad) 70px; overflow: hidden; background: var(--night); }
 .hero-art { position: absolute; inset: 0; background: var(--art) 62% center / cover no-repeat; }
 /* En pantallas grandes y de alta densidad, la versión al triple de resolución */
-@media (min-width: 1100px) and (min-resolution: 1.5dppx) { :root { --art: url(assets/landing/portada-3x.webp); } }
+@media (min-width: 1100px) and (min-resolution: 1.5dppx) { :root { --art: url(assets/landing/solaris-3x.webp); } }
 .hero-art.placed { inset: auto; background-size: 100% 100%; background-position: 0 0; }
 .hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(13, 11, 30, .9) 0%, rgba(13, 11, 30, .68) 30%, rgba(13, 11, 30, 0) 58%), linear-gradient(0deg, var(--night) 0%, rgba(13, 11, 30, 0) 24%); pointer-events: none; }
 .hero-text { position: relative; z-index: 2; max-width: 640px; }
@@ -48,27 +48,29 @@ h3 { font-size: 19px; font-weight: 900; }
 .hero-art .glow { position: absolute; left: var(--x); top: var(--y); width: var(--w); aspect-ratio: var(--r, 1); translate: -50% -50%; border-radius: 50%; background: radial-gradient(closest-side, var(--c), transparent); mix-blend-mode: screen; opacity: .4; }
 /* Trozos de la propia ilustración (huevos y cría) que se mueven sobre ella */
 .hero-art .piece { position: absolute; background-image: var(--art); background-repeat: no-repeat; -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%); transform-origin: 50% 90%; will-change: transform; }
-/* Destellos dentro de las cúpulas */
-.hero-art .spark { position: absolute; left: var(--x); top: var(--y); width: var(--s); aspect-ratio: 1; translate: -50% -50%; scale: 0; background: linear-gradient(#fff, #fff) center / 100% 14% no-repeat, linear-gradient(#fff, #fff) center / 14% 100% no-repeat; filter: drop-shadow(0 0 5px var(--c, #d9c2ff)); }
+/* Destellos dentro de las cúpulas: estrellas de cuatro puntas */
+.hero-art .spark { position: absolute; left: var(--x); top: var(--y); width: var(--s); aspect-ratio: 1; translate: -50% -50%; scale: 0; filter: drop-shadow(0 0 3px var(--c, #ffe9a8)) drop-shadow(0 0 7px var(--c, #ffe9a8)); }
+.hero-art .spark::before { content: ""; position: absolute; inset: 0; background: #fff; clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%); }
+.hero-art .glow.soft { opacity: .15; }
 /* Motas de luz que suben flotando por toda la sala */
 .hero-art .mote { position: absolute; left: var(--x); top: var(--y); width: var(--s); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, #fff, var(--c) 45%, transparent); opacity: 0; mix-blend-mode: screen; }
 /* Un reflejo que cruza el cristal de la cúpula central */
-.hero-art .shine { position: absolute; left: 50.5%; top: 16%; width: 28.4%; height: 67%; border-radius: 50% 50% 6% 6% / 34% 34% 3% 3%; overflow: hidden; pointer-events: none; }
+.hero-art .shine { position: absolute; left: 46.6%; top: 11.6%; width: 32.5%; height: 68.2%; border-radius: 50% 50% 6% 6% / 34% 34% 3% 3%; overflow: hidden; pointer-events: none; }
 .hero-art .shine::before { content: ""; position: absolute; top: -10%; bottom: -10%; left: -60%; width: 34%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .34), transparent); transform: skewX(-16deg); }
 @media (prefers-reduced-motion: no-preference) {
   .hero-art .glow { animation: pulse var(--t, 3s) ease-in-out var(--d, 0s) infinite alternate; }
   .hero-art .glow.flame { animation: flicker var(--t, 2.3s) linear var(--d, 0s) infinite; }
+  .hero-art .glow.soft { animation: pulse-soft var(--t, 3.4s) ease-in-out var(--d, 0s) infinite alternate; }
   .hero-art .piece.egg { animation: wobble var(--t, 2.4s) ease-in-out var(--d, 0s) infinite alternate; }
-  .hero-art .piece.baby { animation: bob 1.9s ease-in-out infinite alternate; }
   .hero-art .spark { animation: twinkle var(--t, 2.4s) ease-in-out var(--d, 0s) infinite; }
   .hero-art .mote { animation: rise var(--t, 9s) linear var(--d, 0s) infinite; }
   .hero-art .shine::before { animation: sweep 6.5s ease-in-out 1.5s infinite; }
 }
 @keyframes pulse { from { opacity: .1; scale: .82; } to { opacity: 1; scale: 1.22; } }
 @keyframes flicker { 0%, 100% { opacity: .5; scale: 1; } 10% { opacity: 1; scale: 1.18; } 22% { opacity: .35; scale: .9; } 36% { opacity: .9; scale: 1.1; } 52% { opacity: .45; scale: .95; } 68% { opacity: 1; scale: 1.2; } 84% { opacity: .4; scale: .92; } }
-@keyframes wobble { from { transform: rotate(-3.4deg) translateX(-1%); } to { transform: rotate(3.4deg) translateX(1%); } }
-@keyframes bob { from { transform: translateY(.4%) scale(.994) rotate(-.8deg); } to { transform: translateY(-1.7%) scale(1.02) rotate(.8deg); } }
-@keyframes twinkle { 0%, 100% { scale: 0; rotate: 0deg; opacity: 0; } 50% { scale: 1; rotate: 45deg; opacity: 1; } }
+@keyframes wobble { from { transform: rotate(-2.4deg); } to { transform: rotate(2.4deg); } }
+@keyframes pulse-soft { from { opacity: .06; scale: .92; } to { opacity: .38; scale: 1.08; } }
+@keyframes twinkle { 0%, 100% { scale: 0; rotate: -12deg; opacity: 0; } 50% { scale: 1; rotate: 12deg; opacity: 1; } }
 @keyframes rise { 0% { transform: translate(0, 0); opacity: 0; } 12% { opacity: .9; } 80% { opacity: .7; } 100% { transform: translate(var(--dx, 2vw), -24vh); opacity: 0; } }
 @keyframes sweep { 0%, 55% { left: -60%; } 100% { left: 150%; } }
 .hero h1 { font-size: clamp(46px, 7vw, 104px); background: linear-gradient(180deg, #fffbe6 6%, var(--gold) 50%, var(--ember) 96%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 #2a2f8a) drop-shadow(0 0 30px rgba(13, 11, 30, .9)); padding: 0 .08em .1em 0; }
