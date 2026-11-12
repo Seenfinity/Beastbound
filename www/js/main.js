@@ -214,7 +214,9 @@ function renderCare() {
   const nap = S.sleepLeft(game);
   setHTML($('btn-sleep'), `<i class="ic ic-luna"></i> ${nap ? `Durmiendo… ${duration(nap)}` : p.asleep ? 'Despertar' : 'Acostar a dormir'}`);
   $('btn-sleep').disabled = nap > 0;
-  $('sleep-note').textContent = nap ? 'Acaba de dormirse: aún no se la puede despertar.' : p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
+  $('sleep-note').textContent = nap ? 'Acaba de dormirse: aún no se la puede despertar.' : p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : '';
+  $('sleep-note').hidden = !p.asleep;
+  $('btn-sleep').title = p.asleep ? '' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
   $('mood-line').textContent = p.asleep ? 'Está durmiendo' : p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
     : p.bond < 30 ? 'Aún no confía en ti' : p.mood > 75 && p.hunger > 60 ? '¡Está feliz!' : 'Está bien';
 
@@ -328,7 +330,7 @@ function renderEggs() {
   if (!game) return;
   S.tickEggs(game);
   const n = game.eggs.length, box = $('incubator');
-  $('eggs-count').textContent = n ? `(${n} de ${S.MAX_EGGS})` : '';
+  $('eggs-count').textContent = n ? `${n}/${S.MAX_EGGS}` : '';
   const buy = `<button class="btn buy-egg" data-buy-egg="1"><i class="ic ic-huevomas"></i> Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i></button>`;
   if (!n) {
     return setHTML(box, `<div class="incu-empty"><div class="incu-dome empty"><i></i></div>

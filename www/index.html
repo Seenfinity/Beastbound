@@ -51,8 +51,13 @@
           <h3><i class="ic ic-trofeo"></i>Misiones de hoy</h3>
           <div id="missions" class="missions"></div>
         </div>
+        <div class="panel">
+          <h3><i class="ic ic-huevomas"></i>Zona de incubación <small id="eggs-count"></small></h3>
+          <div id="incubator" class="incubator"></div>
+        </div>
       </aside>
 
+      <div class="col-mid">
       <section class="room-wrap">
         <canvas id="room"></canvas>
         <button class="plate" id="plate"><b id="pet-name"></b><small id="pet-sub"></small></button>
@@ -63,6 +68,23 @@
         <div class="tray" id="tray" hidden></div>
         <button class="food-btn" id="btn-food"><i class="ic ic-filete"></i><span>Comida</span><b id="food-count">0</b></button>
       </section>
+      <section class="row-mid">
+        <div class="panel">
+          <h3><i class="ic ic-pesa"></i>Entrenar</h3>
+          <p class="muted" id="train-note"></p>
+          <div id="train-list" class="train-list"></div>
+          <p id="train-result" class="muted"></p>
+        </div>
+        <div class="panel">
+          <h3><i class="ic ic-rayo"></i>Poderes <small id="mp-max"></small></h3>
+          <div id="powers-info" class="pw-list"></div>
+        </div>
+        <div class="panel">
+          <h3><i class="ic ic-libro"></i>Sobre la especie</h3>
+          <div id="species-info"></div>
+        </div>
+      </section>
+      </div>
 
       <aside class="col-right">
         <div class="panel">
@@ -79,31 +101,8 @@
         <div class="panel">
           <h3><i class="ic ic-estrella"></i>Personalidad</h3>
           <div id="persona"></div>
-        </div>
-        <div class="panel">
-          <h3>Gustos</h3>
+          <h4 class="sub">Gustos</h4>
           <div id="tastes" class="tastes"></div>
-        </div>
-      </aside>
-
-      <section class="row-bottom">
-        <div class="panel">
-          <h3><i class="ic ic-pesa"></i>Entrenar</h3>
-          <p class="muted" id="train-note"></p>
-          <div id="train-list" class="train-list"></div>
-          <p id="train-result" class="muted"></p>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-rayo"></i>Poderes <small id="mp-max"></small></h3>
-          <div id="powers-info" class="pw-list"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-huevomas"></i>Zona de incubación <small id="eggs-count"></small></h3>
-          <div id="incubator" class="incubator"></div>
-        </div>
-        <div class="panel">
-          <h3><i class="ic ic-libro"></i>Sobre la especie</h3>
-          <div id="species-info"></div>
         </div>
         <div class="panel">
           <h3><i class="ic ic-espadas"></i>Combate</h3>
@@ -111,7 +110,8 @@
           <button class="btn heal-btn" hidden></button>
           <button class="btn primary" id="btn-go-battle">Ir al combate</button>
         </div>
-      </section>
+      </aside>
+
       <footer class="tip" id="tip"></footer>
     </main>
 
