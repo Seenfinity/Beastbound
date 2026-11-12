@@ -15,7 +15,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const TRAIN_ICON = { pot: 'roca', pun: 'diana', agu: 'escudo', agi: 'rayo' };
 
-let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, decorArt = {}, room;
+let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, decorArt = {}, roomArt = {}, room;
 let game = null, battle = null, rival = null, tab = 'care', startPick = 0;
 
 const spriteOf = (species, stage) => { const sp = speciesOf(species); return sprites[sp.sheet][sp.row][stage]; };
@@ -235,12 +235,7 @@ function renderCare() {
     : `<div class="taste unknown"><i class="ic ic-estrella"></i><span>¿…?<small>${label}: sin descubrir</small></span></div>`;
   setHTML($('tastes'), taste('Favorita', p.fav, p.favKnown) + taste('La odia', p.hate, p.hateKnown));
 
-  // Bandeja de comida
-  for (const id of Object.keys(S.FOODS)) {
-    const slot = $('slot-' + id);
-    slot.classList.toggle('empty', game.foods[id] <= 0);
-    slot.querySelector('b').textContent = game.foods[id];
-  }
+  renderTray();
 
   // Momento de crianza
   const ev = S.currentEvent(game), card = $('event-card');
@@ -264,7 +259,10 @@ function renderCare() {
   // Evolución
   const evo = S.evolveStatus(game);
   room.evolveReady = !!evo?.ready;
-  $('btn-evolve').hidden = !evo?.ready || !!room.mini;
+  $('btn-evolve').hidden = !evo?.ready || !!room.mini || room.editing;
+  $('btn-decor').hidden = !game.decor.length || !!room.mini;
+  $('btn-decor').textContent = room.editing ? 'Listo' : 'Decorar';
+  $('btn-decor').classList.toggle('on', room.editing);
   setHTML($('evo-line'), STAGES.map((name, i) =>
     `<div class="step ${i < p.stage ? 'past' : i === p.stage ? 'now' : 'future'}"><i class="sp sp-${p.species}-${i}"${hueStyle(p)}></i>${name}</div>`).join('<span class="arrow">›</span>'));
   $('evo-text').textContent = !evo ? 'Ya está en su forma Final.'
@@ -297,7 +295,7 @@ function renderCare() {
 
   $('tip').textContent = p.asleep ? `${p.name} está durmiendo. Se despierta sola cuando esté recuperada, o puedes despertarla tú.`
     : rest ? `${p.name} se está recuperando del combate. Si la acuestas a dormir tarda la mitad.`
-    : !p.favKnown ? 'Prueba las tres comidas: una es su favorita y otra la odia.'
+    : !p.favKnown ? 'Prueba comidas distintas: una es su favorita y otra la odia.'
     : p.bond < 30 ? 'Con el vínculo bajo puede no obedecerte en combate. Acaríciala y juega con ella.'
     : evo?.ready ? `${p.name} está lista para evolucionar: pulsa el botón dorado.`
     : 'Cuanto mejor cuidada y más unida a ti, más MP tiene para sus poderes.';
@@ -375,6 +373,7 @@ $('event-choices').onclick = e => {
   const b = e.target.closest('[data-choice]');
   if (!b) return;
   const res = S.resolveEvent(game, +b.dataset.choice);
+  if (!res) return;
   $('event-card').dataset.id = '';
   commit();
   room.say(res.text, 3.5);
@@ -412,23 +411,24 @@ $('plate').onclick = () => {
   });
 };
 
-// Bandeja: se arrastra la comida hasta la criatura (o se toca para dársela).
+// Despensa: la comida que tienes. Se abre con el botón «Comida»; se arrastra hasta la criatura (o se toca para dársela).
+let trayOpen = false;
+function renderTray() {
+  const owned = Object.keys(S.FOODS).filter(id => game.foods[id] > 0);
+  setHTML($('tray'), owned.map(id => `<div class="slot" title="${S.FOODS[id].name}: ${S.FOODS[id].desc}"><i class="ic ic-${id}" data-food="${id}"></i><b>${game.foods[id]}</b></div>`).join('')
+    + '<button class="slot more" data-shop="1">+<small>Tienda</small></button>');
+  $('food-count').textContent = owned.reduce((n, id) => n + game.foods[id], 0);
+  $('btn-food').classList.toggle('on', trayOpen);
+}
 function buildTray() {
-  $('tray').innerHTML = Object.entries(S.FOODS).map(([id, f]) =>
-    `<div class="slot" id="slot-${id}" title="${f.name}: ${f.desc}"><i class="ic ic-${id}" data-food="${id}"></i><b>0</b>
-      <button data-buy="${id}" aria-label="Comprar ${f.name}">+ ${f.price}<i class="ic ic-moneda"></i></button></div>`).join('');
   const ghost = $('ghost');
   let drag = null;
+  $('btn-food').onclick = () => { trayOpen = !trayOpen; sfx.tap(); $('btn-food').classList.toggle('on', trayOpen); };
   $('tray').addEventListener('pointerdown', e => {
-    const buy = e.target.closest('[data-buy]');
-    if (buy) {
-      const res = S.buyFood(game, buy.dataset.buy);
-      if (res.error) { toast(res.error); sfx.error(); } else { commit(); sfx.coin(); }
-      return;
-    }
+    if (e.target.closest('[data-shop]')) return switchTab('shop');
     const food = e.target.closest('[data-food]')?.dataset.food;
     if (!food || room.mini) return;
-    if (game.foods[food] <= 0) return toast(`No te queda ${S.FOODS[food].name.toLowerCase()}. Cómpralo con el botón de abajo.`);
+    if (!(game.foods[food] > 0)) return toast(`No te queda ${S.FOODS[food].name.toLowerCase()}.`);
     e.preventDefault();
     drag = { food, sx: e.clientX, sy: e.clientY, moved: false };
     ghost.className = `ic drag-ghost ic-${food}`;
@@ -437,6 +437,7 @@ function buildTray() {
     if (!drag) return;
     if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10) drag.moved = true;
     ghost.hidden = !drag.moved;
+    $('tray').classList.toggle('dragging', drag.moved);     // se aparta para que veas a la criatura
     ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
     room.hover(e);
   });
@@ -444,6 +445,7 @@ function buildTray() {
     if (!drag) return;
     const d = drag;
     drag = null; ghost.hidden = true; room.hover(null);
+    $('tray').classList.remove('dragging');
     if (e.type === 'pointercancel' || (d.moved && !room.canDrop(e))) return;
     const res = S.feed(game, d.food);
     if (res.error) return room.say(res.error);
@@ -484,6 +486,12 @@ function doEvolve() {
   });
 }
 $('btn-evolve').onclick = doEvolve;
+$('btn-decor').onclick = () => {
+  room.editing = !room.editing;
+  sfx.tap();
+  renderCare();
+  if (room.editing) toast('Arrastra los muebles para colocarlos. Pulsa «Listo» al terminar.');
+};
 
 const roomHooks = {
   onStroke() { S.stroke(game); renderCare(); },
@@ -508,8 +516,12 @@ const roomHooks = {
   },
   charColor: () => (game.pet.char ? S.CHARS[game.pet.char].color : ''),
   wish: () => (game.pet.wish ? S.WISHES[game.pet.wish.type].icon : null),
-  decor: () => game.decor.map(id => ({ ...S.DECOR[id], img: decorArt[id] })).filter(d => d.img),
-  bedX: () => (game.decor.includes('cama') ? S.DECOR.cama.x : 0),
+  decor: () => game.decor.map(id => ({ ...S.decorAt(game, id), img: decorArt[id] })).filter(d => d.img),
+  bedX: () => (game.decor.includes('cama') ? S.decorAt(game, 'cama').x : 0),
+  bg: () => roomArt[game.room] || roomArt.sala,
+  onMoveDecor: (id, x, y) => S.moveDecor(game, id, x, y),
+  onDropDecor: () => S.save(game),
+  onUse: id => { if (S.useDecor(game, id)) S.save(game); },
 };
 
 // ---------- Combate ----------
@@ -685,8 +697,13 @@ $('b-quit').onclick = () => modal({
 function renderShop() {
   const good = (icon, name, desc, have, attr, price) => `<div class="good"><i class="ic ic-${icon}"></i><span><b>${name}</b><small>${desc}</small>${have}</span>
     <button class="btn" ${attr}>${price}<i class="ic ic-moneda"></i></button></div>`;
-  setHTML($('shop-food'), Object.entries(S.FOODS).map(([id, f]) => good(id, f.name, f.desc, `<small>Tienes ${game.foods[id]}</small>`, `data-buy-food="${id}"`, f.price)).join(''));
+  setHTML($('shop-food'), Object.entries(S.FOODS).map(([id, f]) => good(id, f.name, f.desc, `<small>Llena ${f.hunger} · Tienes ${game.foods[id] || 0}</small>`, `data-buy-food="${id}"`, f.price)).join(''));
   setHTML($('shop-items'), Object.entries(S.ITEMS).map(([id, it]) => good(it.icon, it.name, it.desc, `<small>Tienes ${game.items[id] || 0}</small>`, `data-buy-item="${id}"`, it.price)).join(''));
+  setHTML($('shop-rooms'), Object.entries(S.ROOMS).map(([id, r]) => {
+    const mine = game.rooms.includes(id), on = game.room === id;
+    return `<div class="room-card${on ? ' on' : ''}"><img src="${r.bg}" alt="">${r.name}
+      ${on ? '<span class="tag" style="--c:var(--gold)">En uso</span>' : mine ? `<button class="btn" data-use-room="${id}">Usar</button>` : `<button class="btn" data-buy-room="${id}">${r.price}<i class="ic ic-moneda"></i></button>`}</div>`;
+  }).join(''));
   setHTML($('shop-decor'), Object.entries(S.DECOR).map(([id, d]) => {
     const owned = game.decor.includes(id);
     return `<div class="good${owned ? ' owned' : ''}"><i class="dc dc-${id}"></i><span><b>${d.name}</b><small>${d.desc}</small><small>${owned ? 'Ya está en tu sala' : ''}</small></span>
@@ -697,7 +714,8 @@ function renderShop() {
 $('tab-shop').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
-  const res = b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem)
+  if (b.dataset.useRoom) { S.setRoom(game, b.dataset.useRoom); sfx.tap(); S.save(game); return renderAll(); }
+  const res = b.dataset.buyRoom ? S.buyRoom(game, b.dataset.buyRoom) : b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem)
     : b.dataset.buyDecor ? S.buyDecor(game, b.dataset.buyDecor) : b.dataset.buyEgg ? S.buyEgg(game) : null;
   if (!res) return;
   if (res.error) { toast(res.error); return sfx.error(); }
@@ -739,7 +757,10 @@ function frame(now) {
     if (tab === 'care') {
       room.update(dt); room.draw();
       const busy = !!room.mini;                       // durante un minijuego se despeja la sala
-      if ($('tray').hidden !== busy) { $('tray').hidden = busy; $('plate').hidden = busy; if (busy) $('btn-evolve').hidden = true; }
+      const hideTray = busy || room.editing;
+      if ($('btn-food').hidden !== hideTray) $('btn-food').hidden = hideTray;
+      if ($('tray').hidden !== (hideTray || !trayOpen)) $('tray').hidden = hideTray || !trayOpen;
+      if ($('plate').hidden !== busy) { $('plate').hidden = busy; if (busy) { $('btn-evolve').hidden = true; room.editing = false; } }
     }
     else if (tab === 'battle' && battle) { battle.update(dt); battle.draw(); renderBattle(); }
   }
@@ -760,8 +781,8 @@ setInterval(() => {
 
 try {
   let loaded = 0;
-  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 8`; return value; });
-  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid] = await Promise.all([
+  const track = promise => promise.then(value => { $('load-text').textContent = `Cargando arte… ${++loaded} de 10`; return value; });
+  const [sheetGrids, mapImgs, roomBg, iconGrid, eggGrid, powerGrids, vfxGrid, decorGrid, foodGrid, roomImgs] = await Promise.all([
     loadSprites(SHEETS),
     Promise.all(MAPS.map(async m => ({ ...m, img: await loadImage(m.bg) }))),
     loadImage('assets/ui/sala.png'),
@@ -770,6 +791,8 @@ try {
     Promise.all(POWER_ICON_SHEETS.map((_, i) => loadGrid(`assets/ui/poderes-${i + 1}.png`, 4, 4, true))),
     loadGrid('assets/ui/efectos.png', 4, 4, 'glow'),
     loadGrid('assets/ui/decoracion.png', 4, 4, true),
+    loadGrid('assets/ui/comida.png', 4, 4, true),
+    Promise.all(Object.entries(S.ROOMS).map(async ([id, r]) => [id, await loadImage(r.bg)])),
   ].map(track));
   sprites = sheetGrids; maps = mapImgs;
   iconGrid.flat().forEach((cv, i) => { icons[ICON_ORDER[i]] = cv; });
@@ -778,6 +801,8 @@ try {
   }));
   vfxGrid.flat().forEach((cv, i) => { vfx[VFX_ORDER[i]] = cv; });
   decorGrid.flat().forEach((cv, i) => { decorArt[S.DECOR_ORDER[i]] = cv; });
+  foodGrid.flat().forEach((cv, i) => { icons[S.FOOD_SHEET[i]] = cv; });
+  Object.assign(roomArt, Object.fromEntries(roomImgs));
   despill(vfx.destello);                             // el estallido de luz debe quedar blanco y dorado, sin rosa
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);

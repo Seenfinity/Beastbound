@@ -11,11 +11,38 @@ const STATS = ['pot', 'agu', 'pun', 'agi'];
 export const STAT_NAMES = { pot: 'Potencia', agu: 'Aguante', pun: 'Puntería', agi: 'Agilidad' };
 export const STAT_HELP = { pot: 'más daño', agu: 'más vida', pun: 'guía de tiro más larga', agi: 'se mueve más por turno' };
 
-// Lo que come decide qué sube al ganar nivel.
+// Comida. hunger = cuánto llena; lean = qué estadística cría (decide qué sube al ganar nivel).
+// Algunas apenas llenan pero animan o dan energía; otras llenan muchísimo.
 export const FOODS = {
-  filete: { name: 'Filete', desc: 'Llena mucho. Cría músculo: Potencia.', hunger: 35, mood: 0, energy: 0, lean: 'pot', price: 6 },
-  bayas: { name: 'Bayas', desc: 'Dulces y sanas. Cría cuerpo: Aguante.', hunger: 24, mood: 6, energy: 0, lean: 'agu', price: 4 },
-  semillas: { name: 'Semillas', desc: 'Ligeras, dan energía. Cría patas: Agilidad.', hunger: 16, mood: 0, energy: 14, lean: 'agi', price: 4 },
+  filete: { name: 'Filete', desc: 'Llena mucho. Cría Potencia.', hunger: 35, mood: 0, energy: 0, lean: 'pot', price: 7 },
+  bayas: { name: 'Bayas', desc: 'Dulces y sanas. Crían Aguante.', hunger: 24, mood: 6, energy: 0, lean: 'agu', price: 4 },
+  semillas: { name: 'Semillas', desc: 'Ligeras, dan energía. Crían Agilidad.', hunger: 16, mood: 0, energy: 14, lean: 'agi', price: 4 },
+  pescado: { name: 'Pescado', desc: 'Llena bien. Cría Puntería.', hunger: 28, mood: 0, energy: 0, lean: 'pun', price: 6 },
+  galleta: { name: 'Galleta', desc: 'Un bocado: casi no llena, pero anima.', hunger: 8, mood: 10, energy: 0, lean: 'agi', price: 2 },
+  miel: { name: 'Miel', desc: 'Llena poco; anima y da algo de energía.', hunger: 12, mood: 14, energy: 6, lean: 'agu', price: 5 },
+  sopa: { name: 'Sopa', desc: 'Llena muchísimo. Cría Aguante.', hunger: 45, mood: 3, energy: 0, lean: 'agu', price: 9 },
+  banquete: { name: 'Banquete', desc: 'Lo que más llena, pero deja pesado. Cría Potencia.', hunger: 60, mood: 0, energy: -8, lean: 'pot', price: 14 },
+  queso: { name: 'Queso', desc: 'Llena algo. Cría Puntería.', hunger: 20, mood: 0, energy: 0, lean: 'pun', price: 4 },
+  manzana: { name: 'Manzana', desc: 'Ligera y fresca. Cría Agilidad.', hunger: 14, mood: 3, energy: 0, lean: 'agi', price: 3 },
+  leche: { name: 'Leche', desc: 'Llena poco y da mucha energía.', hunger: 10, mood: 0, energy: 20, lean: 'agu', price: 5 },
+  pastel: { name: 'Pastel', desc: 'Llena poco, pero le encanta a casi todas.', hunger: 15, mood: 25, energy: 0, lean: 'pot', price: 12 },
+  sandia: { name: 'Sandía', desc: 'Refrescante. Cría Agilidad.', hunger: 22, mood: 0, energy: 5, lean: 'agi', price: 4 },
+  zanahoria: { name: 'Zanahoria', desc: 'Buena para la vista. Cría Puntería.', hunger: 18, mood: 0, energy: 0, lean: 'pun', price: 3 },
+  pan: { name: 'Pan', desc: 'Llena bastante. Cría Aguante.', hunger: 30, mood: 0, energy: 0, lean: 'agu', price: 6 },
+  chile: { name: 'Chile', desc: 'No llena nada: pica, espabila y enfada un poco.', hunger: 5, mood: -6, energy: 25, lean: 'pot', price: 6 },
+  helado: { name: 'Helado', desc: 'Un capricho: no llena, anima mucho.', hunger: 6, mood: 18, energy: 0, lean: 'agi', price: 6 },
+  huevo: { name: 'Huevo frito', desc: 'Llena bien. Cría Potencia.', hunger: 26, mood: 0, energy: 0, lean: 'pot', price: 5 },
+  seta: { name: 'Seta', desc: 'Llena algo. Cría Puntería.', hunger: 16, mood: 0, energy: 0, lean: 'pun', price: 3 },
+};
+// Orden de las comidas nuevas en assets/ui/comida.png.
+export const FOOD_SHEET = ['pescado', 'galleta', 'miel', 'sopa', 'banquete', 'queso', 'manzana', 'leche', 'pastel', 'sandia', 'zanahoria', 'pan', 'chile', 'helado', 'huevo', 'seta'];
+
+// Habitaciones: son solo aspecto. Se compran una vez y se cambia entre ellas cuando quieras.
+export const ROOMS = {
+  sala: { name: 'Guardería nocturna', bg: 'assets/ui/sala.png', price: 0 },
+  bosque: { name: 'Cabaña del bosque', bg: 'assets/ui/sala-bosque.png', price: 250 },
+  espacio: { name: 'Estación espacial', bg: 'assets/ui/sala-espacio.png', price: 300 },
+  dojo: { name: 'Dojo de montaña', bg: 'assets/ui/sala-dojo.png', price: 300 },
 };
 
 // El carácter se fija al evolucionar, según cómo la hayas tratado en esa etapa.
@@ -55,12 +82,13 @@ export const WISHES = {
   fight: { text: 'Quiere pelear', icon: 'espadas' },
 };
 
-// Objetos de combate: se compran en la tienda y se usan uno por turno, sin gastar el turno.
+// Objetos de combate: se usan uno por turno, sin gastar el turno. Son casi una trampa,
+// así que son lo más caro de la tienda.
 export const ITEMS = {
-  pocion: { name: 'Poción', desc: 'Recupera el 30% de la vida.', price: 25, icon: 'botiquin' },
-  elixir: { name: 'Elixir', desc: 'Recupera 15 MP.', price: 20, icon: 'rayo' },
-  escudo: { name: 'Escudo de un uso', desc: 'El próximo golpe que reciba hace la mitad de daño.', price: 20, icon: 'escudo' },
-  mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 15, icon: 'diana' },
+  pocion: { name: 'Poción', desc: 'Recupera el 30% de la vida.', price: 250, icon: 'botiquin' },
+  elixir: { name: 'Elixir', desc: 'Recupera 15 MP.', price: 200, icon: 'rayo' },
+  escudo: { name: 'Escudo de un uso', desc: 'El próximo golpe que reciba hace la mitad de daño.', price: 250, icon: 'escudo' },
+  mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 150, icon: 'diana' },
 };
 
 // Decoración de la sala: se compra en la tienda y cada mueble ayuda en algo.
@@ -89,6 +117,35 @@ const has = (g, id) => !!g.decor?.includes(id);
 // Cada mueble acogedor frena un 6% la bajada de ánimo, hasta un 30%.
 const cozy = g => 1 - 0.06 * Math.min(5, (g.decor || []).filter(id => DECOR[id]?.cozy).length);
 export const trainCost = g => TRAIN_ENERGY - (has(g, 'saco') ? 5 : 0);
+
+// Dónde está cada mueble: donde lo hayas dejado tú o, si no lo has movido, su sitio de fábrica.
+export const decorAt = (g, id) => ({ id, ...DECOR[id], ...(g.decorPos?.[id] || {}) });
+export function moveDecor(g, id, x, y) {
+  if (!DECOR[id]) return;
+  g.decorPos[id] = { x: Math.round(Math.max(40, Math.min(1496, x))), y: Math.round(Math.max(560, Math.min(858, y))) };
+}
+// La criatura usa un mueble por su cuenta: le sube un poco el ánimo (hasta 8 veces al día).
+export function useDecor(g, id) {
+  const p = g.pet;
+  rollDay(p);
+  if (!has(g, id) || (p.usesToday || 0) >= 8) return false;
+  p.usesToday = (p.usesToday || 0) + 1;
+  p.mood = clamp(p.mood + 2);
+  return true;
+}
+
+export function buyRoom(g, id) {
+  const r = ROOMS[id];
+  if (g.rooms.includes(id)) return { error: 'Esa habitación ya es tuya.' };
+  if (g.coins < r.price) return { error: `Te faltan ${r.price - g.coins} monedas.` };
+  g.coins -= r.price;
+  g.rooms.push(id);
+  g.room = id;
+  return {};
+}
+export function setRoom(g, id) {
+  if (g.rooms.includes(id)) g.room = id;
+}
 
 export function buyDecor(g, id) {
   const d = DECOR[id];
@@ -120,11 +177,12 @@ export const MISSIONS = {
 export const MISSION_BONUS = 40;
 
 // Requisitos para evolucionar: nivel y días de vida. [Baby→Teen, Teen→Final]
-export const EVOLVE = [{ level: 4, days: 3 }, { level: 10, days: 14 }];
+export const EVOLVE = [{ level: 10, days: 3 }, { level: 30, days: 14 }];
 
 export const FIGHT_ENERGY = 20, TRAIN_ENERGY = 25, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
-export const DEFEATS_FOR_EGG = 10;
-export const MIN_SLEEP = 5 * 60000;     // una vez dormida, no se la puede despertar antes de este tiempo      // victorias contra una misma especie para ganar su huevo
+export const DEFEATS_FOR_EGG = 10;      // victorias contra una misma especie para ganar su huevo
+export const MIN_SLEEP = 5 * 60000;     // una vez dormida, no se la puede despertar antes de este tiempo
+export const MAX_SLEEP = 8 * 3600000;   // se cansa de dormir y se despierta sola pasado este tiempo
 
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -153,7 +211,7 @@ function makePet(species, name) {
     hunger: 70, energy: 100, mood: 75, bond: 20,
     char: '', mastery: '', fav, hate: pick(foods.filter(f => f !== fav)), favKnown: false, hateKnown: false,
     axes: { carino: 0, disciplina: 0, bravura: 0, descuido: 0 },
-    diet: { pot: 0, agu: 0, agi: 0 }, trained: { pot: 0, agu: 0, pun: 0, agi: 0 },
+    diet: { pot: 0, agu: 0, pun: 0, agi: 0 }, trained: { pot: 0, agu: 0, pun: 0, agi: 0 },
     quirk: pick(Object.keys(QUIRKS)), hue: rollHue(), wish: null, nextWish: 0,
     day: today(), trainsToday: 0, playsToday: 0, strokesToday: 0,
     diary: [{ t: now, text: `${name} salió del huevo.` }],
@@ -167,7 +225,7 @@ export function newGame() {
   return attach({
     v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
-    lastTrain: null, testMode: true, items: { pocion: 1, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [],
+    lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala',
   });
 }
 
@@ -186,7 +244,7 @@ export function load() {
     g.defeats ||= {};                     // partidas guardadas antes de que existieran estas cosas
     g.items ||= { pocion: 1, elixir: 0, escudo: 0, mira: 1 };
     g.news = [];
-    g.decor ||= [];
+    g.decor ||= []; g.decorPos ||= {}; g.rooms ||= ['sala']; g.room ||= 'sala';
     for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
     return attach(g);
   } catch {
@@ -205,7 +263,7 @@ function log(g, text) {
   g.pet.diary.length = Math.min(g.pet.diary.length, 40);
 }
 function rollDay(p) {
-  if (p.day !== today()) { p.day = today(); p.trainsToday = 0; p.playsToday = 0; p.strokesToday = 0; }
+  if (p.day !== today()) { p.day = today(); p.trainsToday = 0; p.playsToday = 0; p.strokesToday = 0; p.usesToday = 0; }
 }
 
 // El tiempo pasa para todas tus criaturas, aunque el juego esté cerrado.
@@ -223,7 +281,7 @@ export function tick(g, now = Date.now()) {
     if (badHours > 0) { p.bond = clamp(p.bond - badHours); p.axes.descuido += badHours * 0.4; }
     if (p.asleep) {
       if (p.restUntil > now) p.restUntil = Math.max(now, p.restUntil - elapsed); // el descanso cuenta doble
-      if (restLeft(p) === 0 && p.energy >= 100 && now - p.sleptAt >= minSleep(g)) { // se despierta sola al estar lista
+      if (now - p.sleptAt >= maxSleep(g)) {            // solo se despierta sola cuando se cansa de dormir
         p.asleep = false;
         p.mood = clamp(p.mood + 5);
         p.diary.unshift({ t: now, text: 'Se despertó descansada.' });
@@ -237,7 +295,8 @@ export function tick(g, now = Date.now()) {
 
 // Acostarla o despertarla. Dormida no se puede jugar, entrenar ni pelear con ella,
 // y hay que dejarla dormir un mínimo antes de poder despertarla.
-const minSleep = g => (g.testMode ? 15000 : MIN_SLEEP);
+const minSleep = g => (g.testMode ? 60000 : MIN_SLEEP);       // en modo prueba: 60 segundos
+const maxSleep = g => (g.testMode ? 180000 : MAX_SLEEP);     // en modo prueba: 3 minutos
 export const sleepLeft = (g, pet = g.pet) => (pet.asleep ? Math.max(0, pet.sleptAt + minSleep(g) - Date.now()) : 0);
 export function toggleSleep(g) {
   const p = g.pet, want = !p.asleep;   // se decide antes de avanzar el tiempo: al avanzar puede despertarse sola
@@ -382,13 +441,13 @@ export function addExp(g, amount) {
   while (p.exp >= expNeeded(p.level)) {
     p.exp -= expNeeded(p.level);
     p.level++; levels++;
-    const dietKeys = ['pot', 'agu', 'agi'];
-    const fed = dietKeys.some(k => p.diet[k] > 0);
-    const byDiet = fed ? argmax(p.diet, dietKeys) : pick(dietKeys);
+    const diet = Object.fromEntries(STATS.map(k => [k, p.diet[k] || 0]));
+    const fed = STATS.some(k => diet[k] > 0);
+    const byDiet = fed ? argmax(diet, STATS) : pick(STATS);
     const byKind = STATS[sp.base.indexOf(Math.max(...sp.base))];
     p.stats[byDiet]++; p.stats[byKind]++;
     gains.push(byDiet, byKind);
-    p.diet = { pot: 0, agu: 0, agi: 0 };
+    p.diet = { pot: 0, agu: 0, pun: 0, agi: 0 };
     log(g, `Subió al nivel ${p.level}.`);
   }
   return { levels, gains };
@@ -400,14 +459,14 @@ export function feed(g, food) {
   tick(g);
   const p = g.pet, f = FOODS[food];
   if (p.asleep) return { error: 'Zzz…' };
-  if (g.foods[food] <= 0) return { error: `No te queda ${f.name.toLowerCase()}.` };
+  if (!(g.foods[food] > 0)) return { error: `No te queda ${f.name.toLowerCase()}.` };
   if (p.hunger >= 96) return { error: 'No tengo hambre.' };
   const attentive = p.hunger < 35;
   g.foods[food]--;
   p.hunger = clamp(p.hunger + f.hunger);
   p.mood = clamp(p.mood + f.mood);
   p.energy = clamp(p.energy + f.energy);
-  p.diet[f.lean]++;
+  p.diet[f.lean] = (p.diet[f.lean] || 0) + 1;
   let reaction = '¡Ñam!', loved = false, hated = false;
   if (food === p.fav) {
     loved = true;
@@ -419,6 +478,8 @@ export function feed(g, food) {
     p.mood = clamp(p.mood - 5);
     reaction = 'Puaj…';
     p.hateKnown = true;
+  } else if (!p.favKnown && f.lean === FOODS[p.fav].lean) {
+    reaction = 'Mmm… se parece a lo que me gusta';   // pista: su favorita cría lo mismo que esta
   }
   if (attentive) { p.axes.carino += 0.5; p.bond = clamp(p.bond + 0.5); }
   track(g, { type: 'feed', food, loved });
@@ -430,7 +491,7 @@ export function buyFood(g, food) {
   const f = FOODS[food];
   if (g.coins < f.price) return { error: 'No te alcanzan las monedas.' };
   g.coins -= f.price;
-  g.foods[food]++;
+  g.foods[food] = (g.foods[food] || 0) + 1;
   return {};
 }
 
@@ -546,7 +607,8 @@ export function currentEvent(g) {
 export function resolveEvent(g, index) {
   const p = g.pet;
   const ev = EVENTS.find(e => e.id === g.pendingEvent);
-  const choice = ev.choices[index];
+  const choice = ev?.choices[index];
+  if (!choice) return null;                            // ya se resolvió (doble toque)
   const fx = choice.fx;
   for (const k of ['carino', 'disciplina', 'bravura', 'descuido']) if (fx[k]) p.axes[k] += fx[k];
   for (const k of ['bond', 'mood', 'energy', 'hunger']) if (fx[k]) p[k] = clamp(p[k] + fx[k]);

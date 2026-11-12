@@ -7,6 +7,12 @@ import { sfx } from './sfx.js';
 
 const SW = 1536, SH = 864;               // tamaño de la imagen de la sala
 const SIZE = [210, 265, 325];            // alto de la criatura por etapa
+// Qué hace la criatura con cada mueble cuando va a usarlo, y qué dice al mirarlo.
+const ACT = {
+  alfombra: 'roll', cama: 'nap', cuenco: 'eat', juguetes: 'jump', muneco: 'punch', trofeo: 'watch', peluche: 'hug', musica: 'dance',
+  pecera: 'watch', lampara: 'watch', planta: 'watch', puff: 'sit', saco: 'punch', libros: 'watch', torre: 'jump', cofre: 'watch',
+};
+const SAY = { trofeo: '¡Algún día ganaré otro!', pecera: '¡Pececitos!', lampara: 'Qué calentito…', planta: 'Mmm, huele bien', libros: 'A ver qué pone aquí…', cofre: '¡Cuántas monedas!' };
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -21,6 +27,8 @@ export class Room {
     this.parts = []; this.bubble = null; this.mini = null; this.result = null;
     this.hold = 0; this.flash = 0; this.t = 0; this.ptr = null; this.food = null;
     this.sleepK = 0;                         // 0 = despierta, 1 = dormida del todo (luces apagadas, acurrucada)
+    this.editing = false;                    // modo decorar: se arrastran los muebles
+    this.items = [];                         // muebles colocados (se refresca en cada fotograma)
     this.view = { x0: 0, w: SW, cx: SW / 2, k: 1 };
     canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); this.down(...this.toScene(e)); });
     canvas.addEventListener('pointermove', e => this.move(...this.toScene(e)));
@@ -39,6 +47,20 @@ export class Room {
   onCreature(x, y, pad = 0) { return Math.abs(x - this.c.x) < this.size * 0.45 + pad && y > FLOOR - this.size - pad && y < FLOOR + 30 + pad; }
 
   say(text, time = 2.2) { this.bubble = { text, t: time }; }
+
+  // --- Muebles ---
+  box(d) { const h = d.img.height * (d.w / d.img.width); return { x0: d.x - d.w / 2, x1: d.x + d.w / 2, y0: d.y - h, y1: d.y, h }; }
+  itemAt(x, y) {                            // el mueble que está más delante bajo el dedo (la alfombra, la última)
+    return [...this.items].sort((a, b) => (a.floor ? 1 : 0) - (b.floor ? 1 : 0) || b.y - a.y).find(d => { const b = this.box(d); return x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1; });
+  }
+  // La criatura camina hasta un mueble para usarlo.
+  goUse(d) {
+    if (this.asleep || this.mini || !d) return;
+    const c = this.c, front = d.floor || d.y > FLOOR + 14;      // los de delante (o el suelo) los usa encima; los de detrás, desde un lado
+    const side = c.x <= d.x ? -1 : 1;
+    c.use = d.id; c.mode = 'goto';
+    c.target = clamp(front ? d.x : d.x + side * (d.w / 2 + this.size * 0.28), this.view.x0 + 110, this.view.x0 + this.view.w - 110);
+  }
   burst(icon, n = 5, x = this.c.x, y = FLOOR - this.size * 0.7) {
     for (let i = 0; i < n; i++) this.parts.push({ icon, x: x + rand(-50, 50), y: y + rand(-30, 30), vx: rand(-60, 60), vy: rand(-190, -90), life: 0, max: rand(0.8, 1.3), size: rand(38, 60) });
   }
@@ -65,8 +87,13 @@ export class Room {
   down(x, y) {
     if (!this.pet) return;
     if (this.mini) { if (!this.result) this.mini.down(x, y); return; }
-    if (this.asleep) {                               // dormida: solo responde con un ronquido
+    if (this.asleep && !this.editing) {              // dormida: solo responde con un ronquido
       if (this.onCreature(x, y)) this.say(this.hooks.onTap(), 1.6);
+      return;
+    }
+    if (this.editing) {                              // modo decorar: se agarra el mueble que haya debajo
+      const d = this.itemAt(x, y);
+      this.ptr = d ? { on: 'decor', id: d.id, dx: d.x - x, dy: d.y - y, x, y } : null;
       return;
     }
     const b = this.ball, [hx, hy] = this.ballHome();
@@ -78,13 +105,14 @@ export class Room {
       this.ptr = { on: 'pet', x, y, rub: 0, moved: 0, time: 0 };
       if (this.c.mode === 'walk') { this.c.mode = 'idle'; this.c.t = 1.5; } // se queda quieta mientras la tocas
     } else {
-      this.ptr = { on: 'floor', x, y, moved: 0 };
+      this.ptr = { on: 'floor', x, y, moved: 0, item: this.itemAt(x, y)?.id };
     }
   }
   move(x, y) {
     if (this.mini) { if (!this.result) this.mini.move(x, y); return; }
     const p = this.ptr;
     if (!p) return;
+    if (p.on === 'decor') { this.hooks.onMoveDecor(p.id, x + p.dx, y + p.dy); p.x = x; p.y = y; return; }
     const d = Math.hypot(x - p.x, y - p.y);
     if (p.on === 'ball') {
       const now = performance.now(), dt = Math.max(8, now - p.t) / 1000, b = this.ball;
@@ -107,6 +135,8 @@ export class Room {
     const p = this.ptr;
     this.ptr = null;
     if (!p) return;
+    if (p.on === 'decor') return this.hooks.onDropDecor();
+    if (p.on === 'floor' && p.moved < 22 && p.item) return this.goUse(this.items.find(d => d.id === p.item));   // tocar un mueble: va a usarlo
     if (p.on === 'ball') {
       const b = this.ball;
       b.held = false; b.vx = clamp(b.vx, -2600, 2600); b.vy = clamp(b.vy, -2600, 1500);
@@ -146,7 +176,7 @@ export class Room {
 
     const c = this.c, b = this.ball, lo = this.view.x0 + 130, hi = this.view.x0 + this.view.w - 130;
     c.x = clamp(c.x, lo, hi);
-    c.squash *= 0.86; c.lift = 0;
+    c.squash *= 0.86; c.lift = 0; c.lunge = 0; c.tilt = 0; c.sit = 1;
     if (this.asleep) {
       // Irse a dormir: camina hasta el centro de la sala, se acurruca y se apagan las luces poco a poco.
       b.active = false; b.held = false; this.ptr = null;
@@ -199,6 +229,28 @@ export class Room {
     } else if (this.food && c.mode !== 'eat') {              // mira la comida que le acercas
       c.dir = this.food[0] >= c.x ? 1 : -1;
       c.lift = Math.abs(Math.sin(this.t * 9)) * (this.sad ? 6 : 22);
+    } else if (c.mode === 'goto') {                  // va hacia un mueble
+      const item = this.items.find(i => i.id === c.use), d = c.target - c.x;
+      if (!item) { c.mode = 'idle'; c.t = 1; }
+      else if (Math.abs(d) < 6) {
+        c.mode = 'use'; c.act = ACT[item.id] || 'watch'; c.t = rand(2.4, 3.6); c.ut = 0;
+        c.dir = item.x >= c.x ? 1 : -1;
+        this.hooks.onUse(item.id);
+        if (SAY[item.id]) this.say(SAY[item.id], 2.2);
+      } else { c.dir = d > 0 ? 1 : -1; c.x += clamp(d, -speed * 1.2 * dt, speed * 1.2 * dt); c.lift = Math.abs(Math.sin(this.t * 10)) * 11; }
+    } else if (c.mode === 'use') {                   // lo está usando
+      c.ut += dt;
+      const item = this.items.find(i => i.id === c.use), k = c.ut;
+      const spark = (icon, every, o = {}) => { if (Math.floor(k / every) !== Math.floor((k - dt) / every)) this.parts.push({ icon, x: (o.x ?? c.x) + rand(-30, 30), y: (o.y ?? FLOOR - this.size * 0.8), vx: rand(-30, 30), vy: -110, life: 0, max: 1, size: o.size || 40, ...o.extra }); };
+      if (c.act === 'punch') { c.lunge = Math.abs(Math.sin(k * 9)); if (item) spark('estrella', 0.35, { x: item.x, y: item.y - this.box(item).h * 0.6, size: 30 }); }
+      else if (c.act === 'jump') c.lift = Math.abs(Math.sin(k * 7)) * 70;
+      else if (c.act === 'dance') { c.tilt = Math.sin(k * 9) * 0.14; c.lift = Math.abs(Math.sin(k * 9)) * 14; if (Math.floor(k / 0.5) !== Math.floor((k - dt) / 0.5)) this.parts.push({ text: '♪', x: c.x + rand(-60, 60), y: FLOOR - this.size, vx: rand(-20, 20), vy: -70, life: 0, max: 1.3, size: rand(30, 44) }); }
+      else if (c.act === 'hug') { c.lunge = 0.35; c.tilt = c.dir * 0.08; spark('corazon', 0.7); }
+      else if (c.act === 'eat') { c.squash = Math.sin(this.t * 22) * 0.5; }
+      else if (c.act === 'roll') { c.tilt = Math.sin(k * 6) * 0.5; c.sit = 0.85; }   // se revuelca en la alfombra
+      else if (c.act === 'sit') { c.sit = 0.86; c.lift = item ? this.box(item).h * 0.42 : 0; }
+      else if (c.act === 'nap') { c.sit = 0.8; if (Math.floor(k / 0.9) !== Math.floor((k - dt) / 0.9)) this.parts.push({ text: 'z', x: c.x + 40, y: FLOOR - this.size * 0.7, vx: 18, vy: -50, life: 0, max: 1.5, size: 30 }); }
+      if ((c.t -= dt) <= 0) { c.mode = 'idle'; c.t = rand(1.5, 3); c.use = null; }
     } else if (c.mode === 'walk') {
       const d = c.target - c.x;
       if (Math.abs(d) < 6) { c.mode = 'idle'; c.t = rand(1.5, 4); }
@@ -210,7 +262,9 @@ export class Room {
       c.squash = Math.sin(this.t * 22) * 0.5;
       if ((c.t -= dt) <= 0) { c.mode = 'idle'; c.t = 1.5; }
     } else if ((c.t -= dt) <= 0 && !this.ptr) {
-      if (Math.random() < (this.sad ? 0.3 : 0.75)) { c.mode = 'walk'; c.target = rand(lo, hi); }
+      const usable = this.sad || this.editing ? [] : this.items.filter(d => d.x > lo && d.x < hi);
+      if (usable.length && Math.random() < 0.45) this.goUse(usable[Math.floor(Math.random() * usable.length)]);   // a veces va a usar un mueble
+      else if (Math.random() < (this.sad ? 0.3 : 0.75)) { c.mode = 'walk'; c.target = rand(lo, hi); }
       else { c.t = rand(1.5, 3.5); if (Math.random() < 0.4) c.dir *= -1; }   // a veces solo mira hacia el otro lado
     }
   }
@@ -233,7 +287,7 @@ export class Room {
     ctx.translate(x + (o.lunge || 0) * 46 * o.dir, FLOOR + 10 - lift);
     if (o.tilt) ctx.rotate(o.tilt);
     const k = this.sleepK;                            // se va acurrucando a medida que se duerme
-    const awake = 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012, curled = 0.78 + Math.sin(this.t * 1.6) * 0.035;
+    const awake = (1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012) * (o.sit || 1), curled = 0.78 + Math.sin(this.t * 1.6) * 0.035;
     ctx.scale(o.dir * (1 + sq * 0.1 * (1 - k) + 0.09 * k), awake + (curled - awake) * k);
     if (k > 0) ctx.filter = `brightness(${1 - 0.22 * k})`;
     else if (this.sad) ctx.filter = 'saturate(0.55) brightness(0.85)';
@@ -259,9 +313,17 @@ export class Room {
     ctx.scale(k, k);
     ctx.translate(-x0, 0);
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(this.art.bg, 0, 0, SW, SH);
-    const decor = this.mini ? [] : this.hooks.decor?.() || [];
-    const put = d => { const k = d.w / d.img.width; ctx.drawImage(d.img, d.x - d.w / 2, d.y - d.img.height * k, d.w, d.img.height * k); };
+    ctx.drawImage(this.hooks.bg?.() || this.art.bg, 0, 0, SW, SH);
+    const decor = this.mini ? [] : [...(this.hooks.decor?.() || [])].sort((a, b) => a.y - b.y);   // de atrás hacia delante
+    this.items = decor;
+    const put = d => {
+      const k = d.w / d.img.width, hh = d.img.height * k;
+      ctx.drawImage(d.img, d.x - d.w / 2, d.y - hh, d.w, hh);
+      if (this.editing) {                              // modo decorar: marco para ver qué se puede arrastrar
+        ctx.save(); ctx.strokeStyle = this.ptr?.id === d.id ? '#ffd76a' : 'rgba(255,255,255,.75)'; ctx.lineWidth = 4; ctx.setLineDash([14, 10]);
+        ctx.strokeRect(d.x - d.w / 2 - 6, d.y - hh - 6, d.w + 12, hh + 12); ctx.restore();
+      }
+    };
     for (const d of decor) if (d.floor) put(d);                              // alfombra: en el suelo
     for (const d of decor) if (!d.floor && d.y <= FLOOR + 14) put(d);          // lo que queda detrás de la criatura
     if (this.sleepK > 0 && !this.mini) {              // luces que se apagan y una luna de noche
@@ -299,13 +361,13 @@ export class Room {
       const b = this.ball, [hx, hy] = this.ballHome();
       if (!b.active) this.drawIcon(ctx, 'pelota', hx, hy - 40, 82);
       const tilt = c.mode === 'pet' ? Math.sin(this.t * 16) * 0.07 : c.mode === 'walk' ? c.dir * 0.05 : c.mode === 'happy' ? Math.sin(this.t * 12) * 0.05 : 0;
-      this.drawCreature(ctx, c.x, { dir: c.dir, squash: c.squash, lift: c.lift, tilt: this.sleepK > 0 ? 0 : tilt }, px);
+      this.drawCreature(ctx, c.x, { dir: c.dir, squash: c.squash, lift: c.lift, lunge: c.lunge, sit: c.sit, tilt: this.sleepK > 0 ? 0 : c.tilt || tilt }, px);
       if (b.active) {
         ctx.save(); ctx.translate(b.x, b.y - 40); ctx.rotate(b.x / 60);
         this.drawIcon(ctx, 'pelota', 0, 0, 82);
         ctx.restore();
       }
-      const say = this.bubble?.text || (this.evolveReady && !this.asleep ? '¡Siento que voy a evolucionar!' : '');
+      const say = this.editing ? '' : this.bubble?.text || (this.evolveReady && !this.asleep ? '¡Siento que voy a evolucionar!' : '');
       if (say) {
         ctx.font = '800 30px system-ui, sans-serif';
         const tw = ctx.measureText(say).width + 48, bx = clamp(c.x - tw / 2, x0 + 12, x0 + vw - tw - 12), by = FLOOR - this.size - 96 - c.lift * 0.4;

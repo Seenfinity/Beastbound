@@ -63,8 +63,10 @@
         <button class="plate" id="plate"><b id="pet-name"></b><small id="pet-sub"></small></button>
         <div class="level"><b id="pet-level"></b><div class="bar exp"><i id="exp-fill"></i></div><small id="exp-text"></small></div>
         <div id="event-card" class="event" hidden><p id="event-text"></p><div id="event-choices"></div></div>
+        <button id="btn-decor" class="decor-btn" hidden>Decorar</button>
         <button id="btn-evolve" class="evolve-btn" hidden>¡Evolucionar!</button>
-        <div class="tray" id="tray"></div>
+        <div class="tray" id="tray" hidden></div>
+        <button class="food-btn" id="btn-food"><i class="ic ic-filete"></i><span>Comida</span><b id="food-count">0</b></button>
       </section>
 
       <aside class="col-right">
@@ -163,9 +165,10 @@
 
     <!-- Tienda -->
     <main id="tab-shop" class="shop" hidden>
-      <div class="panel"><h3><i class="ic ic-filete"></i>Comida</h3><p class="muted">Lo que come decide qué mejora al subir de nivel.</p><div id="shop-food" class="goods"></div></div>
-      <div class="panel"><h3><i class="ic ic-espadas"></i>Objetos de combate</h3><p class="muted">Se usan en tu turno, uno por turno, sin gastar el disparo.</p><div id="shop-items" class="goods"></div></div>
-      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Decoración</h3><p class="muted">Muebles y juguetes para la sala. Se quedan para siempre y cada uno ayuda en algo.</p><div id="shop-decor" class="goods decor-goods"></div></div>
+      <div class="panel shop-wide"><h3><i class="ic ic-filete"></i>Comida</h3><p class="muted">Lo que come decide qué mejora al subir de nivel. Unas llenan mucho, otras apenas, y algunas animan o dan energía.</p><div id="shop-food" class="goods decor-goods"></div></div>
+      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Habitaciones</h3><p class="muted">Cambian el aspecto de la sala. Tus muebles se quedan donde los pusiste.</p><div id="shop-rooms" class="rooms"></div></div>
+      <div class="panel shop-wide"><h3><i class="ic ic-casa"></i>Decoración</h3><p class="muted">Muebles y juguetes para la sala. Se quedan para siempre, cada uno ayuda en algo y tu criatura los usa. Con «Decorar», en la sala, los colocas donde quieras.</p><div id="shop-decor" class="goods decor-goods"></div></div>
+      <div class="panel"><h3><i class="ic ic-espadas"></i>Objetos de combate</h3><p class="muted">Se usan en tu turno, uno por turno, sin gastar el disparo. Son una ventaja enorme, por eso cuestan tanto.</p><div id="shop-items" class="goods"></div></div>
       <div class="panel"><h3><i class="ic ic-huevomas"></i>Huevos</h3><p class="muted">También se ganan derrotando 10 veces a una especie que no tengas.</p><div id="shop-egg" class="goods"></div></div>
     </main>
 

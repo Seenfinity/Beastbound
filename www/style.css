@@ -91,10 +91,17 @@ canvas { display: block; }
 .event div { display: flex; gap: 8px; }
 .event button { flex: 1; background: #2a3270; color: #fff; border: 0; border-radius: 999px; padding: 9px 8px; font-weight: 800; font-size: 13px; }
 
-.tray { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 8px; }
-.slot { position: relative; width: 74px; background: rgba(12, 14, 40, .82); border: 2px solid var(--line); border-radius: 14px; padding: 6px 4px 4px; display: grid; justify-items: center; gap: 2px; touch-action: none; }
-.slot .ic { width: 44px; height: 44px; cursor: grab; }
-.slot b { position: absolute; right: 4px; top: 2px; font-size: 13px; font-weight: 900; }
+.food-btn { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; background: rgba(12, 14, 40, .86); border: 2px solid var(--line); border-radius: 14px; padding: 6px 12px 6px 8px; font-weight: 800; font-size: 14px; }
+.food-btn .ic { width: 34px; height: 34px; }
+.food-btn b { background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 24px; text-align: center; font-size: 12px; font-weight: 900; padding: 0 4px; }
+.food-btn.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 200, 61, .45); }
+.tray { position: absolute; left: 10px; bottom: 68px; display: flex; flex-wrap: wrap; gap: 10px 8px; max-width: min(440px, calc(100% - 20px)); background: rgba(8, 8, 28, .9); border: 2px solid var(--line); border-radius: 16px; padding: 14px 12px 10px; transition: opacity .15s; }
+.tray.dragging { opacity: .15; pointer-events: none; }
+.slot { position: relative; flex: none; width: 62px; background: rgba(12, 14, 40, .82); border: 2px solid var(--line); border-radius: 14px; padding: 6px 4px 4px; display: grid; justify-items: center; gap: 2px; touch-action: none; }
+.slot .ic { width: 42px; height: 42px; cursor: grab; }
+.slot.more { color: var(--gold); font-size: 22px; font-weight: 900; line-height: 1; align-content: center; }
+.slot.more small { font-size: 10px; color: var(--muted); font-weight: 800; }
+.slot b { position: absolute; right: -4px; top: -7px; background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 22px; text-align: center; font-size: 12px; font-weight: 900; }
 .slot.empty > .ic { filter: grayscale(1) opacity(.45); }
 .slot button { width: 100%; background: #2a3270; border: 0; border-radius: 8px; font-size: 11px; font-weight: 800; padding: 3px 0; display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
 .slot button .ic { width: 13px; height: 13px; cursor: pointer; }
@@ -296,6 +303,14 @@ canvas { display: block; }
 .decor-goods { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .good.owned { border-color: var(--green); }
 .good.owned small:last-child { color: var(--green); font-weight: 800; }
+
+.decor-btn { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(12, 14, 40, .82); border: 2px solid var(--line); border-radius: 999px; padding: 6px 16px; font-weight: 800; font-size: 13px; }
+.decor-btn.on { background: var(--gold); color: #2a1a00; border-color: #fff3b0; box-shadow: 0 0 18px rgba(255, 200, 61, .7); }
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.room-card { background: rgba(8, 6, 24, .45); border: 2px solid var(--line); border-radius: 12px; padding: 8px; display: grid; gap: 6px; font-size: 14px; font-weight: 800; }
+.room-card img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
+.room-card.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 200, 61, .3); }
+.room-card .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 
 /* Colección y ajustes */
 .dex { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
