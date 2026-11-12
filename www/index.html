@@ -18,7 +18,7 @@
   <!-- Primer huevo -->
   <section id="screen-start" class="screen centered" hidden>
     <h1 class="logo">PetBound</h1>
-    <p class="lead">Hay tres huevos en la incubadora y solo se ve su elemento. Elige cuál abrir primero; los otros dos seguirán incubándose.</p>
+    <p class="lead">Hay tres huevos en la incubadora y solo se ve su elemento. Elige uno: es el único que te llevas. Los demás tendrás que ganártelos.</p>
     <div id="start-eggs" class="capsules"></div>
     <label class="field"><span>¿Cómo se va a llamar?</span><input id="start-name" maxlength="12" autocomplete="off"></label>
     <button id="btn-start" class="btn primary big">Abrir el huevo</button>
@@ -45,6 +45,7 @@
         <div class="panel">
           <h3>Mis huevos <small id="eggs-count"></small></h3>
           <div id="eggs-list" class="eggs-list"></div>
+          <button class="btn" id="btn-buy-egg"></button>
         </div>
         <div class="panel">
           <h3>Mis criaturas</h3>
@@ -84,10 +85,11 @@
           <h3><i class="ic ic-pesa"></i>Entrenar</h3>
           <p class="muted" id="train-note"></p>
           <div id="train-list" class="train-list"></div>
+          <p id="train-result" class="muted"></p>
         </div>
         <div class="panel">
-          <h3>Último entrenamiento</h3>
-          <div id="train-result" class="train-result"></div>
+          <h3><i class="ic ic-rayo"></i>Poderes <small id="mp-max"></small></h3>
+          <div id="powers-info" class="pw-list"></div>
         </div>
         <div class="panel">
           <h3>Evolución</h3>
@@ -101,6 +103,7 @@
         <div class="panel">
           <h3><i class="ic ic-espadas"></i>Combate</h3>
           <div id="battle-prev"></div>
+          <button class="btn heal-btn" hidden></button>
           <button class="btn primary" id="btn-go-battle">Ir al combate</button>
         </div>
       </section>
@@ -110,25 +113,33 @@
     <!-- Combate -->
     <main id="tab-battle" hidden>
       <div id="lobby" class="lobby">
-        <div class="panel lobby-card">
-          <h3><i class="ic ic-espadas"></i>Duelo 1 contra 1</h3>
-          <div id="lobby-info"></div>
-          <button class="btn primary big" id="btn-find">Buscar rival</button>
+        <div class="col">
+          <div class="panel lobby-card">
+            <h3><i class="ic ic-espadas"></i>Duelo 1 contra 1</h3>
+            <div id="lobby-info"></div>
+            <button class="btn heal-btn" hidden></button>
+            <button class="btn primary big" id="btn-find">Rival al azar</button>
+          </div>
+          <div class="panel">
+            <h3>Mapas</h3>
+            <div id="lobby-maps" class="maps"></div>
+          </div>
         </div>
         <div class="panel">
-          <h3>Mapas</h3>
-          <div id="lobby-maps" class="maps"></div>
+          <h3>Elegir rival</h3>
+          <p class="muted">Derrota 10 veces a una especie que no tengas y te ganas su huevo. Fíjate en las ventajas de elemento.</p>
+          <div id="rivals" class="rivals"></div>
         </div>
       </div>
       <div id="arena" hidden>
         <div class="vs">
-          <div class="side"><b id="b-name1"></b><div class="bar hp"><i id="b-hp1"></i></div><small id="b-st1"></small></div>
+          <div class="side"><b id="b-name1"></b><div class="bar hp"><i id="b-hp1"></i></div><div class="bar mp"><i id="b-mp1"></i></div><small id="b-st1"></small></div>
           <div class="wind"><small>Viento</small><b id="b-wind"></b></div>
-          <div class="side right"><b id="b-name2"></b><div class="bar hp foe"><i id="b-hp2"></i></div><small id="b-st2"></small></div>
+          <div class="side right"><b id="b-name2"></b><div class="bar hp foe"><i id="b-hp2"></i></div><div class="bar mp foe"><i id="b-mp2"></i></div><small id="b-st2"></small></div>
         </div>
         <div class="field-wrap">
           <canvas id="field"></canvas>
-          <button id="b-special" class="orb" aria-label="Disparo especial"><i class="ic ic-rayo"></i><span id="b-special-cd"></span></button>
+          <div id="b-powers" class="powers"></div>
           <button id="b-quit" class="quit">Rendirse</button>
           <p id="b-hint" class="hint"></p>
         </div>

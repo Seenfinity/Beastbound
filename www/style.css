@@ -188,6 +188,42 @@ canvas { display: block; }
 .prev-map { height: 76px; border-radius: 10px; border: 2px solid var(--line); background: center 40% / cover; display: grid; place-items: end center; overflow: hidden; }
 .prev-map .sp { width: 70px; height: 58px; }
 
+/* Poderes, MP, rivales y recuperación */
+.pw-list { display: grid; gap: 5px; }
+.pw-list div { background: rgba(8, 6, 24, .45); border-left: 3px solid var(--gold); border-radius: 8px; padding: 4px 8px; }
+.pw-list b { font-size: 13px; }
+.pw-list small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; }
+.pw-list .locked { border-left-color: var(--line); opacity: .6; }
+.match { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; }
+.match span:first-child { font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 2px; }
+.adv { font-weight: 800; font-size: 12px; }
+.adv.up { color: var(--green); }
+.adv.down { color: var(--red); }
+.resting { color: var(--gold) !important; }
+.heal-btn, #btn-buy-egg { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; padding: 8px; }
+.bar.mp { height: 7px; }
+.bar.mp i { background: var(--blue); }
+.bar.mp.foe i { margin-left: auto; }
+.powers { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; pointer-events: none; }
+.pw { pointer-events: auto; position: relative; min-width: 96px; background: rgba(12, 14, 40, .88); border: 2px solid var(--gold); border-radius: 12px; padding: 6px 10px; display: grid; text-align: left; box-shadow: 0 3px 0 #090b22; }
+.pw b { font-size: 13px; }
+.pw small { font-size: 11px; color: var(--blue); font-weight: 800; }
+.pw span { position: absolute; right: -6px; top: -8px; background: #080a1c; border: 2px solid var(--line); border-radius: 999px; min-width: 24px; text-align: center; font-weight: 900; font-size: 12px; }
+.pw span:empty { display: none; }
+.pw:disabled { border-color: var(--line); opacity: .55; }
+.pw.armed { background: var(--gold); color: #2a1a00; box-shadow: 0 0 0 3px rgba(255, 200, 61, .35), 0 0 22px var(--gold); }
+.pw.armed small { color: #5a3a00; }
+.pw-none { font-size: 12px; color: #fff6d8; font-weight: 700; text-shadow: 0 2px 0 #120c24; margin: 0; }
+.rivals { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.rival { background: rgba(8, 6, 24, .45); border: 2px solid var(--line); border-radius: 12px; padding: 6px; display: grid; justify-items: center; gap: 2px; font-size: 12px; }
+.rival .sp { width: 100%; height: 62px; }
+.rival b { font-size: 14px; }
+.rival small { color: var(--muted); font-size: 11px; }
+.rival:hover:not(:disabled) { border-color: var(--gold); }
+.rival:disabled { opacity: .5; }
+.rival.unseen .sp { filter: brightness(0) opacity(.5); }
+.maps small { display: block; color: var(--muted); font-weight: 600; font-size: 11px; line-height: 1.25; margin-top: 2px; }
+
 /* Colección y ajustes */
 .dex { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .entry { background: rgba(8, 6, 24, .45); border: 2px solid var(--line); border-radius: 12px; padding: 8px; display: grid; gap: 4px; font-size: 12px; color: var(--muted); }

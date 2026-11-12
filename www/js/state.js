@@ -39,6 +39,7 @@ export const MASTERY = {
 export const EVOLVE = [{ level: 4, days: 3 }, { level: 10, days: 14 }];
 
 export const FIGHT_ENERGY = 20, TRAIN_ENERGY = 25, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
+export const DEFEATS_FOR_EGG = 10;      // victorias contra una misma especie para ganar su huevo
 
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -69,21 +70,19 @@ function makePet(species, name) {
   };
 }
 
-// Partida nueva: tres huevos misteriosos (solo se ve el elemento). Eliges cuál abrir primero.
+// Partida nueva: tres huevos misteriosos (solo se ve el elemento). Te quedas con uno.
 export function newGame() {
   const pool = [...ROSTER], now = Date.now();
   const offer = [0, 1, 2].map(() => pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
   return attach({
-    v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [],
+    v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
     lastTrain: null, testMode: true,
   });
 }
 
-// Abre el huevo elegido; los otros dos se quedan incubando.
+// Abre el huevo elegido. Los otros dos no te los quedas: los huevos nuevos hay que ganárselos.
 export function startWith(g, index, name) {
-  const now = Date.now();
-  g.offer.forEach((species, i) => { if (i !== index) g.eggs.push({ species, laidAt: now, hours: g.eggs.length ? 24 : 2 }); });
   g.pets.push(makePet(g.offer[index], name));
   g.seen.push(g.offer[index]);
   g.offer = [];
@@ -93,7 +92,9 @@ export function startWith(g, index, name) {
 export function load() {
   try {
     const g = JSON.parse(localStorage.getItem(KEY));
-    return g && g.v === 3 && Array.isArray(g.pets) && g.pets.every(p => speciesOf(p.species)) ? attach(g) : null;
+    if (!(g && g.v === 3 && Array.isArray(g.pets) && g.pets.every(p => speciesOf(p.species)))) return null;
+    g.defeats ||= {};                     // partidas guardadas antes de que existiera el contador
+    return attach(g);
   } catch {
     return null;
   }
@@ -141,9 +142,26 @@ export function claimDaily(g) {
 }
 
 // --- Huevos ---
+// Solo se consiguen comprándolos o derrotando 10 veces a una misma especie, y nunca repetidos.
 
 export const eggReadyAt = (g, egg) => egg.laidAt + (g.testMode ? Math.min(egg.hours * 20e3, 90e3) : egg.hours * 3600e3);
 export const eggReady = (g, egg) => Date.now() >= eggReadyAt(g, egg);
+export const owns = (g, species) => g.pets.some(p => p.species === species) || g.eggs.some(e => e.species === species);
+const hasRoom = g => g.eggs.length < MAX_EGGS && g.pets.length + g.eggs.length < MAX_PETS;
+export const eggPrice = g => 100 * (g.pets.length + g.eggs.length);
+
+// Huevo misterioso: una especie al azar que aún no tengas.
+export function buyEgg(g) {
+  const free = ROSTER.filter(r => !owns(g, r.id));
+  if (!free.length) return { error: 'Ya tienes todas las especies.' };
+  if (!hasRoom(g)) return { error: 'No te caben más huevos ni criaturas.' };
+  const price = eggPrice(g);
+  if (g.coins < price) return { error: `Te faltan ${price - g.coins} monedas.` };
+  g.coins -= price;
+  const sp = pick(free);
+  g.eggs.push({ species: sp.id, laidAt: Date.now(), hours: 6 });
+  return { species: sp.id };
+}
 
 export function hatchEgg(g, index, name) {
   const egg = g.eggs[index];
@@ -342,6 +360,9 @@ export function profile(pet) {
   const resentful = pet.char === 'resentido';
   return {
     maxHp: Math.round(70 + s.agu * 7 + pet.stage * 10),
+    // MP para los poderes: sube con el nivel y con lo bien cuidada y unida a ti que esté.
+    maxMp: Math.round(12 + pet.level * 2 + (pet.hunger + pet.mood) / 20 + pet.bond / 10),
+    mpRegen: pet.mood > 70 ? 6 : 5,
     dmg: 22 * (1 + s.pot * 0.04) * condition * (resentful ? 1.12 : 1),
     guide: Math.round((8 + s.pun * 2) * (pet.char === 'astuto' ? 1.6 : 1) * (pet.bond >= 50 ? 1.2 : 1)),
     fuel: 40 + s.agi * 6,
@@ -349,15 +370,26 @@ export function profile(pet) {
     clutch: (pet.char === 'leal' && pet.bond >= 40) || pet.bond >= 80,
     regen: pet.char === 'sereno' ? 0.04 : 0,
     mastery: pet.stage === 2 ? pet.mastery : '',
-    cdSpecial: pet.stage === 2 && pet.mastery === 'agi' ? 2 : 3,
   };
+}
+
+// Tras un combate hay que recuperarse: más cuanto más herida acabe, y mucho más si pierde.
+export const restLeft = pet => Math.max(0, (pet.restUntil || 0) - Date.now());
+export const healCost = (g, pet = g.pet) => 5 + (g.testMode ? 0 : Math.ceil(restLeft(pet) / 60000));
+export function heal(g) {
+  const cost = healCost(g);
+  if (g.coins < cost) return { error: 'No te alcanzan las monedas.' };
+  g.coins -= cost;
+  g.pet.restUntil = 0;
+  return {};
 }
 
 const RIVAL_NAMES = ['Tizón', 'Burbu', 'Zarza', 'Pompa', 'Chisgo', 'Liana', 'Humo', 'Charco', 'Musgo', 'Fogón', 'Rocío', 'Espina', 'Trasto', 'Nube', 'Colmillo'];
 
 // Rival de la máquina con un poder parecido al tuyo (misma etapa, nivel cercano).
-export function makeRival(pet) {
-  const sp = pick(ROSTER.filter(r => r.id !== pet.species));
+// Si se indica especie, es un reto a esa especie; si no, sale una al azar.
+export function makeRival(pet, species = '') {
+  const sp = species ? speciesOf(species) : pick(ROSTER.filter(r => r.id !== pet.species));
   const level = Math.max(1, pet.level + pick([-1, 0, 0, 1]));
   const stats = { pot: sp.base[0], agu: sp.base[1], pun: sp.base[2], agi: sp.base[3] };
   const mine = STATS.reduce((sum, k) => sum + pet.stats[k], 0);
@@ -371,8 +403,9 @@ export function makeRival(pet) {
   };
 }
 
-// Al ganar te quedas con su botín y, a veces, con un huevo de su especie.
-export function finishBattle(g, win, rival) {
+// Al ganar te quedas con su botín. A la décima victoria contra una especie que no tengas, ganas su huevo.
+// hpLeft (0–1) es la vida con la que acabó tu criatura: decide cuánto tarda en recuperarse.
+export function finishBattle(g, win, rival, hpLeft = 0) {
   const p = g.pet;
   let exp, coins = 0, stolen = 0, egg = false;
   if (!g.seen.includes(rival.species)) g.seen.push(rival.species);
@@ -381,11 +414,12 @@ export function finishBattle(g, win, rival) {
     coins = 8 + rival.level * 2;
     g.coins += coins; g.wins++;
     p.mood = clamp(p.mood + 10); p.bond = clamp(p.bond + 2);
-    if (g.eggs.length < MAX_EGGS && g.pets.length + g.eggs.length < MAX_PETS && Math.random() < (g.testMode ? 0.6 : 0.25)) {
+    g.defeats[rival.species] = (g.defeats[rival.species] || 0) + 1;
+    if (g.defeats[rival.species] >= DEFEATS_FOR_EGG && !owns(g, rival.species) && hasRoom(g)) {
       g.eggs.push({ species: rival.species, laidAt: Date.now(), hours: 6 });
       egg = true;
     }
-    log(g, `Ganó a ${rival.name} y se quedó con su botín${egg ? ' y un huevo' : ''}.`);
+    log(g, `Ganó a ${rival.name}${egg ? ' y se ganó un huevo de su especie' : ' y se quedó con su botín'}.`);
   } else {
     exp = 10;
     stolen = Math.min(3, g.coins);
@@ -393,7 +427,11 @@ export function finishBattle(g, win, rival) {
     p.mood = clamp(p.mood - 8); p.bond = clamp(p.bond + 1);
     log(g, `Perdió contra ${rival.name}.`);
   }
+  const hurt = 1 - Math.max(0, Math.min(1, hpLeft));
+  const minutes = win ? hurt * 10 : 15 + hurt * 20;
+  const rest = minutes * (g.testMode ? 1000 : 60000);   // en modo prueba, segundos en vez de minutos
+  p.restUntil = Date.now() + rest;
   p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
   p.hunger = clamp(p.hunger - 10);
-  return { exp, coins, stolen, egg, up: addExp(g, exp) };
+  return { exp, coins, stolen, egg, rest, defeats: g.defeats[rival.species] || 0, up: addExp(g, exp) };
 }

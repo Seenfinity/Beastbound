@@ -1,7 +1,7 @@
 // Arranque, pestañas y paneles. Las reglas están en state.js, la sala en room.js y el combate en battle.js.
 
 import * as S from './state.js';
-import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER } from './roster.js';
+import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, matchup, strongAgainst, weakAgainst } from './roster.js';
 import { loadSprites, loadGrid, loadImage, scaled } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
@@ -228,9 +228,9 @@ function renderCare() {
   setHTML($('train-list'), Object.keys(S.STAT_NAMES).map(k =>
     `<button data-train="${k}"><i class="ic ic-${TRAIN_ICON[k]}"></i><span>${S.STAT_NAMES[k]} ${p.stats[k]}<small>${MINI_INFO[k].title}</small></span></button>`).join(''));
   const lt = game.lastTrain;
-  setHTML($('train-result'), lt
-    ? `<i class="ic ic-${TRAIN_ICON[lt.stat]}"></i><b>${{ perfecto: '¡Perfecto!', bien: 'Bien', flojo: 'Flojo' }[lt.grade]}</b>${lt.gained ? `+1 ${S.STAT_NAMES[lt.stat]}` : 'Esta vez no mejoró'}`
-    : `<i class="ic ic-pesa"></i>Aún no ha entrenado.<br>Según lo bien que te salga, gana o no el punto.`);
+  $('train-result').textContent = lt
+    ? `Último: ${{ perfecto: '¡Perfecto!', bien: 'Bien', flojo: 'Flojo' }[lt.grade]} · ${lt.gained ? `+1 ${S.STAT_NAMES[lt.stat]}` : 'no mejoró'}`
+    : 'Según lo bien que te salga el minijuego, gana o no el punto.';
 
   // Evolución
   const evo = S.evolveStatus(game);
@@ -241,22 +241,51 @@ function renderCare() {
     : evo.ready ? `¡Lista! Mantén pulsado sobre ${p.name} para que evolucione.`
     : `Siguiente: ${STAGES[p.stage + 1]} con nivel ${evo.req.level}` + (game.testMode ? '.' : ` y ${evo.req.days} días de vida${evo.okTime ? '' : ` (faltan ${evo.daysLeft})`}.`);
 
+  const tags = list => (list.length ? list.map(e => `<span class="tag" style="--c:${ELEMENT_COLOR[e]}">${e}</span>`).join(' ') : '—');
   setHTML($('species-info'), `<p><b>${sp.name}</b> <span class="tag" style="--c:${ELEMENT_COLOR[sp.element]}">${sp.element}</span></p>
-    <p>${sp.role}.</p><p><b>${sp.special.name}:</b> ${sp.special.desc}${p.stage < 1 ? ' Lo aprende al llegar a Teen.' : ''}</p>
+    <p>${sp.role}.</p>
+    <p class="match"><span>Fuerte contra</span>${tags(strongAgainst(sp.element))}</p>
+    <p class="match"><span>Débil contra</span>${tags(weakAgainst(sp.element))}</p>
     ${p.mastery ? `<p><b>${S.MASTERY[p.mastery].name}.</b> ${S.MASTERY[p.mastery].desc}</p>` : ''}`);
 
-  const prof = S.profile(p);
-  setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"></i></div><span>Vida <b>${prof.maxHp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
-    <span>Guía de tiro <b>${prof.guide}</b> · Movimiento <b>${prof.fuel}</b></span>
-    <span>${prof.disobey > 0 ? 'Con tan poco vínculo puede no obedecerte.' : prof.clutch ? 'Aguantará un golpe mortal por ti.' : `${game.wins} ganados · ${game.losses} perdidos`}</span>`);
+  // Poderes: tres de su elemento (por nivel) y el propio de la especie (forma Final)
+  const prof = S.profile(p), rest = S.restLeft(p);
+  $('mp-max').textContent = `· ${prof.maxMp} MP`;
+  setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><b>${pw.name}</b>
+    <small>${pw.unlocked ? `${pw.mp} MP · ${pw.desc}` : `${pw.need} · ${pw.desc}`}</small></div>`).join(''));
+
+  setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"></i></div>
+    <span>Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
+    <span>${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : prof.disobey > 0 ? 'Con tan poco vínculo puede no obedecerte.' : prof.clutch ? 'Aguantará un golpe mortal por ti.' : `${game.wins} ganados · ${game.losses} perdidos`}</span>`);
+  renderHeal();
 
   setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"></i>${esc(m.name)}</button>`).join(''));
   renderEggs();
 
-  $('tip').textContent = !p.favKnown ? 'Prueba las tres comidas: una es su favorita y otra la odia.'
+  $('tip').textContent = rest ? `${p.name} se está recuperando del combate. Mientras tanto puedes cuidarla, entrenarla o pelear con otra criatura.`
+    : !p.favKnown ? 'Prueba las tres comidas: una es su favorita y otra la odia.'
     : p.bond < 30 ? 'Con el vínculo bajo puede no obedecerte en combate. Acaríciala y juega con ella.'
     : evo?.ready ? `Mantén el dedo sobre ${p.name} para que evolucione.`
-    : 'Frótala para acariciarla, arrastra la comida hasta ella, lánzale la pelota o toca el suelo para que camine.';
+    : 'Cuanto mejor cuidada y más unida a ti, más MP tiene para sus poderes.';
+}
+
+// Botón de curar: aparece mientras la criatura se recupera de un combate.
+function renderHeal() {
+  const rest = S.restLeft(game.pet);
+  for (const b of document.querySelectorAll('.heal-btn')) {
+    b.hidden = !rest;
+    if (rest) setHTML(b, `Curar ahora · ${S.healCost(game)}<i class="ic ic-moneda"></i>`);
+  }
+}
+for (const b of document.querySelectorAll('.heal-btn')) {
+  b.onclick = () => {
+    const res = S.heal(game);
+    if (res.error) { toast(res.error); return sfx.error(); }
+    sfx.heart();
+    S.save(game);
+    renderAll();
+    toast(`${game.pet.name} está como nueva.`);
+  };
 }
 
 function renderEggs() {
@@ -267,8 +296,17 @@ function renderEggs() {
     return `<button class="egg-card${ready ? ' ready' : ''}" data-egg="${i}" style="--c:${elColor(e.species)}">
       <i class="egg-img ${eggClass(e.species)}"></i>
       <span><b>${esc(speciesOf(e.species).element)}</b>${ready ? '¡Listo! Toca para abrirlo' : 'Se abre en ' + duration(S.eggReadyAt(game, e) - Date.now())}</span></button>`;
-  }).join('') : '<p class="muted">No hay huevos incubando. Al ganar combates a veces te llevas uno.</p>');
+  }).join('') : `<p class="muted">Sin huevos. Compra uno, o derrota ${S.DEFEATS_FOR_EGG} veces a una especie que no tengas.</p>`);
+  setHTML($('btn-buy-egg'), `Huevo misterioso · ${S.eggPrice(game)}<i class="ic ic-moneda"></i>`);
 }
+
+$('btn-buy-egg').onclick = () => {
+  const res = S.buyEgg(game);
+  if (res.error) { toast(res.error); return sfx.error(); }
+  sfx.coin();
+  commit();
+  toast(`Compraste un huevo de ${speciesOf(res.species).element}. Nunca sale una especie que ya tengas.`);
+};
 
 $('eggs-list').onclick = e => {
   const b = e.target.closest('[data-egg]');
@@ -417,30 +455,54 @@ const roomHooks = {
 
 // ---------- Combate ----------
 
-function renderLobby() {
-  if (battle) return;
-  const p = game.pet, sp = speciesOf(p.species), prof = S.profile(p);
-  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
-    Vida <b>${prof.maxHp}</b> · Daño <b>${Math.round(prof.dmg)}</b> · Energía <b>${Math.round(p.energy)}</b><br>
-    ${p.stage >= 1 ? `Especial: <b>${sp.special.name}</b>` : 'Su especial llega al evolucionar a Teen.'}<br>
-    Arrastra hacia atrás y suelta para disparar. Toca el suelo para moverte.</div>`);
-  setHTML($('lobby-maps'), maps.map(m => `<div><img src="${m.bg}" alt="">${m.name}</div>`).join(''));
+// Cómo queda un elemento frente a otro, en palabras.
+function advantage(mine, theirs) {
+  const out = matchup(mine, theirs), back = matchup(theirs, mine);
+  return (out > 1 ? '<span class="adv up">▲ Pegas más</span>' : out < 1 ? '<span class="adv down">▽ Pegas menos</span>' : '')
+    + (back > 1 ? '<span class="adv down">▼ Te pega más</span>' : back < 1 ? '<span class="adv up">△ Te pega menos</span>' : '');
 }
 
-$('btn-find').onclick = () => {
+function renderLobby() {
+  if (battle) return;
+  const p = game.pet, sp = speciesOf(p.species), prof = S.profile(p), rest = S.restLeft(p);
+  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
+    Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b><br>
+    ${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : 'Lista para pelear.'}<br>
+    Arrastra hacia atrás y suelta para disparar. Toca el suelo para moverte.</div>`);
+  $('btn-find').disabled = !!rest;
+  renderHeal();
+  setHTML($('lobby-maps'), maps.map(m => `<div><img src="${m.bg}" alt="">${m.name}<small>${m.effect}</small></div>`).join(''));
+  setHTML($('rivals'), ROSTER.filter(r => r.id !== p.species).map(r => {
+    const seen = game.seen.includes(r.id), n = game.defeats[r.id] || 0;
+    const progress = S.owns(game, r.id) ? 'Ya la tienes' : n >= S.DEFEATS_FOR_EGG ? 'Huevo pendiente: haz sitio' : `Derrotas: ${n} de ${S.DEFEATS_FOR_EGG}`;
+    return `<button class="rival${seen ? '' : ' unseen'}" data-rival="${r.id}"${rest ? ' disabled' : ''}>
+      <i class="sp sp-${r.id}-${p.stage}"></i><b>${seen ? r.name : '¿…?'}</b>
+      <span class="tag" style="--c:${ELEMENT_COLOR[r.element]}">${r.element}</span>${advantage(sp.element, r.element)}<small>${progress}</small></button>`;
+  }).join(''));
+}
+
+function challenge(species = '') {
   S.tick(game);
-  const p = game.pet;
+  const p = game.pet, sp = speciesOf(p.species);
+  if (S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   if (p.energy < S.FIGHT_ENERGY) return toast(`${p.name} está agotado. Déjalo descansar.`);
-  rival = S.makeRival(p);
+  rival = S.makeRival(p, species);
   const rsp = speciesOf(rival.species), map = pick(maps);
+  const out = matchup(sp.element, rsp.element), back = matchup(rsp.element, sp.element);
   modal({
     title: map.name,
     body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}"></canvas>${esc(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}"></canvas>${esc(rival.name)} · Nv ${rival.level}</figure></div>
-      <p>Te enfrentas a <b>${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>`,
+      <p>Te enfrentas a <b>${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
+      ${out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : ''}
+      ${back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : ''}
+      <p class="muted">${map.effect}</p>`,
     actions: [{ label: '¡A luchar!', cls: 'primary', fn: () => startBattle(map) }, closeBtn('Mejor no')],
   });
-};
+}
+$('btn-find').onclick = () => challenge();
+$('rivals').onclick = e => { const b = e.target.closest('[data-rival]'); if (b && !b.disabled) challenge(b.dataset.rival); };
 
+let powerButtons = [];
 function startBattle(map) {
   const p = game.pet;
   p.energy -= S.FIGHT_ENERGY;
@@ -454,46 +516,61 @@ function startBattle(map) {
   const maxH = Math.max(240, window.innerHeight - wrap.getBoundingClientRect().top - 16);
   const w = Math.min(maxW, maxH / 0.5625), h = clamp(maxH, w * 0.5625, w * 1.35);
   wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
-  battle = new Battle($('field'),
-    { pet: p, prof: S.profile(p), species: speciesOf(p.species), sprite: spriteOf(p.species, p.stage) },
-    { pet: rival, prof: S.profile(rival), species: speciesOf(rival.species), sprite: spriteOf(rival.species, rival.stage) },
-    map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1);
-  $('b-name1').textContent = p.name;
-  $('b-name2').textContent = rival.name;
-  $('b-special').hidden = p.stage < 1;
+  const side = pet => {
+    const sp = speciesOf(pet.species);
+    return { pet, prof: S.profile(pet), species: sp, sprite: spriteOf(pet.species, pet.stage), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
+  };
+  battle = new Battle($('field'), side(p), side(rival), map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1);
+  const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
+  $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
+  $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
+  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><b>${esc(pw.name)}</b><small>${pw.mp} MP</small><span></span></button>`).join('')
+    || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
+  powerButtons = [...document.querySelectorAll('#b-powers .pw')];
 }
 
 function statusOf(f) {
-  return [f.frozen || f.frozenNext ? 'Congelado' : '', f.poison ? 'Veneno' : '', f.shield > 0 ? 'Escudo' : '', f.counter > 0 ? 'Batería' : ''].filter(Boolean).join(' · ');
+  return [f.frozen || f.frozenNext ? 'Congelado' : '', f.burn ? 'Quemadura' : '', f.poison ? 'Veneno' : '', f.blind || f.blindNext ? 'Cegado' : '',
+    f.rooted || f.rootNext ? 'Inmóvil' : '', f.exposed > 0 ? 'Vulnerable' : '', f.shield > 0 ? 'Escudo' : '', f.counter > 0 ? 'Contraataque' : ''].filter(Boolean).join(' · ');
 }
 function renderBattle() {
   const a = battle.player, b = battle.rival;
   $('b-hp1').style.width = (a.hp / a.maxHp) * 100 + '%';
   $('b-hp2').style.width = (b.hp / b.maxHp) * 100 + '%';
-  $('b-st1').textContent = `${Math.ceil(a.hp)} / ${a.maxHp}  ${statusOf(a)}`;
-  $('b-st2').textContent = `${statusOf(b)}  ${Math.ceil(b.hp)} / ${b.maxHp}`;
-  const wnd = battle.wind;
+  $('b-mp1').style.width = (a.mp / a.maxMp) * 100 + '%';
+  $('b-mp2').style.width = (b.mp / b.maxMp) * 100 + '%';
+  $('b-st1').textContent = `${Math.ceil(a.hp)} / ${a.maxHp} · ${a.mp} MP  ${statusOf(a)}`;
+  $('b-st2').textContent = `${statusOf(b)}  ${b.mp} MP · ${Math.ceil(b.hp)} / ${b.maxHp}`;
+  const wnd = Math.round(battle.windNow());
   $('b-wind').textContent = wnd === 0 ? 'calma' : (wnd < 0 ? '← ' : '') + Math.abs(wnd) + (wnd > 0 ? ' →' : '');
-  const orb = $('b-special');
-  orb.disabled = !battle.canSpecial();
-  orb.classList.toggle('armed', battle.armed);
-  $('b-special-cd').textContent = a.cd > 0 ? a.cd : '';
-  $('b-hint').textContent = !battle.canAct() ? ''
-    : battle.armed ? `${a.species.special.name}: ${a.species.special.desc}`
+  powerButtons.forEach((btn, i) => {
+    const armed = battle.armed === i;
+    btn.disabled = !armed && !battle.canUse(a, i);
+    btn.classList.toggle('armed', armed);
+    btn.lastElementChild.textContent = a.cds[i] > 0 ? a.cds[i] : '';
+  });
+  const pw = a.powers[battle.armed];
+  $('b-hint').textContent = !battle.canAct() ? battle.map.effect
+    : pw ? `${pw.name}: ${pw.desc} Si falla, tarda más en volver.`
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
+    : a.blind ? 'Cegado: este turno no ves la guía de tiro.'
+    : a.rooted ? 'Inmóvil: este turno no puedes moverte.'
     : 'Arrastra hacia atrás y suelta para disparar · Toca el suelo para moverte';
 }
 
 function endBattle(win) {
-  const p = game.pet;
-  const r = S.finishBattle(game, win, rival);
+  const p = game.pet, rsp = speciesOf(rival.species);
+  const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp);
   S.save(game);
   if (win) sfx.win(); else sfx.lose();
+  const hunt = r.egg ? `<p><b>¡Décima victoria contra ${esc(rsp.name)}!</b> Te ganaste su huevo: ya está en tu incubadora.</p>`
+    : win && !S.owns(game, rival.species) ? `<p class="muted">Victorias contra ${esc(rsp.name)}: ${Math.min(r.defeats, S.DEFEATS_FOR_EGG)} de ${S.DEFEATS_FOR_EGG} para ganar su huevo.</p>` : '';
   const lines = win
-    ? `<p>Le ganaste a <b>${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${r.egg ? `<p><b>¡Y un huevo de ${esc(speciesOf(rival.species).element)}!</b> Ya está en tu incubadora.</p>` : ''}`
+    ? `<p>Le ganaste a <b>${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
     : `<p><b>${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
-  modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
+  const rest = `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>`;
+  modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + rest, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;
     switchTab('care');
@@ -510,7 +587,7 @@ field.addEventListener('pointerdown', e => { if (battle) { field.setPointerCaptu
 field.addEventListener('pointermove', e => { if (battle) battle.pullMove(...toWorld(e)); });
 field.addEventListener('pointerup', () => battle?.pullEnd());
 field.addEventListener('pointercancel', () => { if (battle) battle.pull = null; });
-$('b-special').onclick = () => battle?.toggleSpecial();
+$('b-powers').onclick = e => { const b = e.target.closest('[data-power]'); if (b && battle) { battle.arm(+b.dataset.power); sfx.tap(); } };
 $('b-quit').onclick = () => modal({
   title: '¿Rendirte?',
   body: '<p>Cuenta como derrota.</p>',
@@ -522,9 +599,10 @@ $('b-quit').onclick = () => modal({
 function renderDex() {
   $('dex-count').textContent = `${game.seen.length} de ${ROSTER.length} vistas`;
   setHTML($('dex'), ROSTER.map(sp => {
-    const seen = game.seen.includes(sp.id), mine = game.pets.some(m => m.species === sp.id);
+    const seen = game.seen.includes(sp.id), mine = game.pets.some(m => m.species === sp.id), n = game.defeats[sp.id] || 0;
+    const hunt = mine ? 'La tienes.' : S.owns(game, sp.id) ? 'Tienes su huevo.' : `Derrotas: ${Math.min(n, S.DEFEATS_FOR_EGG)} de ${S.DEFEATS_FOR_EGG} para su huevo.`;
     return seen
-      ? `<div class="entry"><i class="sp sp-${sp.id}-${mine ? 2 : 0}"></i><b>${sp.name}</b><span class="tag" style="--c:${ELEMENT_COLOR[sp.element]}">${sp.element}</span>${sp.role}. Especial: ${sp.special.name}.${mine ? ' La tienes.' : ' Vista en combate.'}</div>`
+      ? `<div class="entry"><i class="sp sp-${sp.id}-${mine ? 2 : 0}"></i><b>${sp.name}</b><span class="tag" style="--c:${ELEMENT_COLOR[sp.element]}">${sp.element}</span>${sp.role}. ${hunt}</div>`
       : `<div class="entry unseen"><i class="sp sp-${sp.id}-0"></i><b>¿…?</b>Aún no la has visto.</div>`;
   }).join(''));
 }
@@ -557,10 +635,8 @@ function frame(now) {
 let seconds = 0;
 setInterval(() => {
   if (!game?.pet || $('game').hidden) return;
-  if (tab === 'care') renderEggs();
-  if (++seconds % 5) return;
-  S.tick(game);
-  S.save(game);
+  if (tab === 'battle' && !battle) renderLobby();      // cuenta atrás de la recuperación
+  if (++seconds % 5 === 0) { S.tick(game); S.save(game); }
   if (tab !== 'care') return;
   renderCare();
   const p = game.pet;                                 // de vez en cuando avisa de lo que le falta
