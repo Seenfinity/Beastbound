@@ -193,8 +193,10 @@ function renderCare() {
   $('exp-fill').style.width = (p.exp / need) * 100 + '%';
   $('exp-text').textContent = `${Math.floor(p.exp)} / ${need}`;
   setMeter('m-hunger', p.hunger); setMeter('m-energy', p.energy); setMeter('m-mood', p.mood); setMeter('m-bond', p.bond);
-  setHTML($('btn-sleep'), `<i class="ic ic-luna"></i> ${p.asleep ? 'Despertar' : 'Acostar a dormir'}`);
-  $('sleep-note').textContent = p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
+  const nap = S.sleepLeft(game);
+  setHTML($('btn-sleep'), `<i class="ic ic-luna"></i> ${nap ? `Durmiendo… ${duration(nap)}` : p.asleep ? 'Despertar' : 'Acostar a dormir'}`);
+  $('btn-sleep').disabled = nap > 0;
+  $('sleep-note').textContent = nap ? 'Acaba de dormirse: aún no se la puede despertar.' : p.asleep ? 'Durmiendo: recobra energía y se recupera el doble de rápido.' : 'Dormida se recupera antes, pero no podrás jugar ni pelear con ella.';
   $('mood-line').textContent = p.asleep ? 'Está durmiendo' : p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
     : p.bond < 30 ? 'Aún no confía en ti' : p.mood > 75 && p.hunger > 60 ? '¡Está feliz!' : 'Está bien';
 
@@ -366,9 +368,11 @@ $('train-list').onclick = e => {
 $('btn-sleep').onclick = () => {
   if (room.mini) return;
   const res = S.toggleSleep(game);
+  if (res.error) { toast(res.error); return sfx.error(); }
   sfx.tap();
   commit();
-  if (!res.asleep) room.say('¡Buenos días!');
+  if (res.asleep) room.say('Aaah… qué sueño', 2.4);
+  else { room.cheer(); room.say('¡Buenos días!'); }
 };
 
 $('plate').onclick = () => {
@@ -465,7 +469,7 @@ const roomHooks = {
   },
   onPlay() {
     const res = S.play(game);
-    if (!res.error) { commit(); celebrate(res.up); }
+    if (!res.error) commit();
     return res;
   },
   onEvolve: doEvolve,

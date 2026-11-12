@@ -39,7 +39,8 @@ export const MASTERY = {
 export const EVOLVE = [{ level: 4, days: 3 }, { level: 10, days: 14 }];
 
 export const FIGHT_ENERGY = 20, TRAIN_ENERGY = 25, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
-export const DEFEATS_FOR_EGG = 10;      // victorias contra una misma especie para ganar su huevo
+export const DEFEATS_FOR_EGG = 10;
+export const MIN_SLEEP = 5 * 60000;     // una vez dormida, no se la puede despertar antes de este tiempo      // victorias contra una misma especie para ganar su huevo
 
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -129,7 +130,7 @@ export function tick(g, now = Date.now()) {
     if (badHours > 0) { p.bond = clamp(p.bond - badHours); p.axes.descuido += badHours * 0.4; }
     if (p.asleep) {
       if (p.restUntil > now) p.restUntil = Math.max(now, p.restUntil - elapsed); // el descanso cuenta doble
-      if (restLeft(p) === 0 && p.energy >= 100 && now - p.sleptAt > 4000) {       // se despierta sola al estar lista
+      if (restLeft(p) === 0 && p.energy >= 100 && now - p.sleptAt >= minSleep(g)) { // se despierta sola al estar lista
         p.asleep = false;
         p.mood = clamp(p.mood + 5);
         p.diary.unshift({ t: now, text: 'Se despertó descansada.' });
@@ -140,9 +141,13 @@ export function tick(g, now = Date.now()) {
   g.lastTick = now;
 }
 
-// Acostarla o despertarla. Dormida no se puede jugar, entrenar ni pelear con ella.
+// Acostarla o despertarla. Dormida no se puede jugar, entrenar ni pelear con ella,
+// y hay que dejarla dormir un mínimo antes de poder despertarla.
+const minSleep = g => (g.testMode ? 15000 : MIN_SLEEP);
+export const sleepLeft = (g, pet = g.pet) => (pet.asleep ? Math.max(0, pet.sleptAt + minSleep(g) - Date.now()) : 0);
 export function toggleSleep(g) {
   const p = g.pet, want = !p.asleep;   // se decide antes de avanzar el tiempo: al avanzar puede despertarse sola
+  if (p.asleep && sleepLeft(g) > 0) return { error: `${p.name} acaba de dormirse. Déjala descansar un poco.`, asleep: true };
   tick(g);
   p.asleep = want;
   if (p.asleep) p.sleptAt = Date.now();
@@ -276,7 +281,7 @@ export function play(g) {
   p.mood = clamp(p.mood + 18);
   if (p.playsToday < 5) { p.bond = clamp(p.bond + 1); p.axes.carino += 1; }
   p.playsToday++;
-  return { up: addExp(g, 2) };
+  return {};                             // jugar sube ánimo y vínculo, no experiencia
 }
 
 export function trainsLeft(g) {
@@ -384,7 +389,7 @@ export function profile(pet) {
     maxHp: Math.round(70 + s.agu * 7 + pet.stage * 10),
     // MP para los poderes: sube con el nivel, con cada evolución y con lo bien cuidada y unida a ti que esté.
     maxMp: Math.round(12 + pet.level * 2 + pet.stage * 4 + (pet.hunger + pet.mood) / 20 + pet.bond / 10),
-    mpRegen: pet.mood > 70 ? 6 : 5,
+    mpRegen: pet.mood > 70 ? 4 : 3,       // el MP se recupera poco: hay que elegir cuándo gastar
     dmg: 22 * (1 + s.pot * 0.04) * condition * (resentful ? 1.12 : 1),
     guide: Math.round((8 + s.pun * 2) * (pet.char === 'astuto' ? 1.6 : 1) * (pet.bond >= 50 ? 1.2 : 1)),
     fuel: 40 + s.agi * 6,

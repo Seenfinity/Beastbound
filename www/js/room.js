@@ -20,13 +20,14 @@ export class Room {
     this.ball = { x: 0, y: 0, vx: 0, vy: 0, held: false, active: false, life: 0 };
     this.parts = []; this.bubble = null; this.mini = null; this.result = null;
     this.hold = 0; this.flash = 0; this.t = 0; this.ptr = null; this.food = null;
+    this.sleepK = 0;                         // 0 = despierta, 1 = dormida del todo (luces apagadas, acurrucada)
     this.view = { x0: 0, w: SW, cx: SW / 2, k: 1 };
     canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); this.down(...this.toScene(e)); });
     canvas.addEventListener('pointermove', e => this.move(...this.toScene(e)));
     for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, e => this.up(...this.toScene(e)));
   }
 
-  setPet(pet) { this.pet = pet; this.c.mode = 'idle'; this.c.t = 1; this.mini = null; this.result = null; this.bubble = null; }
+  setPet(pet) { this.pet = pet; this.c.mode = 'idle'; this.c.t = 1; this.mini = null; this.result = null; this.bubble = null; this.sleepK = pet.asleep ? 1 : 0; }
   toScene(e) {
     const r = this.canvas.getBoundingClientRect(), k = r.height / SH;
     return [this.view.x0 + (e.clientX - r.left) / k, (e.clientY - r.top) / k];
@@ -146,14 +147,24 @@ export class Room {
     const c = this.c, b = this.ball, lo = this.view.x0 + 130, hi = this.view.x0 + this.view.w - 130;
     c.x = clamp(c.x, lo, hi);
     c.squash *= 0.86; c.lift = 0;
-    if (this.asleep) {                               // dormida: quieta, respirando y soltando zetas
-      c.mode = 'idle'; c.t = 1; b.active = false; b.held = false; this.hold = 0; this.ptr = null;
-      if ((this.zz = (this.zz || 0) - dt) <= 0) {
-        this.zz = 1.1;
-        this.parts.push({ text: 'z', x: c.x + c.dir * this.size * 0.3, y: FLOOR - this.size * 0.7, vx: 22 * c.dir, vy: -55, life: 0, max: 1.8, size: rand(28, 44) });
+    if (this.asleep) {
+      // Irse a dormir: camina hasta el centro de la sala, se acurruca y se apagan las luces poco a poco.
+      b.active = false; b.held = false; this.ptr = null;
+      const bed = this.view.cx, d = bed - c.x;
+      if (Math.abs(d) > 6 && this.sleepK < 0.05) {
+        c.dir = d > 0 ? 1 : -1;
+        c.x += clamp(d, -210 * dt, 210 * dt);
+        c.lift = Math.abs(Math.sin(this.t * 7)) * 6;   // pasitos cansados
+      } else {
+        this.sleepK = Math.min(1, this.sleepK + dt / 1.8);
+        if (this.sleepK > 0.9 && (this.zz = (this.zz || 0) - dt) <= 0) {
+          this.zz = 1.1;
+          this.parts.push({ text: 'z', x: c.x + c.dir * this.size * 0.3, y: FLOOR - this.size * 0.7, vx: 22 * c.dir, vy: -55, life: 0, max: 1.8, size: rand(28, 44) });
+        }
       }
       return;
     }
+    this.sleepK = Math.max(0, this.sleepK - dt / 0.9);   // al despertar, las luces vuelven
 
     const p = this.ptr;
     if (p && p.on === 'pet') p.time += dt;
@@ -219,9 +230,10 @@ export class Room {
     ctx.beginPath(); ctx.ellipse(x, FLOOR + 8, w * 0.38 * (1 - Math.min(0.5, lift / 300)), 16, 0, 0, 7); ctx.fill();
     ctx.save();
     ctx.translate(x + (o.lunge || 0) * 46 * o.dir, FLOOR + 10 - lift);
-    if (this.asleep) ctx.scale(o.dir * 1.08, 0.8 + Math.sin(this.t * 1.6) * 0.035); // acurrucada, respiración lenta
-    else ctx.scale(o.dir * (1 + sq * 0.1), 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012);
-    if (this.asleep) ctx.filter = 'brightness(0.78)';
+    const k = this.sleepK;                            // se va acurrucando a medida que se duerme
+    const awake = 1 - sq * 0.1 + Math.sin(this.t * 3) * 0.012, curled = 0.78 + Math.sin(this.t * 1.6) * 0.035;
+    ctx.scale(o.dir * (1 + sq * 0.1 * (1 - k) + 0.09 * k), awake + (curled - awake) * k);
+    if (k > 0) ctx.filter = `brightness(${1 - 0.22 * k})`;
     else if (this.sad) ctx.filter = 'saturate(0.55) brightness(0.85)';
     if (o.hurt && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.4;
     ctx.drawImage(img, -w / 2, -h, w, h);
@@ -246,7 +258,13 @@ export class Room {
     ctx.translate(-x0, 0);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.art.bg, 0, 0, SW, SH);
-    if (this.asleep && !this.mini) { ctx.fillStyle = 'rgba(6,4,34,.55)'; ctx.fillRect(x0, 0, vw, SH); } // luces apagadas
+    if (this.sleepK > 0 && !this.mini) {              // luces que se apagan y una luna de noche
+      ctx.fillStyle = `rgba(6,4,34,${0.58 * this.sleepK})`; ctx.fillRect(x0, 0, vw, SH);
+      // Un charco de luz de luna donde duerme
+      const halo = ctx.createRadialGradient(this.c.x, FLOOR - 40, 20, this.c.x, FLOOR - 40, 380);
+      halo.addColorStop(0, `rgba(170,195,255,${0.26 * this.sleepK})`); halo.addColorStop(1, 'rgba(170,195,255,0)');
+      ctx.fillStyle = halo; ctx.fillRect(this.c.x - 380, FLOOR - 420, 760, 760);
+    }
 
     const color = this.hooks.charColor();
     if (color || this.evolveReady) {                      // aura: color del carácter, o dorada si puede evolucionar

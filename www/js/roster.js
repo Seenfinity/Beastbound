@@ -80,8 +80,8 @@ export const weakAgainst = element => Object.keys(STRONG).filter(d => matchup(el
 // --- Poderes ---
 // Cada elemento tiene tres poderes que se desbloquean con el nivel. El cuarto es el propio de la especie.
 // Gastan MP y tienen enfriamiento (cd, en turnos); si el disparo falla, tardan dos turnos más en volver.
-export const POWER_SLOTS = [{ level: 2, mp: 8, cd: 2 }, { level: 5, mp: 12, cd: 3 }, { level: 8, mp: 16, cd: 3 }];
-const SIGNATURE = { mp: 22, cd: 4 };
+export const POWER_SLOTS = [{ level: 2, mp: 12, cd: 2 }, { level: 5, mp: 18, cd: 3 }, { level: 8, mp: 24, cd: 3 }];
+const SIGNATURE = { mp: 32, cd: 4 };
 const P = (name, desc, flags) => ({ name, desc, ...flags });
 
 export const POWERS = {
