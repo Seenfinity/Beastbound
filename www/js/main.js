@@ -592,15 +592,19 @@ function startBattle(map) {
     const sp = speciesOf(pet.species);
     return { pet, prof: S.profile(pet), species: sp, sprite: petSprite(pet), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
   };
-  battle = new Battle($('field'), side(p), side(rival), map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] });
-  const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
-  $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
-  $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
-  $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
+  const mine = side(p), VH = Math.round((W * h) / w);
+  $('b-powers').innerHTML = mine.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
     || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
   powerButtons = [...document.querySelectorAll('#b-powers .pw')];
   $('b-items').innerHTML = Object.entries(S.ITEMS).map(([id, it]) => `<button class="item" data-item="${id}"><i class="ic ic-${it.icon}"></i><b></b></button>`).join('');
   itemButtons = [...$('b-items').children];
+  // Lo que tapan los botones de abajo: el suelo del campo se levanta para quedar por encima.
+  const box = $('field').getBoundingClientRect(), tops = [$('b-powers'), $('b-items')].map(el => el.getBoundingClientRect()).filter(r => r.height).map(r => r.top);
+  const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
+  battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
+  const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
+  $('b-name1').innerHTML = esc(p.name) + tag(battle.player);
+  $('b-name2').innerHTML = tag(battle.rival) + ' ' + esc(rival.name);
 }
 
 function statusOf(f) {
@@ -640,7 +644,7 @@ function renderBattle() {
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
     : a.blind ? 'Cegado: este turno no ves la guía de tiro.'
     : a.rooted ? 'Inmóvil: este turno no puedes moverte.'
-    : 'Arrastra hacia atrás y suelta para disparar · Toca el suelo para moverte';
+    : 'Arrastra hacia atrás y suelta para disparar · Toca el suelo para moverte · Toca el minimapa para mirar el campo';
 }
 
 function endBattle(win) {
@@ -666,12 +670,12 @@ function endBattle(win) {
 const field = $('field');
 const toWorld = e => {
   const r = field.getBoundingClientRect();
-  return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * battle.H];
+  return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * battle.VH];   // coordenadas de pantalla; el combate las pasa al campo
 };
 field.addEventListener('pointerdown', e => { if (battle) { field.setPointerCapture(e.pointerId); battle.pullStart(...toWorld(e)); } });
 field.addEventListener('pointermove', e => { if (battle) battle.pullMove(...toWorld(e)); });
 field.addEventListener('pointerup', () => battle?.pullEnd());
-field.addEventListener('pointercancel', () => { if (battle) battle.pull = null; });
+field.addEventListener('pointercancel', () => { if (battle) { battle.pull = null; battle.pan = false; } });
 $('b-items').addEventListener('pointerover', e => { hoverItem = e.target.closest('[data-item]')?.dataset.item || ''; });
 $('b-items').addEventListener('pointerleave', () => { hoverItem = ''; });
 $('b-items').onclick = e => {

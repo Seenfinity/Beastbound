@@ -85,10 +85,10 @@ export const WISHES = {
 // Objetos de combate: se usan uno por turno, sin gastar el turno. Son casi una trampa,
 // así que son lo más caro de la tienda.
 export const ITEMS = {
-  pocion: { name: 'Poción', desc: 'Recupera el 30% de la vida.', price: 250, icon: 'botiquin' },
-  elixir: { name: 'Elixir', desc: 'Recupera 15 MP.', price: 200, icon: 'rayo' },
-  escudo: { name: 'Escudo de un uso', desc: 'El próximo golpe que reciba hace la mitad de daño.', price: 250, icon: 'escudo' },
-  mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 150, icon: 'diana' },
+  pocion: { name: 'Poción', desc: 'Recupera el 30% de la vida.', price: 999, icon: 'botiquin' },
+  elixir: { name: 'Elixir', desc: 'Recupera 15 MP.', price: 500, icon: 'rayo' },
+  escudo: { name: 'Escudo de un uso', desc: 'El próximo golpe que reciba hace la mitad de daño.', price: 350, icon: 'escudo' },
+  mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 999, icon: 'diana' },
 };
 
 // Decoración de la sala: se compra en la tienda y cada mueble ayuda en algo.

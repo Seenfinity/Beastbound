@@ -6,7 +6,9 @@ import { ELEMENT_COLOR, matchup } from './roster.js';
 import { CHARS } from './state.js';
 import { sfx } from './sfx.js';
 
-export const W = 640;                   // ancho del campo en unidades de juego (el alto depende de la pantalla)
+export const W = 640;                   // ancho de lo que cabe en pantalla, en unidades de juego (el alto depende de la pantalla)
+export const WORLD = 1200;              // ancho del campo entero: la cámara lo recorre
+const SKY = 240;                        // cielo por encima de lo que cabe en pantalla, para ver los tiros altos
 const GRAVITY = 300, WIND_K = 5, STEP = 1 / 120;
 export const TURN_TIME = 30;            // segundos para apuntar y disparar; si se acaban, se pierde el turno
 const SIZE = [{ h: 48, r: 15 }, { h: 60, r: 19 }, { h: 74, r: 23 }]; // alto y radio de golpe por etapa
@@ -14,7 +16,7 @@ const SIZE = [{ h: 48, r: 15 }, { h: 60, r: 19 }, { h: 74, r: 23 }]; // alto y r
 const rad = d => (d * Math.PI) / 180;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const speedOf = power => 110 + power * 3.9;
+const speedOf = power => 120 + power * 5;          // a tope, un tiro cruza todo el campo
 
 // Aspecto de cada elemento: colores de la explosión y partículas del impacto.
 const FX = {
@@ -44,35 +46,57 @@ function zigzag(x, y, a, len) {
   return pts;
 }
 
-function makeTerrain(H) {
-  const t = new Float32Array(W);
-  const base = H - rand(104, 130), a1 = rand(10, 24), f1 = rand(0.006, 0.012), p1 = rand(0, 6.28);
-  const a2 = rand(4, 9), f2 = rand(0.02, 0.035), p2 = rand(0, 6.28);
-  const mid = Math.random() < 0.5 ? -rand(30, 72) : rand(30, 60); // colina o valle en medio
-  const mx = rand(270, 370), mw = rand(45, 80);
-  for (let x = 0; x < W; x++) {
-    const y = base + Math.sin(x * f1 + p1) * a1 + Math.sin(x * f2 + p2) * a2 + mid * Math.exp(-((x - mx) ** 2) / (2 * mw * mw));
-    t[x] = clamp(y, H - 250, H - 26);
+// Terreno: ondulación suave, una meseta alta o una hondonada donde aparece cada bando
+// y dos o tres obstáculos (picos o fosos) entre ambos.
+function makeTerrain(H) {                              // H: la altura a la que acaba lo que se ve del suelo
+  const t = new Float32Array(WORLD);
+  const base = H - rand(96, 124), a1 = rand(10, 22), f1 = rand(0.004, 0.009), p1 = rand(0, 6.28);
+  const a2 = rand(4, 8), f2 = rand(0.02, 0.035), p2 = rand(0, 6.28);
+  const feats = [];
+  const spawn = left => {
+    const high = Math.random() < 0.5, x = left ? rand(110, 300) : rand(WORLD - 300, WORLD - 110);
+    feats.push({ x, w: rand(70, 105), h: high ? rand(110, 200) : -rand(8, 36), flat: true });
+    return { x, high };
+  };
+  const spawns = [spawn(true), spawn(false)];
+  const n = 2 + Math.floor(rand(0, 2));
+  for (let i = 0; i < n; i++) {
+    const x = 430 + ((WORLD - 860) * (i + rand(0.2, 0.8))) / n;
+    feats.push(Math.random() < 0.65 ? { x, w: rand(34, 70), h: rand(80, 210) } : { x, w: rand(50, 90), h: -rand(30, 60) });
   }
-  return t;
+  for (let x = 0; x < WORLD; x++) {
+    let y = base + Math.sin(x * f1 + p1) * a1 + Math.sin(x * f2 + p2) * a2;
+    for (const f of feats) { const d = Math.abs(x - f.x) / f.w; y -= f.h * Math.exp(f.flat ? -(d ** 4) : -(d * d) / 2); }
+    t[x] = clamp(y, H - 340, H - 26);
+  }
+  return { t, spawns };
 }
 
 export class Battle {
   // Cada bando: { pet, prof, species, sprite, powers }. hooks: { onEnd(win) }
   // H es el alto del campo; scale agranda a las criaturas en pantallas estrechas.
   // art: { vfx: {nombre: lienzo}, icon(nombreDePoder) → lienzo } para los efectos e iconos.
-  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}) {
-    this.canvas = canvas; this.map = map; this.hooks = hooks; this.H = H; this.scale = scale; this.art = art;
+  // pad: franja de abajo que tapan los botones; el suelo se levanta para que no quede debajo.
+  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}, pad = 0) {
+    this.canvas = canvas; this.map = map; this.hooks = hooks; this.scale = scale; this.art = art;
+    this.VH = H;                                     // alto de lo que se ve
+    this.pad = pad = clamp(pad, 0, H * 0.5);
+    this.H = H = Math.max(H + 120, 360 + SKY);        // alto del campo entero
     this.clock = TURN_TIME; this.beep = 6;
     this.stats = { dianas: 0, powerHits: 0 };       // lo que hizo el jugador: cuenta para las misiones
     this.itemUsed = false;
-    this.terrain = makeTerrain(H);
+    const land = makeTerrain(H - pad);
+    this.terrain = land.t; this.spawns = land.spawns;
     this.ground = document.createElement('canvas');
-    this.ground.width = W * 2; this.ground.height = H * 2;
+    this.ground.width = WORLD * 2; this.ground.height = H * 2;
     this.dirty = true;
-    this.player = this.makeFighter(player, 92, 1, true);
-    this.rival = this.makeFighter(rival, W - 92, -1, false);
+    this.player = this.makeFighter(player, land.spawns[0].x, 1, true);
+    this.rival = this.makeFighter(rival, land.spawns[1].x, -1, false);
     this.shots = []; this.fx = []; this.texts = []; this.gusts = []; this.parts = [];
+    this.rings = []; this.pillars = []; this.casts = [];   // adornos de los poderes
+    // Cámara: empieza enseñando al rival y luego viaja hasta quien tenga el turno.
+    this.cam = { x: clamp(this.rival.x - W / 2, 0, WORLD - W), y: clamp(this.rival.y - (this.VH - pad) * 0.62, 0, H - this.VH) };
+    this.look = null; this.pan = false; this.intro = 1.3;
     this.t = 0; this.acc = 0; this.shake = 0; this.flash = 0; this.wind = 0;
     this.pull = null; this.armed = -1; this.moveTarget = null; this.volley = null;
     this.banner = null; this.ended = false;
@@ -94,23 +118,23 @@ export class Battle {
 
   // --- Efectos del mapa ---
   setupHazards(h) {
-    const top = Math.min(...this.terrain);
-    const slots = h.rocks === 1 ? [[280, 360]] : [[190, 280], [360, 450]];
-    this.rocks = slots.slice(0, h.rocks || 0).map(([a, b]) => ({ x: rand(a, b), y: Math.max(64, top - rand(64, 140)), rx: rand(26, 38), ry: rand(13, 18) }));
-    this.thermals = [[190, 290], [350, 450]].slice(0, h.thermals || 0).map(([a, b]) => ({ x: rand(a, b), w: rand(34, 48) }));
-    this.birds = Array.from({ length: h.birds || 0 }, (_, i) => this.newBird(i, true));
+    // Todo se reparte por la zona central, entre los dos bandos.
+    const spread = (n, make) => Array.from({ length: n }, (_, i) => make(rand(340 + ((WORLD - 680) * i) / n, 340 + ((WORLD - 680) * (i + 0.9)) / n)));
+    this.rocks = spread((h.rocks || 0) * 2, x => ({ x, y: Math.max(40, this.groundAt(x) - rand(80, 210)), rx: rand(26, 40), ry: rand(13, 18) }));
+    this.thermals = spread((h.thermals || 0) * 2, x => ({ x, w: rand(34, 48) }));
+    this.birds = Array.from({ length: (h.birds || 0) * 2 }, (_, i) => this.newBird(i, true));
     this.gusty = !!h.gusty;
-    this.snow = h.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.H), v: rand(18, 46) })) : [];
+    this.snow = h.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(18, 46) })) : [];
   }
   newBird(i, anywhere = false) {
     const dir = Math.random() < 0.5 ? 1 : -1;
-    return { x: anywhere ? rand(0, W) : dir > 0 ? -20 : W + 20, y: rand(40, Math.max(60, this.H * 0.42)), dir, v: rand(36, 60), phase: i * 2.1, away: 0 };
+    return { x: anywhere ? rand(0, WORLD) : dir > 0 ? -20 : WORLD + 20, y: rand(this.H - this.VH + 30, this.H - this.pad - 210), dir, v: rand(36, 60), phase: i * 2.1, away: 0 };
   }
   rockAt(x, y) { return this.rocks.find(r => ((x - r.x) / r.rx) ** 2 + ((y - r.y) / r.ry) ** 2 < 1); }
   lift(x) { return this.thermals.some(t => Math.abs(x - t.x) < t.w / 2) ? 560 : 0; } // empuje hacia arriba
   windNow() { return this.wind + (this.gusty ? Math.sin(this.t * 1.9) * 4 : 0); }
 
-  groundAt(x) { return this.terrain[clamp(Math.round(x), 0, W - 1)]; }
+  groundAt(x) { return this.terrain[clamp(Math.round(x), 0, WORLD - 1)]; }
   other(f) { return f === this.player ? this.rival : this.player; }
   say(text, time = 1.6) { this.banner = { text, t: time }; }
   note(f, text, color = '#fff6d8', size = 15) { this.texts.push({ x: f.x, y: f.y - f.h - 12 - this.texts.filter(e => e.t < 0.3).length * 16, text, t: 0, color, size }); }
@@ -135,6 +159,7 @@ export class Battle {
     this.phase = 'aim';
     this.clock = TURN_TIME; this.beep = 6;
     this.itemUsed = false; f.sight = false;
+    this.look = null;
     if (f.isPlayer) sfx.turn();
     this.say(f.frozen ? `${f.pet.name} está congelado` : f.blind ? `${f.pet.name} está cegado: apunta peor` : f.rooted ? `${f.pet.name} no puede moverse` : f.isPlayer ? '¡Tu turno!' : `Turno de ${f.pet.name}`);
     if (!f.isPlayer) { this.aiTimer = 1.5; this.aiReady = false; }
@@ -150,29 +175,42 @@ export class Battle {
     const v = speedOf(power);
     let vx = Math.cos(rad(angle)) * v, vy = -Math.sin(rad(angle)) * v;
     const pts = [];
-    for (let i = 0; i < 1400; i++) {
+    for (let i = 0; i < 1800; i++) {
       vx += this.wind * WIND_K * STEP; vy += (GRAVITY - this.lift(x)) * STEP;
       x += vx * STEP; y += vy * STEP;
       if (limit && i % 3 === 0) { pts.push([x, y]); if (pts.length >= limit) return { pts, end: null }; }
-      if (x < -80 || x > W + 80 || y > this.H + 30) return { pts, end: null };
+      if (x < -80 || x > WORLD + 80 || y > this.H + 30) return { pts, end: null };
       if (this.rockAt(x, y)) return { pts, end: null };
-      if (x >= 0 && x < W && y >= this.groundAt(x)) return { pts, end: [x, y] };
+      if (x >= 0 && x < WORLD && y >= this.groundAt(x)) return { pts, end: [x, y] };
     }
     return { pts, end: null };
   }
 
+  // Minimapa: arriba, en el centro. Tocarlo o arrastrarlo mueve la cámara para mirar el campo.
+  mini() {
+    const w = 180, floor = this.H - this.pad, y0 = Math.max(0, floor - 480), k = w / WORLD;
+    return { x: (W - w) / 2, y: 6, w, h: (floor - y0) * k, k, y0 };
+  }
+  inMini(vx, vy) { const m = this.mini(); return vx > m.x - 6 && vx < m.x + m.w + 6 && vy > m.y - 6 && vy < m.y + m.h + 8; }
+  lookAt(vx) { const m = this.mini(); this.look = { x: clamp((vx - m.x) / m.k, 0, WORLD) }; }
+
   // Tirachinas: se arrastra hacia atrás desde cualquier punto y se suelta para disparar.
   // Un toque sin arrastrar hace que la criatura camine hacia ese punto.
-  pullStart(wx, wy) {
+  // Las coordenadas son las de la pantalla (0..W, 0..VH); aquí se pasan al campo.
+  pullStart(vx, vy) {
+    this.intro = 0;
+    if (this.inMini(vx, vy)) { this.pan = true; this.pull = null; return this.lookAt(vx); }
     if (!this.canAct()) return;
-    this.pull = { sx: wx, sy: wy, x: wx, y: wy, aiming: false };
+    this.look = null;
+    this.pull = { sx: vx, sy: vy, x: vx, y: vy, wx: vx + this.cam.x, aiming: false };
     this.moveTarget = null;
   }
-  pullMove(wx, wy) {
+  pullMove(vx, vy) {
+    if (this.pan) return this.lookAt(vx);
     const p = this.pull;
     if (!p || !this.canAct()) return;
-    p.x = wx; p.y = wy;
-    const dx = p.sx - wx, dy = p.sy - wy, len = Math.hypot(dx, dy);
+    p.x = vx; p.y = vy;
+    const dx = p.sx - vx, dy = p.sy - vy, len = Math.hypot(dx, dy);
     p.aiming = len > 12;
     if (!p.aiming) return;
     const f = this.player;
@@ -182,11 +220,12 @@ export class Battle {
     f.power = clamp(len / 1.6, 5, 100);
   }
   pullEnd() {
+    if (this.pan) { this.pan = false; return; }
     const p = this.pull;
     this.pull = null;
     if (!p || !this.canAct()) return;
     if (p.aiming) { if (this.player.power > 8) this.fire(this.armed); }
-    else this.moveTarget = p.sx;
+    else this.moveTarget = clamp(p.wx, 14, WORLD - 14);
   }
   // Usa un objeto de la mochila: uno por turno y sin gastar el turno. Devuelve si se pudo usar.
   useItem(id) {
@@ -236,6 +275,10 @@ export class Battle {
       if (sp.gust) this.wind = (foe.x > f.x ? 1 : -1) * 8;
     }
     this.volley = pw ? { f, index, name: pw.name, hit: false } : null;
+    // Cómo se ve el proyectil de un poder: onda (rugidos), cometa (golpes gordos), rayo (rápidos) u orbe.
+    const style = !pw ? '' : sp.expose ? 'wave' : (sp.dmg ?? 1) >= 1.3 || blast >= 40 ? 'comet' : sp.fast || sp.noWind || sp.pierce ? 'beam' : 'orb';
+    if (pw) this.cast(f, pw, style);
+    this.look = null; this.intro = 0;
     const n = sp.count ?? 1;
     for (let i = 0; i < n; i++) {
       const a = angle + (i - (n - 1) / 2) * (sp.spread ?? 0);
@@ -243,12 +286,42 @@ export class Battle {
       const v = speedOf(f.power) * (sp.fast ?? 1);
       this.shots.push({
         x, y, vx: Math.cos(rad(a)) * v, vy: -Math.sin(rad(a)) * v, dmg, blast, owner: f, sp,
-        age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40,
+        age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40, style,
       });
     }
     f.lunge = 1;                                      // se abalanza al disparar
     this.phase = 'flying';
     if (pw) sfx.special(); else sfx.shoot();
+  }
+
+  // Al lanzar un poder: ondas, partículas de su elemento y su emblema sobre la criatura.
+  cast(f, pw, style) {
+    const look = fxOf(f.species.element), cy = f.y - f.h * 0.5;
+    this.rings.push({ x: f.x, y: cy, r: f.h * 1.5, t: 0, max: 0.5, c: look.c[1], w: 4 });
+    this.rings.push({ x: f.x, y: cy, r: f.h * 2.3, t: -0.12, max: 0.6, c: look.c[2], w: 2 });
+    if (style === 'wave') for (let i = 0; i < 3; i++) this.rings.push({ x: f.x + f.dir * f.h * 0.4, y: f.y - f.h * 0.7, r: f.h * (2.6 + i), t: -0.1 * i, max: 0.7, c: '#ffffff', w: 3 });
+    this.spray(f.x, cy, f.species.element, 26);
+    this.casts.push({ f, icon: this.art.icon?.(pw.name), t: 0, max: 1 });
+    this.shake = Math.max(this.shake, style === 'wave' ? 7 : 3);
+  }
+
+  // Al impactar un poder: onda expansiva, más partículas y la marca de lo que provoca.
+  impact(s) {
+    const sp = s.sp, element = s.owner.species.element, look = fxOf(element), b = s.blast;
+    this.rings.push({ x: s.x, y: s.y, r: b * 2.2, t: 0, max: 0.5, c: look.c[1], w: 5 });
+    this.rings.push({ x: s.x, y: s.y, r: b * 3.3, t: -0.1, max: 0.65, c: look.c[2], w: 2.5 });
+    this.spray(s.x, s.y, element, b * 1.5);
+    if (s.style === 'comet') {                        // golpe gordo: columna de luz, cascotes y más temblor
+      this.pillars.push({ x: s.x, y: s.y, w: b * 1.2, t: 0, max: 0.7, c: look.c });
+      this.shake = Math.min(16, b / 2.4 + 4); this.flash = Math.max(this.flash, 0.22);
+      for (let i = 0; i < 16; i++) this.parts.push({ k: 'rock', x: s.x + rand(-b, b) * 0.5, y: s.y, vx: rand(-150, 150), vy: -rand(120, 330), g: 520, life: 0, max: rand(0.7, 1.3), c: look.c[i % 2], s: rand(3, 7), a: rand(0, 6) });
+    } else if (s.style === 'wave') {
+      for (let i = 0; i < 3; i++) this.rings.push({ x: s.x, y: s.y, r: b * (1.6 + i * 0.9), t: -0.08 * i, max: 0.6, c: '#ffffff', w: 3 });
+      this.shake = Math.max(this.shake, 8);
+    }
+    const mark = sp.freeze ? 'hielo' : sp.root ? 'raices' : sp.blind ? 'nubeOscura' : sp.poison ? 'burbujasVeneno' : sp.burn ? 'llamas' : sp.expose ? 'escudoRoto'
+      : sp.shock ? 'anilloRayo' : sp.crit ? 'estrellas' : sp.drain || sp.heal ? 'curar' : sp.push || sp.gust ? 'polvo' : '';
+    if (mark) this.puff(mark, s.x, s.y - b * 0.4, b * 3, 0.85, -16);
   }
 
   surrender() {
@@ -289,17 +362,17 @@ export class Battle {
   }
 
   carve(cx, cy, r) {
-    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++) {
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD - 1, Math.ceil(cx + r)); x++) {
       const dy = Math.sqrt(Math.max(0, r * r - (x - cx) ** 2)), g = this.terrain[x];
       if (g >= cy + dy) continue;                       // el suelo queda por debajo del hueco
-      this.terrain[x] = Math.min(this.H - 10, g >= cy - dy ? cy + dy : g + 2 * dy);
+      this.terrain[x] = Math.min(this.H - this.pad - 10, g >= cy - dy ? cy + dy : g + 2 * dy);
     }
     this.dirty = true;
   }
   mound(cx, r) {
-    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++) {
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD - 1, Math.ceil(cx + r)); x++) {
       const up = Math.sqrt(Math.max(0, r * r - (x - cx) ** 2)) * 1.25;
-      this.terrain[x] = Math.max(this.H - 320, this.terrain[x] - up);
+      this.terrain[x] = Math.max(this.H - this.pad - 360, this.terrain[x] - up);
     }
     this.dirty = true;
   }
@@ -314,6 +387,7 @@ export class Battle {
     this.shake = Math.min(9, s.blast / 5);
     this.flash = look.flash || 0.14;
     if (look.flash) this.puff('destello', s.x, s.y, s.blast * 3.2, 0.45);
+    if (s.style) this.impact(s);
     sfx.boom();
     for (const f of [this.player, this.rival]) {
       const d = Math.hypot(f.x - s.x, f.y - f.r - s.y);
@@ -346,7 +420,7 @@ export class Battle {
       if (sp.root) { f.rootNext = true; this.note(f, '¡Inmóvil!', '#d9b06a', 13); }
       if (sp.expose) { f.exposed = sp.expose; this.note(f, '¡Debilitado!', '#ff7a7a', 13); }
       if (sp.shock) { const lost = Math.min(f.mp, sp.shock); f.mp -= lost; if (lost) { this.note(f, `-${lost} MP`, '#7fe9ff', 12); this.puff('mana', f.x, f.y - f.h * 0.7, f.h * 0.7, 0.8, -34); } }
-      if (sp.push) f.x = clamp(f.x + (f.x >= me.x ? 1 : -1) * sp.push, 14, W - 14);
+      if (sp.push) f.x = clamp(f.x + (f.x >= me.x ? 1 : -1) * sp.push, 14, WORLD - 14);
     }
   }
 
@@ -408,7 +482,7 @@ export class Battle {
 
   tryMove(f, dir, dt) {
     if (f.fuel <= 0) return;
-    const dx = dir * 42 * dt, nx = clamp(f.x + dx, 14, W - 14);
+    const dx = dir * 42 * dt, nx = clamp(f.x + dx, 14, WORLD - 14);
     if (f.y - this.groundAt(nx + dir * 2) > 5) return; // cuesta demasiado empinada
     f.x = nx;
     f.fuel = Math.max(0, f.fuel - Math.abs(dx));
@@ -418,16 +492,21 @@ export class Battle {
   planAI() {
     const f = this.rival, tgt = this.player, left = tgt.x < f.x;
     let best = null;
-    for (let i = 0; i < 80; i++) {
-      const angle = left ? rand(98, 172) : rand(8, 82), power = rand(25, 100);
+    const tryShot = (angle, power) => {
       const [x, y] = this.muzzle(f, angle);
       const end = this.trace(x, y, angle, power).end;
-      if (!end) continue;
+      if (!end) return;
       const d = Math.abs(end[0] - tgt.x) + Math.abs(end[1] - tgt.y) * 0.3;
       if (!best || d < best.d) best = { d, angle, power };
-    }
-    best = best || { angle: left ? 135 : 45, power: 60 };
-    const err = Math.max(1, 7 - f.pet.level * 0.45) * (f.blind ? 2.5 : 1);
+    };
+    for (let i = 0; i < 160; i++) tryShot(left ? rand(98, 172) : rand(8, 82), rand(25, 100));
+    for (let i = 0; best && i < 60; i++) tryShot(clamp(best.angle + rand(-5, 5), 0, 180), clamp(best.power + rand(-7, 7), 10, 100));
+    best = best || { angle: left ? 135 : 45, power: 70 };
+    // Como un jugador: el primer tiro es a ojo y va corrigiendo mientras el objetivo no se mueva.
+    if (f.aimedAt === undefined || Math.abs(tgt.x - f.aimedAt) > 30) f.tries = 0;
+    f.aimedAt = tgt.x;
+    const learn = Math.max(0.45, 1 - 0.2 * f.tries++);
+    const err = Math.max(1, 7 - f.pet.level * 0.45) * learn * clamp(520 / Math.abs(tgt.x - f.x), 0.5, 1) * (f.blind ? 2.5 : 1);
     f.angle = clamp(best.angle + rand(-err, err), 0, 180);
     f.power = clamp(best.power + rand(-err, err) * 1.2, 10, 100);
   }
@@ -464,19 +543,21 @@ export class Battle {
       f.y = f.y < g ? Math.min(g, f.y + 220 * dt) : g;
     }
     this.fx = this.fx.filter(e => (e.t += dt) < 0.45);
+    for (const list of ['rings', 'pillars', 'casts']) this[list] = this[list].filter(e => (e.t += dt) < e.max);
+    this.updateCam(dt);
     this.texts = this.texts.filter(e => (e.t += dt) < 1.2);
     for (const q of this.parts) { q.life += dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
     this.parts = this.parts.filter(q => q.life < q.max);
     this.birds.forEach((b, i) => {
       if (b.away > 0) { if ((b.away -= dt) <= 0) Object.assign(b, this.newBird(i)); return; }
       b.x += b.v * b.dir * dt;
-      if (b.x < -30 || b.x > W + 30) Object.assign(b, this.newBird(i));
+      if (b.x < -30 || b.x > WORLD + 30) Object.assign(b, this.newBird(i));
     });
 
     if (this.phase === 'aim') {
       const f = this.turn;
       if (f.isPlayer) {
-        this.clock -= dt;
+        if (this.intro <= 0) this.clock -= dt;         // el reloj espera a que la cámara llegue
         if (this.clock <= 5 && Math.ceil(this.clock) < this.beep) { this.beep = Math.ceil(this.clock); sfx.tap(); }
         if (this.clock <= 0) {                         // se acabó el tiempo: pierde el turno
           this.clock = 0; this.pull = null; this.armed = -1; this.moveTarget = null;
@@ -503,11 +584,11 @@ export class Battle {
       s.vy += (GRAVITY - this.lift(s.x)) * dt;
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (Math.round(s.age / dt) % 3 === 0) { s.trail.push([s.x, s.y]); if (s.trail.length > 10) s.trail.shift(); }
-      if (Math.round(s.age / dt) % 6 === 0) {         // estela con el aspecto de su elemento
+      if (Math.round(s.age / dt) % (s.style ? 2 : 6) === 0) {   // estela con el aspecto de su elemento (más densa en los poderes)
         const look = fxOf(s.owner.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
-        this.parts.push({ k: kind, x: s.x, y: s.y, vx: rand(-12, 12), vy: rand(-12, 12), g: kind === 'drop' || kind === 'rock' ? 160 : kind === 'ember' || kind === 'flame' ? -40 : 0, life: 0, max: rand(0.25, 0.5), c: look.c[Math.floor(rand(0, 3))], s: rand(1.5, 3), a: rand(0, 6) });
+        this.parts.push({ k: kind, x: s.x, y: s.y, vx: rand(-12, 12), vy: rand(-12, 12), g: kind === 'drop' || kind === 'rock' ? 160 : kind === 'ember' || kind === 'flame' ? -40 : 0, life: 0, max: rand(0.25, 0.5), c: look.c[Math.floor(rand(0, 3))], s: s.style ? rand(3, 5.5) : rand(1.5, 3), a: rand(0, 6) });
       }
-      if (s.x < -80 || s.x > W + 80 || s.y > this.H + 30) { s.dead = true; continue; }
+      if (s.x < -80 || s.x > WORLD + 80 || s.y > this.H + 30) { s.dead = true; continue; }
       const rock = this.rockAt(s.x, s.y);
       if (rock) { this.hitRock(rock, s); continue; }
       const bird = this.birds.find(b => b.away <= 0 && Math.hypot(b.x - s.x, b.y - s.y) < 9);
@@ -521,7 +602,7 @@ export class Battle {
         if (f === s.owner && s.age < 0.3) continue;
         if (Math.hypot(f.x - s.x, f.y - f.r - s.y) < f.r + 3) { this.explode(s); break; }
       }
-      if (s.dead || s.x < 0 || s.x >= W || s.y < this.groundAt(s.x)) continue;
+      if (s.dead || s.x < 0 || s.x >= WORLD || s.y < this.groundAt(s.x)) continue;
       if (s.pierceLeft > 0) {                       // perfora el terreno
         this.carve(s.x, s.y, 7);
         s.pierceLeft -= Math.hypot(s.vx, s.vy) * dt;
@@ -559,6 +640,22 @@ export class Battle {
     }
   }
 
+  // La cámara sigue al disparo; si no hay, a quien le toca (un poco adelantada hacia su rival)
+  // o a donde el jugador esté mirando con el minimapa. Tras un impacto se queda mirándolo.
+  updateCam(dt) {
+    const cam = this.cam, f = this.turn, shot = this.shots[0];
+    let fx, fy, speed = 3;
+    if (this.intro > 0) { this.intro -= dt; fx = this.rival.x; fy = this.rival.y - this.rival.h * 0.5; }
+    else if (shot) { fx = shot.x + shot.vx * 0.16; fy = shot.y; speed = 8; }
+    else if (this.phase === 'over') { const win = this.rival.hp <= 0 ? this.player : this.rival; fx = win.x; fy = win.y - win.h * 0.5; }
+    else if (this.phase !== 'aim') return;
+    else if (this.look) { fx = this.look.x; fy = this.groundAt(this.look.x) - 50; speed = 10; }
+    else { fx = f.x + Math.sign(this.other(f).x - f.x) * W * 0.2; fy = f.y - f.h * 0.5; }
+    const k = 1 - Math.exp(-speed * dt);
+    cam.x += (clamp(fx - W / 2, 0, WORLD - W) - cam.x) * k;
+    cam.y += (clamp(fy - (this.VH - this.pad) * 0.6, 0, this.H - this.VH) - cam.y) * k;
+  }
+
   // --- Dibujo ---
 
   renderGround() {
@@ -566,8 +663,8 @@ export class Battle {
     const [rock, rock2, edge, top, light] = this.map.terrain;
     const H = this.H;
     g.setTransform(2, 0, 0, 2, 0, 0);
-    g.clearRect(0, 0, W, H);
-    for (let x = 0; x < W; x += 2) {
+    g.clearRect(0, 0, WORLD, H);
+    for (let x = 0; x < WORLD; x += 2) {
       const y = Math.round(this.terrain[x]);
       g.fillStyle = rock; g.fillRect(x, y, 2, H - y);
       g.fillStyle = rock2; g.fillRect(x, y + 9, 2, 10 + ((x * 7) % 5) * 3);
@@ -609,15 +706,16 @@ export class Battle {
       ctx.beginPath(); ctx.moveTo(b.x - 6, b.y + up); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x + 6, b.y + up); ctx.stroke();
       ctx.fillStyle = '#ffd76a'; ctx.fillRect(b.x + b.dir * 2 - 1, b.y - 1, 2, 2);
     }
-    if (this.snow.length) {                           // nieve arrastrada por el viento
-      ctx.fillStyle = 'rgba(255,255,255,.75)';
-      const wind = this.windNow();
-      for (const s of this.snow) {
-        s.x += wind * 0.22; s.y += s.v * 0.016;
-        if (s.y > H) { s.y = -4; s.x = rand(0, W); }
-        if (s.x > W + 4) s.x = -4; else if (s.x < -4) s.x = W + 4;
-        ctx.fillRect(s.x, s.y, 2, 2);
-      }
+  }
+  drawSnow(ctx) {                                     // nieve arrastrada por el viento (pegada a la pantalla)
+    if (!this.snow.length) return;
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    const wind = this.windNow();
+    for (const s of this.snow) {
+      s.x += wind * 0.22; s.y += s.v * 0.016;
+      if (s.y > this.VH) { s.y = -4; s.x = rand(0, W); }
+      if (s.x > W + 4) s.x = -4; else if (s.x < -4) s.x = W + 4;
+      ctx.fillRect(s.x, s.y, 2, 2);
     }
   }
 
@@ -734,19 +832,125 @@ export class Battle {
     }
   }
 
+  // Proyectil: los disparos normales son un cuadradito; los de un poder llevan cola, halo y forma propia.
+  drawShot(ctx, sh) {
+    const look = fxOf(sh.owner.species.element), color = look.c[1], size = sh.big ? 8 : 6;
+    sh.trail.forEach((q, i) => { ctx.globalAlpha = (i + 1) / sh.trail.length * 0.6; ctx.fillStyle = color; ctx.fillRect(q[0] - 2, q[1] - 2, 4, 4); });
+    ctx.globalAlpha = 1;
+    if (!sh.style) {
+      ctx.fillStyle = color; ctx.fillRect(sh.x - size / 2, sh.y - size / 2, size, size);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(sh.x - size / 4, sh.y - size / 4, size / 2, size / 2);
+      return;
+    }
+    const a = Math.atan2(sh.vy, sh.vx), pulse = 1 + Math.sin(this.t * 30) * 0.12;
+    const R = sh.style === 'comet' ? 20 : sh.style === 'beam' ? 9 : 12, len = (sh.style === 'beam' ? 130 : sh.style === 'comet' ? 115 : 56) * (0.9 + Math.sin(this.t * 41) * 0.1);
+    ctx.save();
+    ctx.translate(sh.x, sh.y); ctx.rotate(a);
+    const halo = ctx.createRadialGradient(0, 0, 1, 0, 0, R * 2.6 * pulse);
+    halo.addColorStop(0, '#ffffff'); halo.addColorStop(0.3, look.c[1] + 'dd'); halo.addColorStop(1, look.c[0] + '00');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(0, 0, R * 2.6 * pulse, 0, 6.3); ctx.fill();
+    for (const [k, c, alpha] of [[1, look.c[0], 0.8], [0.68, look.c[1], 0.92], [0.36, '#ffffff', 0.95]]) {   // cola en tres capas
+      ctx.globalAlpha = alpha; ctx.fillStyle = c;
+      ctx.beginPath(); ctx.moveTo(R * 0.3, -R * 0.95 * k); ctx.lineTo(-len * (0.55 + 0.45 * k), 0); ctx.lineTo(R * 0.3, R * 0.95 * k); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (sh.style === 'wave') {                        // rugido: medias lunas que avanzan
+      ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        ctx.globalAlpha = 1 - i * 0.28; ctx.lineWidth = 3.4 - i * 0.7;
+        ctx.beginPath(); ctx.arc(-i * 10 - 6, 0, 10 + i * 5, -0.95, 0.95); ctx.stroke();
+      }
+    } else {                                          // núcleo en píxel, girando
+      for (const [k, c] of [[0.8, '#120c24'], [0.68, look.c[1]], [0.4, '#ffffff']]) {   // cabeza redonda hecha de franjas
+        ctx.fillStyle = c;
+        for (let yy = -R * k; yy < R * k; yy += 2) { const half = Math.sqrt(Math.max(0, (R * k) ** 2 - (yy + 1) ** 2)); ctx.fillRect(-half, yy, half * 2, 2); }
+      }
+    }
+    ctx.restore();
+  }
+
+  // Adornos de los poderes: columnas de luz, ondas expansivas y el emblema del poder sobre quien lo lanza.
+  drawPowerFx(ctx) {
+    for (const p of this.pillars) {
+      const u = p.t / p.max, w = p.w * (1 - u * 0.8), top = p.y - 340;
+      const g = ctx.createLinearGradient(0, p.y, 0, top);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.25, p.c[1] + 'dd'); g.addColorStop(1, p.c[0] + '00');
+      ctx.globalAlpha = 1 - u; ctx.fillStyle = g;
+      ctx.fillRect(p.x - w / 2, top, w, p.y - top + 6);
+    }
+    for (const r of this.rings) {
+      if (r.t <= 0) continue;
+      const u = r.t / r.max, rad2 = r.r * (1 - (1 - u) ** 2.2);
+      ctx.globalAlpha = 1 - u; ctx.strokeStyle = r.c; ctx.lineWidth = r.w * (1 - u * 0.6);
+      ctx.beginPath(); ctx.ellipse(r.x, r.y, rad2, rad2 * 0.82, 0, 0, 6.3); ctx.stroke();
+    }
+    for (const c of this.casts) {
+      if (!c.icon) continue;
+      const u = c.t / c.max, pop = u < 0.18 ? u / 0.18 : 1, size = 46 * (0.35 + 0.65 * pop) * (1 + Math.max(0, 0.18 - u) * 1.4);
+      ctx.globalAlpha = u > 0.7 ? (1 - u) / 0.3 : 1;
+      ctx.drawImage(c.icon, c.f.x - size / 2, c.f.y - c.f.h - 40 - u * 16 - size / 2, size, size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Minimapa con el campo entero, los dos bandos, los disparos y el trozo que se está viendo.
+  drawMini(ctx) {
+    const m = this.mini(), cam = this.cam, bottom = m.y + m.h;
+    const my = y => clamp(m.y + (y - m.y0) * m.k, m.y, bottom);
+    ctx.fillStyle = 'rgba(8,6,24,.74)'; ctx.fillRect(m.x - 3, m.y - 3, m.w + 6, m.h + 6);
+    ctx.fillStyle = this.map.terrain[3] || '#8a7aa8';
+    for (let i = 0; i < m.w; i += 2) { const y = my(this.terrain[Math.min(WORLD - 1, Math.round(i / m.k))]); ctx.fillRect(m.x + i, y, 2, bottom - y); }
+    ctx.fillStyle = '#cfd3e6';
+    for (const r of this.rocks) ctx.fillRect(m.x + (r.x - r.rx) * m.k, my(r.y), Math.max(3, r.rx * 2 * m.k), 2);
+    for (const [f, c] of [[this.rival, '#ff5a5a'], [this.player, '#6fe36a']]) {
+      ctx.fillStyle = '#0a0720'; ctx.fillRect(m.x + f.x * m.k - 3.5, my(f.y) - 7.5, 7, 7);
+      ctx.fillStyle = c; ctx.fillRect(m.x + f.x * m.k - 2.5, my(f.y) - 6.5, 5, 5);
+    }
+    ctx.fillStyle = '#ffffff';
+    for (const sh of this.shots) ctx.fillRect(m.x + clamp(sh.x, 0, WORLD) * m.k - 1.5, my(sh.y) - 1.5, 3, 3);
+    ctx.strokeStyle = this.look ? '#ffd76a' : 'rgba(255,255,255,.85)'; ctx.lineWidth = 1;
+    ctx.strokeRect(m.x + cam.x * m.k, my(cam.y), W * m.k, Math.max(4, my(cam.y + this.VH) - my(cam.y)));
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.strokeRect(m.x - 3, m.y - 3, m.w + 6, m.h + 6);
+  }
+
+  // Flechas en el borde hacia lo que queda fuera de la pantalla: el otro bando y los disparos altos.
+  drawEdges(ctx) {
+    const cam = this.cam, VH = this.VH;
+    for (const [f, c] of [[this.rival, '#ff5a5a'], [this.player, '#6fe36a']]) {
+      const vx = f.x - cam.x;
+      if (vx > -10 && vx < W + 10) continue;
+      const side = vx < 0 ? -1 : 1, x = side < 0 ? 12 : W - 12, y = clamp(f.y - f.h * 0.5 - cam.y, 70, VH - this.pad - 30) + Math.sin(this.t * 5) * 2;
+      ctx.fillStyle = '#0a0720'; ctx.beginPath(); ctx.moveTo(x + side * 9, y); ctx.lineTo(x - side * 7, y - 11); ctx.lineTo(x - side * 7, y + 11); ctx.fill();
+      ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + side * 6, y); ctx.lineTo(x - side * 5, y - 7.5); ctx.lineTo(x - side * 5, y + 7.5); ctx.fill();
+      ctx.font = '800 10px system-ui, sans-serif'; ctx.textAlign = side < 0 ? 'left' : 'right';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#0a0720';
+      const label = `${Math.round(Math.abs(f.x - this.other(f).x))}`;
+      ctx.strokeText(label, x - side * 11, y + 3.5); ctx.fillStyle = '#fff6d8'; ctx.fillText(label, x - side * 11, y + 3.5);
+    }
+    ctx.fillStyle = '#ffffff';
+    for (const sh of this.shots) {
+      if (sh.y >= cam.y) continue;
+      const x = clamp(sh.x - cam.x, 10, W - 10);
+      ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x - 6, 13); ctx.lineTo(x + 6, 13); ctx.fill();
+    }
+  }
+
   draw() {
     const { ctx, w, dpr } = fit(this.canvas);
-    const s = w / W, H = this.H, img = this.map.img;
+    const s = w / W, H = this.H, VH = this.VH, img = this.map.img, cam = this.cam;
     if (this.dirty) this.renderGround();
     ctx.save();
     ctx.scale(s, s);
     if (this.shake > 0.3) ctx.translate(rand(-this.shake, this.shake), rand(-this.shake, this.shake));
-    const bk = Math.max((W + 20) / img.width, (H + 16) / img.height); // el fondo cubre todo el campo
-    ctx.drawImage(img, (W - img.width * bk) / 2, (H - img.height * bk) * 0.3, img.width * bk, img.height * bk);
+    // El fondo se mueve menos que el suelo: da sensación de distancia.
+    const bk = Math.max((W + 170) / img.width, (VH + 70) / img.height), bw = img.width * bk, bh = img.height * bk;
+    const px = cam.x / (WORLD - W), py = H > VH ? cam.y / (H - VH) : 1;
+    ctx.drawImage(img, -20 - (bw - W - 40) * px, -20 - (bh - VH - 40) * py, bw, bh);
 
     // Rachas de viento: más y más rápidas cuanto más sopla
     const wind = this.windNow(), want = Math.round(Math.abs(wind) * 2);
-    while (this.gusts.length < want) this.gusts.push({ x: rand(0, W), y: rand(20, H * 0.62), len: rand(14, 34) });
+    while (this.gusts.length < want) this.gusts.push({ x: rand(0, W), y: rand(20, VH * 0.62), len: rand(14, 34) });
     this.gusts.length = Math.min(this.gusts.length, want);
     ctx.strokeStyle = 'rgba(255,255,255,.34)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -757,8 +961,11 @@ export class Battle {
     }
     ctx.stroke();
 
+    // --- El campo, visto desde la cámara ---
+    ctx.save();
+    ctx.translate(-cam.x, -cam.y);
     this.drawHazards(ctx);
-    ctx.drawImage(this.ground, 0, 0, W, H);
+    ctx.drawImage(this.ground, cam.x * 2, cam.y * 2, W * 2, VH * 2, cam.x, cam.y, W, VH);
     for (const f of [this.rival, this.player]) this.drawFighter(ctx, f, s * dpr);
 
     // Tirachinas: goma, potencia y guía de tiro (más larga cuanto más Puntería)
@@ -784,7 +991,7 @@ export class Battle {
       ctx.beginPath(); ctx.arc(cx - Math.cos(a) * back, cy + Math.sin(a) * back, 4, 0, Math.PI * 2); ctx.fill();
       if (!p.blind || p.sight) {
         const [mx, my] = this.muzzle(p, p.angle);
-        const pts = this.trace(mx, my, p.angle, p.power, p.sight ? 400 : Math.min(60, p.prof.guide)).pts;
+        const pts = this.trace(mx, my, p.angle, p.power, p.sight ? 500 : Math.min(60, p.prof.guide)).pts;
         pts.forEach((q, i) => { ctx.globalAlpha = 1 - (i / pts.length) * 0.75; ctx.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); });
         ctx.globalAlpha = 1;
       }
@@ -797,13 +1004,7 @@ export class Battle {
       ctx.fillStyle = '#7fe9ff'; ctx.fillRect(this.moveTarget - 1, this.groundAt(this.moveTarget) - 9, 2, 9);
     }
 
-    for (const sh of this.shots) {
-      const color = fxOf(sh.owner.species.element).c[1], size = sh.big ? 8 : 6;
-      sh.trail.forEach((q, i) => { ctx.globalAlpha = (i + 1) / sh.trail.length * 0.6; ctx.fillStyle = color; ctx.fillRect(q[0] - 2, q[1] - 2, 4, 4); });
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = color; ctx.fillRect(sh.x - size / 2, sh.y - size / 2, size, size);
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(sh.x - size / 4, sh.y - size / 4, size / 2, size / 2);
-    }
+    for (const sh of this.shots) this.drawShot(ctx, sh);
 
     // Explosiones en "píxel": círculos hechos de franjas
     for (const e of this.fx) {
@@ -819,8 +1020,8 @@ export class Battle {
       }
       ctx.globalAlpha = 1;
     }
+    this.drawPowerFx(ctx);
     this.drawParts(ctx);
-    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(0.6, this.flash * 2.4)})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
 
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     for (const e of this.texts) {
@@ -830,12 +1031,22 @@ export class Battle {
       ctx.strokeText(e.text, e.x, e.y - e.t * 22);
       ctx.fillStyle = e.color; ctx.fillText(e.text, e.x, e.y - e.t * 22);
     }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // --- Pegado a la pantalla ---
+    this.drawSnow(ctx);
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(0.6, this.flash * 2.4)})`; ctx.fillRect(-20, -20, W + 40, VH + 40); }
+    ctx.lineJoin = 'round';
+    this.drawEdges(ctx);
+    this.drawMini(ctx);
     if (this.banner) {
+      const m = this.mini();
       ctx.globalAlpha = Math.min(1, this.banner.t * 2.5);
-      ctx.font = '900 24px system-ui, sans-serif';
+      ctx.font = '900 24px system-ui, sans-serif'; ctx.textAlign = 'center';
       ctx.lineWidth = 6; ctx.strokeStyle = '#120c24';
-      ctx.strokeText(this.banner.text, W / 2, 60);
-      ctx.fillStyle = '#ffd76a'; ctx.fillText(this.banner.text, W / 2, 60);
+      ctx.strokeText(this.banner.text, W / 2, m.y + m.h + 36);
+      ctx.fillStyle = '#ffd76a'; ctx.fillText(this.banner.text, W / 2, m.y + m.h + 36);
     }
     ctx.globalAlpha = 1;
     ctx.restore();
