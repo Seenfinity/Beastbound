@@ -161,7 +161,18 @@ function buildArt() {
     bits.push(`<i class="piece ${cls}" style="left:${pct(x0, ART.w)};top:${pct(y0, ART.h)};width:${pct(w, ART.w)};height:${pct(h, ART.h)};background-size:${(ART.w / w) * 100}% ${(ART.h / h) * 100}%;background-position:${(x0 / (ART.w - w)) * 100}% ${(y0 / (ART.h - h)) * 100}%;--t:${t}s;--d:${d}s"></i>`);
   }
   GLOWS.forEach(([x, y, w, r, c, cls], i) => bits.push(`<i class="glow ${cls}" style="--x:${pct(x, ART.w)};--y:${pct(y, ART.h)};--w:${pct(w, ART.w)};--r:${r};--c:${c};--t:${(2.2 + (i * 0.37) % 1.9).toFixed(2)}s;--d:${(-(i * 0.71) % 3).toFixed(2)}s"></i>`));
-  for (let i = 0; i < 18; i++) bits.push(`<i class="spark" style="--x:${pct(rand(810, 1190), ART.w)};--y:${pct(rand(185, 640), ART.h)};--s:${rand(0.7, 1.7).toFixed(2)}%;--t:${rand(1.8, 3.6).toFixed(2)}s;--d:${(-rand(0, 3.5)).toFixed(2)}s"></i>`);
+  // Destellos: muchos en la cúpula central (morados) y unos pocos en las de los lados (cálidos y fríos).
+  const spark = (x0, x1, y0, y1, c) => bits.push(`<i class="spark" style="--x:${pct(rand(x0, x1), ART.w)};--y:${pct(rand(y0, y1), ART.h)};--s:${rand(1, 2.6).toFixed(2)}%;--c:${c};--t:${rand(1.5, 3.2).toFixed(2)}s;--d:${(-rand(0, 3.2)).toFixed(2)}s"></i>`);
+  for (let i = 0; i < 22; i++) {                     // alrededor de la cría, sin taparle la cara
+    let x, y;
+    do { x = rand(805, 1195); y = rand(180, 650); } while (((x - 995) / 150) ** 2 + ((y - 410) / 190) ** 2 < 1);
+    spark(x, x, y, y, '#d9c2ff');
+  }
+  for (let i = 0; i < 6; i++) spark(525, 705, 330, 600, '#ffcf8a');
+  for (let i = 0; i < 6; i++) spark(1320, 1500, 320, 620, '#bfe6ff');
+  // Motas de luz que suben flotando por la sala.
+  for (let i = 0; i < 30; i++) bits.push(`<i class="mote" style="--x:${pct(rand(0, ART.w), ART.w)};--y:${pct(rand(260, 860), ART.h)};--s:${rand(0.45, 1.1).toFixed(2)}%;--c:${['#ffd98a', '#c9a8ff', '#8fd0ff'][i % 3]};--dx:${rand(-3, 3).toFixed(1)}vw;--t:${rand(6, 12).toFixed(1)}s;--d:${(-rand(0, 12)).toFixed(1)}s"></i>`);
+  bits.push('<i class="shine"></i>');
   art.innerHTML = bits.join('');
   // La capa se coloca igual que lo haría un fondo «cover», para que todo lo de encima case con el dibujo.
   const hero = art.parentElement, narrow = matchMedia('(max-width: 860px)');
