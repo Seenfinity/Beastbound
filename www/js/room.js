@@ -309,6 +309,17 @@ export class Room {
       }
     }
 
+    // Deseo: una nube de pensamiento con lo que pide
+    const wish = !m && !this.asleep && !this.bubble && !this.evolveReady ? this.hooks.wish?.() : null;
+    if (wish) {
+      const wx = c.x + c.dir * this.size * 0.42, wy = FLOOR - this.size - 92 + Math.sin(this.t * 2) * 5 - c.lift * 0.4;
+      ctx.fillStyle = '#ffffff';
+      for (const [dx, dy, r] of [[0, 0, 50], [-38, 14, 30], [38, 12, 32], [-10, -24, 34], [22, -22, 30]]) { ctx.beginPath(); ctx.arc(wx + dx, wy + dy, r, 0, 7); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(wx - c.dir * 46, wy + 62, 12, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(wx - c.dir * 64, wy + 84, 7, 0, 7); ctx.fill();
+      this.drawIcon(ctx, wish, wx, wy, 66);
+    }
+
     for (const p of this.parts) {
       ctx.globalAlpha = Math.min(1, (p.max - p.life) * 3);
       if (p.text) this.text(ctx, p.text, p.x, p.y, p.size, '#cfe0ff');

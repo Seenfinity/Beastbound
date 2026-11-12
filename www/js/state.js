@@ -1,6 +1,6 @@
 // Reglas de crianza y partida guardada. Aquí no se dibuja nada.
 
-import { ROSTER, speciesOf } from './roster.js';
+import { ROSTER, speciesOf, matchup } from './roster.js';
 import { EVENTS } from './events.js';
 
 // Partida guardada. Con ?slot=nombre en la dirección se usa una partida aparte (útil para probar sin tocar la tuya).
@@ -35,6 +35,54 @@ export const MASTERY = {
   agi: { name: 'Maestría de Agilidad', desc: 'Recarga el especial un turno antes.' },
 };
 
+// Rasgo: cada individuo nace con uno, aunque sea de la misma especie.
+export const QUIRKS = {
+  gloton: { name: 'Glotón', desc: 'Le entra hambre antes, pero tiene 10 de vida más.' },
+  dormilon: { name: 'Dormilón', desc: 'Recobra la energía un 50% más rápido.' },
+  jugueton: { name: 'Juguetón', desc: 'Jugar le sube mucho más el ánimo.' },
+  duro: { name: 'Duro', desc: 'Se recupera de los combates un 25% antes.' },
+  listo: { name: 'Listo', desc: 'Gana un 10% más de experiencia.' },
+  mimoso: { name: 'Mimoso', desc: 'Las caricias le dan el doble de vínculo.' },
+};
+
+// Deseos: de vez en cuando pide algo; cumplirlo a tiempo sube el vínculo.
+export const WISHES = {
+  play: { text: 'Quiere jugar a la pelota', icon: 'pelota' },
+  pet: { text: 'Quiere mimos', icon: 'corazon' },
+  food: { text: 'Se le antoja comer algo', icon: 'filete' },
+  sleep: { text: 'Tiene sueño', icon: 'luna' },
+  train: { text: 'Quiere entrenar', icon: 'pesa' },
+  fight: { text: 'Quiere pelear', icon: 'espadas' },
+};
+
+// Objetos de combate: se compran en la tienda y se usan uno por turno, sin gastar el turno.
+export const ITEMS = {
+  pocion: { name: 'Poción', desc: 'Recupera el 30% de la vida.', price: 25, icon: 'botiquin' },
+  elixir: { name: 'Elixir', desc: 'Recupera 15 MP.', price: 20, icon: 'rayo' },
+  escudo: { name: 'Escudo de un uso', desc: 'El próximo golpe que reciba hace la mitad de daño.', price: 20, icon: 'escudo' },
+  mira: { name: 'Mira', desc: 'Este turno ves la trayectoria completa.', price: 15, icon: 'diana' },
+};
+
+// Misiones diarias: una de cuidado, una de entrenamiento y una de combate.
+// ok(pet) dice si tiene sentido proponerla hoy; on(evento) cuánto avanza con cada cosa que pasa.
+const yes = v => (v ? 1 : 0);
+export const MISSIONS = {
+  fav: { cat: 'care', text: 'Descubre cuál es su comida favorita', goal: 1, coins: 25, ok: p => !p.favKnown, on: e => yes(e.type === 'feed' && e.loved) },
+  favfeed: { cat: 'care', text: 'Dale su comida favorita', goal: 1, coins: 15, ok: p => p.favKnown, on: e => yes(e.type === 'feed' && e.loved) },
+  strokes: { cat: 'care', text: 'Acaríciala 10 veces', goal: 10, coins: 15, on: e => yes(e.type === 'stroke') },
+  catch: { cat: 'care', text: 'Que atrape la pelota 3 veces', goal: 3, coins: 15, on: e => yes(e.type === 'catch') },
+  wish: { cat: 'care', text: 'Cumple uno de sus deseos', goal: 1, coins: 25, on: e => yes(e.type === 'wish') },
+  perfect: { cat: 'train', text: 'Saca «Perfecto» en un minijuego', goal: 1, coins: 25, on: e => yes(e.type === 'train' && e.grade === 'perfecto') },
+  weak: { cat: 'train', text: 'Entrena su estadística más baja', goal: 1, coins: 20, on: e => yes(e.type === 'train' && e.gained && e.wasLowest) },
+  train2: { cat: 'train', text: 'Mejora dos veces entrenando', goal: 2, coins: 20, on: e => yes(e.type === 'train' && e.gained) },
+  win: { cat: 'fight', text: 'Gana un combate', goal: 1, coins: 25, on: e => yes(e.type === 'battle' && e.win) },
+  diana: { cat: 'fight', text: 'Acierta 2 dianas en combate', goal: 2, coins: 30, on: e => (e.type === 'battle' ? e.dianas || 0 : 0) },
+  power: { cat: 'fight', text: 'Acierta 2 poderes en combate', goal: 2, coins: 30, ok: p => p.level >= 2, on: e => (e.type === 'battle' ? e.powerHits || 0 : 0) },
+  clean: { cat: 'fight', text: 'Gana conservando más de media vida', goal: 1, coins: 35, on: e => yes(e.type === 'battle' && e.win && e.hpLeft > 0.5) },
+  under: { cat: 'fight', text: 'Gana a un rival con ventaja de elemento sobre ti', goal: 1, coins: 45, on: e => yes(e.type === 'battle' && e.win && e.disadvantage) },
+};
+export const MISSION_BONUS = 40;
+
 // Requisitos para evolucionar: nivel y días de vida. [Baby→Teen, Teen→Final]
 export const EVOLVE = [{ level: 4, days: 3 }, { level: 10, days: 14 }];
 
@@ -57,6 +105,10 @@ function attach(g) {
   return g;
 }
 
+// Color propio: casi siempre una variación suave; una de cada diez veces, un color raro.
+export const rollHue = () => (Math.random() < 0.1 ? pick([120, 180, -120]) : Math.round(Math.random() * 56 - 28));
+export const isRare = pet => Math.abs(pet.hue || 0) > 60;
+
 function makePet(species, name) {
   const now = Date.now(), sp = speciesOf(species), foods = Object.keys(FOODS), fav = pick(foods);
   return {
@@ -66,6 +118,7 @@ function makePet(species, name) {
     char: '', mastery: '', fav, hate: pick(foods.filter(f => f !== fav)), favKnown: false, hateKnown: false,
     axes: { carino: 0, disciplina: 0, bravura: 0, descuido: 0 },
     diet: { pot: 0, agu: 0, agi: 0 }, trained: { pot: 0, agu: 0, pun: 0, agi: 0 },
+    quirk: pick(Object.keys(QUIRKS)), hue: rollHue(), wish: null, nextWish: 0,
     day: today(), trainsToday: 0, playsToday: 0, strokesToday: 0,
     diary: [{ t: now, text: `${name} salió del huevo.` }],
   };
@@ -78,7 +131,7 @@ export function newGame() {
   return attach({
     v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
-    lastTrain: null, testMode: true,
+    lastTrain: null, testMode: true, items: { pocion: 1, elixir: 0, escudo: 0, mira: 1 }, news: [],
   });
 }
 
@@ -94,7 +147,10 @@ export function load() {
   try {
     const g = JSON.parse(localStorage.getItem(KEY));
     if (!(g && g.v === 3 && Array.isArray(g.pets) && g.pets.every(p => speciesOf(p.species)))) return null;
-    g.defeats ||= {};                     // partidas guardadas antes de que existiera el contador
+    g.defeats ||= {};                     // partidas guardadas antes de que existieran estas cosas
+    g.items ||= { pocion: 1, elixir: 0, escudo: 0, mira: 1 };
+    g.news = [];
+    for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
     return attach(g);
   } catch {
     return null;
@@ -121,12 +177,12 @@ export function tick(g, now = Date.now()) {
   const elapsed = now - g.lastTick, h = elapsed / 3600000;
   if (h <= 0) return;
   for (const p of g.pets) {
-    const slow = p.asleep ? 0.5 : 1;
-    const badHours = Math.max(0, h - Math.min(p.hunger / (5 * slow), p.mood / (3 * slow)));
-    const starving = Math.max(0, h - p.hunger / (5 * slow)); // horas con la barriga a cero
-    p.hunger = clamp(p.hunger - 5 * slow * h);
+    const slow = p.asleep ? 0.5 : 1, hungry = 5 * slow * (p.quirk === 'gloton' ? 1.3 : 1);
+    const badHours = Math.max(0, h - Math.min(p.hunger / hungry, p.mood / (3 * slow)));
+    const starving = Math.max(0, h - p.hunger / hungry); // horas con la barriga a cero
+    p.hunger = clamp(p.hunger - hungry * h);
     p.mood = clamp(p.mood - 3 * slow * h - 4 * starving);
-    p.energy = g.testMode ? 100 : clamp(p.energy + (p.asleep ? 40 : 12) * h); // en modo prueba no se cansa
+    p.energy = g.testMode ? 100 : clamp(p.energy + (p.asleep ? 40 : 12) * (p.quirk === 'dormilon' ? 1.5 : 1) * h); // en modo prueba no se cansa
     if (badHours > 0) { p.bond = clamp(p.bond - badHours); p.axes.descuido += badHours * 0.4; }
     if (p.asleep) {
       if (p.restUntil > now) p.restUntil = Math.max(now, p.restUntil - elapsed); // el descanso cuenta doble
@@ -139,6 +195,7 @@ export function tick(g, now = Date.now()) {
     rollDay(p);
   }
   g.lastTick = now;
+  updateWish(g, now);
 }
 
 // Acostarla o despertarla. Dormida no se puede jugar, entrenar ni pelear con ella,
@@ -150,7 +207,7 @@ export function toggleSleep(g) {
   if (p.asleep && sleepLeft(g) > 0) return { error: `${p.name} acaba de dormirse. Déjala descansar un poco.`, asleep: true };
   tick(g);
   p.asleep = want;
-  if (p.asleep) p.sleptAt = Date.now();
+  if (p.asleep) { p.sleptAt = Date.now(); grant(g, 'sleep'); }
   return { asleep: p.asleep };
 }
 
@@ -163,6 +220,82 @@ export function claimDaily(g) {
   g.coins += coins;
   g.pet.bond = clamp(g.pet.bond + 3);
   return { coins, streak: g.streak };
+}
+
+// --- Deseos ---
+
+const wishGap = test => (test ? 40e3 + Math.random() * 30e3 : (40 + Math.random() * 50) * 60e3);
+// Se llama al avanzar el tiempo: caduca el deseo si no se cumplió y, cuando toca, le da uno nuevo que tenga sentido ahora.
+function updateWish(g, now) {
+  const p = g.pet;
+  if (!p) return;
+  if (p.wish && now > p.wish.until) { p.wish = null; p.mood = clamp(p.mood - 4); p.nextWish = now + wishGap(g.testMode); }
+  if (!p.nextWish) p.nextWish = now + wishGap(g.testMode);
+  if (p.wish || p.asleep || now < p.nextWish) return;
+  const options = ['pet', 'play'];
+  if (p.hunger < 85) options.push('food');
+  if (restLeft(p) > 0 || p.energy < 50) options.push('sleep');
+  if (trainsLeft(g) > 0 && p.energy >= TRAIN_ENERGY) options.push('train');
+  if (!restLeft(p) && p.energy >= FIGHT_ENERGY) options.push('fight');
+  p.wish = { type: pick(options), until: now + (g.testMode ? 70e3 : 15 * 60e3), got: 0 };
+}
+// Cumple el deseo si lo que acaba de pasar es lo que pedía (los mimos piden 5 caricias).
+function grant(g, type) {
+  const p = g.pet, w = p.wish;
+  if (!w || w.type !== type) return false;
+  if (type === 'pet' && ++w.got < 5) return false;
+  p.wish = null;
+  p.nextWish = Date.now() + wishGap(g.testMode);
+  p.bond = clamp(p.bond + 3); p.mood = clamp(p.mood + 8); p.axes.carino += 1;
+  log(g, `Cumpliste su deseo: ${WISHES[type].text.toLowerCase()}.`);
+  news(g, `¡Deseo cumplido! Sube el vínculo con ${p.name}.`);
+  track(g, { type: 'wish' });
+  return true;
+}
+
+// --- Misiones y avisos ---
+
+// Avisos para enseñar en pantalla (misión cumplida, deseo cumplido…). main.js los va sacando.
+function news(g, text) { (g.news ||= []).push(text); }
+
+// Las tres misiones de hoy, con su texto y recompensa. Se eligen al empezar el día según la criatura activa.
+export function dailyMissions(g) {
+  if (g.missionsDay !== today() || !g.missions) {
+    const p = g.pet;
+    g.missionsDay = today(); g.missionsBonus = false;
+    g.missions = ['care', 'train', 'fight'].map(cat => {
+      const pool = Object.keys(MISSIONS).filter(id => MISSIONS[id].cat === cat && (!MISSIONS[id].ok || MISSIONS[id].ok(p)));
+      return { id: pick(pool), got: 0, done: false };
+    });
+  }
+  return g.missions.map(m => ({ ...m, ...MISSIONS[m.id] }));
+}
+// Algo ha pasado: avanza las misiones que correspondan y paga las que se completen.
+export function track(g, e) {
+  if (!g.pet) return;
+  dailyMissions(g);
+  for (const m of g.missions) {
+    const def = MISSIONS[m.id];
+    if (m.done || !def) continue;
+    m.got = Math.min(def.goal, m.got + def.on(e));
+    if (m.got >= def.goal) { m.done = true; g.coins += def.coins; news(g, `Misión cumplida: ${def.text}. +${def.coins} monedas`); }
+  }
+  if (!g.missionsBonus && g.missions.every(m => m.done)) { g.missionsBonus = true; g.coins += MISSION_BONUS; news(g, `¡Las tres misiones de hoy! +${MISSION_BONUS} monedas extra`); }
+}
+
+// --- Objetos ---
+
+export function buyItem(g, id) {
+  const it = ITEMS[id];
+  if (g.coins < it.price) return { error: 'No te alcanzan las monedas.' };
+  g.coins -= it.price;
+  g.items[id] = (g.items[id] || 0) + 1;
+  return {};
+}
+export function spendItem(g, id) {
+  if (!(g.items[id] > 0)) return false;
+  g.items[id]--;
+  return true;
 }
 
 // --- Huevos ---
@@ -208,7 +341,7 @@ export function addExp(g, amount) {
   const p = g.pet, sp = speciesOf(p.species);
   const gains = [];
   let levels = 0;
-  p.exp += amount;
+  p.exp += Math.round(amount * (p.quirk === 'listo' ? 1.1 : 1));
   while (p.exp >= expNeeded(p.level)) {
     p.exp -= expNeeded(p.level);
     p.level++; levels++;
@@ -251,6 +384,8 @@ export function feed(g, food) {
     p.hateKnown = true;
   }
   if (attentive) { p.axes.carino += 0.5; p.bond = clamp(p.bond + 0.5); }
+  track(g, { type: 'feed', food, loved });
+  grant(g, 'food');
   return { reaction, loved, hated, up: addExp(g, 2) };
 }
 
@@ -267,8 +402,10 @@ export function stroke(g) {
   const p = g.pet;
   rollDay(p);
   p.mood = clamp(p.mood + 2);
-  if (p.strokesToday < 15) { p.bond = clamp(p.bond + 0.4); p.axes.carino += 0.2; }
+  if (p.strokesToday < 15) { p.bond = clamp(p.bond + (p.quirk === 'mimoso' ? 0.8 : 0.4)); p.axes.carino += 0.2; }
   p.strokesToday++;
+  track(g, { type: 'stroke' });
+  grant(g, 'pet');
 }
 
 // Atrapar la pelota.
@@ -278,9 +415,11 @@ export function play(g) {
   if (p.asleep) return { error: 'Zzz…' };
   if (p.energy < PLAY_ENERGY) return { error: 'Estoy agotado…' };
   p.energy -= PLAY_ENERGY;
-  p.mood = clamp(p.mood + 18);
+  p.mood = clamp(p.mood + (p.quirk === 'jugueton' ? 28 : 18));
   if (p.playsToday < 5) { p.bond = clamp(p.bond + 1); p.axes.carino += 1; }
   p.playsToday++;
+  track(g, { type: 'catch' });
+  grant(g, 'play');
   return {};                             // jugar sube ánimo y vínculo, no experiencia
 }
 
@@ -301,6 +440,7 @@ export function canTrain(g) {
 export function train(g, stat, score) {
   const p = g.pet;
   const grade = score >= 0.8 ? 'perfecto' : score >= 0.4 ? 'bien' : 'flojo';
+  const wasLowest = p.stats[stat] === Math.min(...STATS.map(k => p.stats[k]));
   p.energy = clamp(p.energy - TRAIN_ENERGY);
   p.hunger = clamp(p.hunger - 8);
   p.mood = clamp(p.mood - (grade === 'flojo' ? 8 : 4));
@@ -309,6 +449,8 @@ export function train(g, stat, score) {
   const gained = grade !== 'flojo';
   if (gained) { p.stats[stat]++; p.trained[stat]++; }
   g.lastTrain = { stat, grade, gained, t: Date.now() };
+  track(g, { type: 'train', stat, grade, gained, wasLowest });
+  grant(g, 'train');
   return { grade, gained, up: addExp(g, { perfecto: 12, bien: 8, flojo: 4 }[grade]) };
 }
 
@@ -386,7 +528,7 @@ export function profile(pet) {
   const condition = 0.88 + ((pet.hunger + pet.mood) / 200) * 0.22; // bien cuidado pega más
   const resentful = pet.char === 'resentido';
   return {
-    maxHp: Math.round(70 + s.agu * 7 + pet.stage * 10),
+    maxHp: Math.round(70 + s.agu * 7 + pet.stage * 10 + (pet.quirk === 'gloton' ? 10 : 0)),
     // MP para los poderes: sube con el nivel, con cada evolución y con lo bien cuidada y unida a ti que esté.
     maxMp: Math.round(12 + pet.level * 2 + pet.stage * 4 + (pet.hunger + pet.mood) / 20 + pet.bond / 10),
     mpRegen: pet.mood > 70 ? 4 : 3,       // el MP se recupera poco: hay que elegir cuándo gastar
@@ -423,7 +565,7 @@ export function makeRival(pet, species = '') {
   const target = Math.round(12 + (mine - 12) * (0.8 + Math.random() * 0.25) + (level - pet.level) * 2);
   for (let i = STATS.reduce((sum, k) => sum + stats[k], 0); i < target; i++) stats[pick(STATS)]++;
   return {
-    species: sp.id, name: pick(RIVAL_NAMES), level, stage: pet.stage, stats,
+    species: sp.id, name: pick(RIVAL_NAMES), level, stage: pet.stage, stats, hue: rollHue(),
     hunger: 70, mood: 70, bond: 55,
     char: pet.stage >= 1 ? pick(['feroz', 'leal', 'astuto', 'sereno']) : '',
     mastery: pet.stage === 2 ? pick(STATS) : '',
@@ -432,7 +574,7 @@ export function makeRival(pet, species = '') {
 
 // Al ganar te quedas con su botín. A la décima victoria contra una especie que no tengas, ganas su huevo.
 // hpLeft (0–1) es la vida con la que acabó tu criatura: decide cuánto tarda en recuperarse.
-export function finishBattle(g, win, rival, hpLeft = 0) {
+export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   const p = g.pet;
   let exp, coins = 0, stolen = 0, egg = false;
   if (!g.seen.includes(rival.species)) g.seen.push(rival.species);
@@ -456,9 +598,12 @@ export function finishBattle(g, win, rival, hpLeft = 0) {
   }
   const hurt = 1 - Math.max(0, Math.min(1, hpLeft));
   const minutes = win ? hurt * 10 : 15 + hurt * 20;
-  const rest = minutes * (g.testMode ? 1000 : 60000);   // en modo prueba, segundos en vez de minutos
+  const rest = minutes * (g.testMode ? 1000 : 60000) * (p.quirk === 'duro' ? 0.75 : 1);   // en modo prueba, segundos en vez de minutos
   p.restUntil = Date.now() + rest;
   p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
   p.hunger = clamp(p.hunger - 10);
+  const mine = speciesOf(p.species).element, theirs = speciesOf(rival.species).element;
+  track(g, { type: 'battle', win, hpLeft, dianas: stats.dianas, powerHits: stats.powerHits, disadvantage: matchup(theirs, mine) > 1 });
+  grant(g, 'fight');
   return { exp, coins, stolen, egg, rest, defeats: g.defeats[rival.species] || 0, up: addExp(g, exp) };
 }

@@ -227,3 +227,22 @@ export function scaled(sprite, height) {
   }
   return c;
 }
+
+// La misma figura con el color girado: es lo que hace distinto a cada individuo.
+const tints = new WeakMap();
+export function tinted(sprite, hue) {
+  if (!hue) return sprite;
+  let byHue = tints.get(sprite);
+  if (!byHue) tints.set(sprite, byHue = new Map());
+  let c = byHue.get(hue);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = sprite.width; c.height = sprite.height;
+    const ctx = c.getContext('2d');
+    if (!('filter' in ctx)) return sprite;           // navegador sin filtros en lienzo: se queda con el color normal
+    ctx.filter = `hue-rotate(${hue}deg)`;
+    ctx.drawImage(sprite, 0, 0);
+    byHue.set(hue, c);
+  }
+  return c;
+}

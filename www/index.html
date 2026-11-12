@@ -31,6 +31,7 @@
         <button data-tab="care"><i class="ic ic-casa"></i><span>Cuidar</span></button>
         <button data-tab="battle"><i class="ic ic-espadas"></i><span>Combate</span></button>
         <button data-tab="collection"><i class="ic ic-libro"></i><span>Colección</span></button>
+        <button data-tab="shop"><i class="ic ic-moneda"></i><span>Tienda</span></button>
         <button data-tab="settings"><i class="ic ic-engranaje"></i><span>Ajustes</span></button>
       </nav>
       <div class="nav-right">
@@ -51,6 +52,10 @@
           <h3>Mis criaturas</h3>
           <div id="team" class="team"></div>
         </div>
+        <div class="panel">
+          <h3><i class="ic ic-trofeo"></i>Misiones de hoy</h3>
+          <div id="missions" class="missions"></div>
+        </div>
       </aside>
 
       <section class="room-wrap">
@@ -70,6 +75,7 @@
           <div class="meter mood" id="m-mood"><i class="ic ic-estrella"></i><span>Ánimo</span><div class="bar"><i></i></div></div>
           <div class="meter bond" id="m-bond"><i class="ic ic-corazon"></i><span>Vínculo</span><div class="bar"><i></i></div></div>
           <p id="mood-line" class="mood-line"></p>
+          <p id="wish-line" class="wish-line" hidden></p>
           <button class="btn" id="btn-sleep"></button>
           <p class="muted" id="sleep-note"></p>
         </div>
@@ -142,6 +148,7 @@
         </div>
         <div class="field-wrap">
           <canvas id="field"></canvas>
+          <div id="b-items" class="items"></div>
           <div id="b-powers" class="powers"></div>
           <button id="b-quit" class="quit">Rendirse</button>
           <p id="b-hint" class="hint"></p>
@@ -152,6 +159,13 @@
     <!-- Colección -->
     <main id="tab-collection" hidden>
       <div class="panel"><h3><i class="ic ic-libro"></i>Colección <small id="dex-count"></small></h3><div id="dex" class="dex"></div></div>
+    </main>
+
+    <!-- Tienda -->
+    <main id="tab-shop" class="shop" hidden>
+      <div class="panel"><h3><i class="ic ic-filete"></i>Comida</h3><p class="muted">Lo que come decide qué mejora al subir de nivel.</p><div id="shop-food" class="goods"></div></div>
+      <div class="panel"><h3><i class="ic ic-espadas"></i>Objetos de combate</h3><p class="muted">Se usan en tu turno, uno por turno, sin gastar el disparo.</p><div id="shop-items" class="goods"></div></div>
+      <div class="panel"><h3><i class="ic ic-huevomas"></i>Huevos</h3><p class="muted">También se ganan derrotando 10 veces a una especie que no tengas.</p><div id="shop-egg" class="goods"></div></div>
     </main>
 
     <!-- Ajustes -->

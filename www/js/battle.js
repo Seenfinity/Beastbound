@@ -64,6 +64,8 @@ export class Battle {
   constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}) {
     this.canvas = canvas; this.map = map; this.hooks = hooks; this.H = H; this.scale = scale; this.art = art;
     this.clock = TURN_TIME; this.beep = 6;
+    this.stats = { dianas: 0, powerHits: 0 };       // lo que hizo el jugador: cuenta para las misiones
+    this.itemUsed = false;
     this.terrain = makeTerrain(H);
     this.ground = document.createElement('canvas');
     this.ground.width = W * 2; this.ground.height = H * 2;
@@ -132,6 +134,7 @@ export class Battle {
     this.wind = Math.round(rand(-10, 10));
     this.phase = 'aim';
     this.clock = TURN_TIME; this.beep = 6;
+    this.itemUsed = false; f.sight = false;
     if (f.isPlayer) sfx.turn();
     this.say(f.frozen ? `${f.pet.name} está congelado` : f.blind ? `${f.pet.name} está cegado: apunta peor` : f.rooted ? `${f.pet.name} no puede moverse` : f.isPlayer ? '¡Tu turno!' : `Turno de ${f.pet.name}`);
     if (!f.isPlayer) { this.aiTimer = 1.5; this.aiReady = false; }
@@ -185,6 +188,20 @@ export class Battle {
     if (p.aiming) { if (this.player.power > 8) this.fire(this.armed); }
     else this.moveTarget = p.sx;
   }
+  // Usa un objeto de la mochila: uno por turno y sin gastar el turno. Devuelve si se pudo usar.
+  useItem(id) {
+    if (!this.canAct() || this.itemUsed) return false;
+    const f = this.player;
+    if (id === 'pocion') { if (f.hp >= f.maxHp) return false; this.heal(f, Math.round(f.maxHp * 0.3)); }
+    else if (id === 'elixir') { if (f.mp >= f.maxMp) return false; const got = Math.min(15, f.maxMp - f.mp); f.mp += got; this.note(f, `+${got} MP`, '#7fe9ff'); this.puff('mana', f.x, f.y - f.h * 0.7, f.h * 0.8, 0.8, -30); }
+    else if (id === 'escudo') { if (f.shield >= 0.5) return false; f.shield = 0.5; f.shieldLook = 'burbuja'; this.note(f, 'Escudo', '#4db8ff'); }
+    else if (id === 'mira') { if (f.sight) return false; f.sight = true; this.note(f, 'Mira', '#ffd76a'); }
+    else return false;
+    this.itemUsed = true;
+    sfx.coin();
+    return true;
+  }
+
   // Prepara (o quita) un poder para sumarlo al próximo disparo.
   arm(i) {
     if (this.armed === i) this.armed = -1;
@@ -308,10 +325,16 @@ export class Battle {
         tag = mult > 1 ? '¡Eficaz!' : mult < 1 ? 'Poco eficaz' : '';
         if (f.exposed > 0) { dmg *= 1.25; f.exposed--; }
       }
+      if (foe && k >= 0.9) {                            // impacto directo: premio a la puntería
+        dmg *= 1.2;
+        this.note(f, '¡Diana!', '#ffd76a', 14);
+        if (me.isPlayer) { this.stats.dianas++; sfx.good(); }
+        for (let i = 0; i < 10; i++) { const a = rand(0, 6.283), v = rand(40, 130); this.parts.push({ k: 'star', x: s.x, y: s.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: 0, max: rand(0.4, 0.8), c: '#ffd76a', s: rand(4, 7), a }); }
+      }
       if (sp.crit && k > 0.45 && Math.random() < sp.crit) { dmg *= 2; this.note(f, '¡Crítico!', '#ffffff', 13); }
       const done = this.hurt(f, dmg, me, tag);
       if (!foe) continue;
-      if (this.volley) this.volley.hit = true;
+      if (this.volley && !this.volley.hit) { this.volley.hit = true; if (me.isPlayer) this.stats.powerHits++; }
       const dot = turns => ({ turns, dmg: Math.max(2, Math.round(me.prof.dmg * 0.32)) });
       if (sp.drain) this.heal(me, Math.round(done * sp.drain));
       if (sp.poison) { f.poison = dot(sp.poison); this.note(f, '¡Envenenado!', '#9be33c', 13); }
@@ -747,9 +770,9 @@ export class Battle {
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(a) * back, cy + Math.sin(a) * back); ctx.stroke();
       ctx.fillStyle = '#fff6d8';
       ctx.beginPath(); ctx.arc(cx - Math.cos(a) * back, cy + Math.sin(a) * back, 4, 0, Math.PI * 2); ctx.fill();
-      if (!p.blind) {
+      if (!p.blind || p.sight) {
         const [mx, my] = this.muzzle(p, p.angle);
-        const pts = this.trace(mx, my, p.angle, p.power, Math.min(60, p.prof.guide)).pts;
+        const pts = this.trace(mx, my, p.angle, p.power, p.sight ? 400 : Math.min(60, p.prof.guide)).pts;
         pts.forEach((q, i) => { ctx.globalAlpha = 1 - (i / pts.length) * 0.75; ctx.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); });
         ctx.globalAlpha = 1;
       }

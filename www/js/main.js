@@ -2,7 +2,7 @@
 
 import * as S from './state.js';
 import { SHEETS, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
-import { loadSprites, loadGrid, loadImage, scaled, despill } from './sprites.js';
+import { loadSprites, loadGrid, loadImage, scaled, despill, tinted } from './sprites.js';
 import { Battle, W } from './battle.js';
 import { Room } from './room.js';
 import { MINI_INFO } from './minigames.js';
@@ -19,6 +19,9 @@ let sprites, maps, icons = {}, powerIcons = {}, vfx = {}, room;
 let game = null, battle = null, rival = null, tab = 'care', startPick = 0;
 
 const spriteOf = (species, stage) => { const sp = speciesOf(species); return sprites[sp.sheet][sp.row][stage]; };
+// Cada individuo tiene su propio color: el mismo dibujo con el tono girado.
+const petSprite = pet => tinted(spriteOf(pet.species, pet.stage), pet.hue || 0);
+const hueStyle = pet => (pet.hue ? ` style="filter:hue-rotate(${pet.hue}deg)"` : '');
 const eggClass = species => 'egg-' + EGG_ORDER.indexOf(speciesOf(species).element);
 const elColor = species => ELEMENT_COLOR[speciesOf(species).element];
 
@@ -40,8 +43,8 @@ function modal({ title, body = '', actions = [] }) {
   $('modal-title').textContent = title;
   $('modal-body').innerHTML = body;
   for (const cv of $('modal-body').querySelectorAll('canvas[data-sprite]')) {
-    const [species, stage] = cv.dataset.sprite.split(':');
-    paintSprite(cv, spriteOf(species, +stage));
+    const [species, stage, hue] = cv.dataset.sprite.split(':');
+    paintSprite(cv, tinted(spriteOf(species, +stage), +hue || 0));
   }
   const bar = $('modal-actions');
   bar.replaceChildren();
@@ -88,7 +91,18 @@ function duration(ms) {
   return `${s} s`;
 }
 
-function commit() { S.save(game); renderCare(); }
+function commit() { S.save(game); renderCare(); flushNews(); }
+
+// Enseña de uno en uno los avisos pendientes (misión cumplida, deseo cumplido…).
+let newsBusy = false;
+function flushNews() {
+  if (newsBusy || !game?.news?.length || !$('modal').hidden || !$('evo').hidden) return;
+  newsBusy = true;
+  toast(game.news.shift());
+  sfx.coin();
+  $('coins').textContent = game.coins;
+  setTimeout(() => { newsBusy = false; flushNews(); }, 2300);
+}
 function celebrate(up) {
   if (!up || !up.levels) return;
   toast(`¡Nivel ${game.pet.level}! ${up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}`);
@@ -131,7 +145,7 @@ function birthModal(pet) {
   const sp = speciesOf(pet.species);
   modal({
     title: `¡Ha nacido ${pet.name}!`,
-    body: `<div class="hatch"><i class="egg-img ${eggClass(sp.id)}"></i><canvas data-sprite="${sp.id}:0"></canvas></div>
+    body: `<div class="hatch"><i class="egg-img ${eggClass(sp.id)}"></i><canvas data-sprite="${sp.id}:0:${pet.hue || 0}"></canvas></div>
       <p>Del huevo salió un <b>${esc(sp.name)}</b>, de elemento ${esc(sp.element)}. Lo suyo: ${esc(sp.role.toLowerCase())}.</p>
       <p>Frótalo para acariciarlo, arrastra la comida hasta él y lánzale la pelota. Según cómo lo trates crecerá con un carácter u otro.</p>`,
     actions: [{ label: 'Vamos', cls: 'primary' }],
@@ -153,7 +167,7 @@ function enterGame() {
 
 function switchTab(name) {
   tab = name;
-  for (const t of ['care', 'battle', 'collection', 'settings']) $('tab-' + t).hidden = t !== name;
+  for (const t of ['care', 'battle', 'collection', 'shop', 'settings']) $('tab-' + t).hidden = t !== name;
   for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   renderAll();
   window.scrollTo(0, 0);
@@ -168,6 +182,7 @@ function renderAll() {
   if (tab === 'care') renderCare();
   if (tab === 'battle') renderLobby();
   if (tab === 'collection') renderDex();
+  if (tab === 'shop') renderShop();
   if (tab === 'settings') {
     $('btn-test').textContent = game.testMode ? 'Desactivar' : 'Activar';
     $('btn-sound').textContent = isMuted() ? 'Activar' : 'Silenciar';
@@ -200,12 +215,19 @@ function renderCare() {
   $('mood-line').textContent = p.asleep ? 'Está durmiendo' : p.hunger < 25 ? 'Tiene hambre' : p.mood < 25 ? 'Está triste' : p.energy < 20 ? 'Está agotado'
     : p.bond < 30 ? 'Aún no confía en ti' : p.mood > 75 && p.hunger > 60 ? '¡Está feliz!' : 'Está bien';
 
+  // Deseo: lo que pide ahora mismo y cuánto queda para cumplirlo
+  const wish = p.wish;
+  $('wish-line').hidden = !wish;
+  if (wish) setHTML($('wish-line'), `<i class="ic ic-${S.WISHES[wish.type].icon}"></i><span>${S.WISHES[wish.type].text}${wish.type === 'pet' ? ` (${wish.got} de 5)` : ''} · ${duration(wish.until - Date.now())}</span>`);
+
   // Personalidad: la actual y hacia dónde va con el trato de ahora
   const trend = S.trendOf(p), c = p.char && S.CHARS[p.char];
   setHTML($('persona'), (c
     ? `<b class="big" style="--c:${c.color}">${c.name}</b><p>${c.desc}</p>`
     : `<b class="big">Sin definir</b><p>Se decide al evolucionar a Teen, según cómo la trates.</p>`)
-    + (trend ? `<p>Con el trato de ahora va camino de ser <span class="tag" style="--c:${S.CHARS[trend].color}">${S.CHARS[trend].name}</span></p>` : ''));
+    + (trend ? `<p>Con el trato de ahora va camino de ser <span class="tag" style="--c:${S.CHARS[trend].color}">${S.CHARS[trend].name}</span></p>` : '')
+    + `<p><b style="color:var(--ink)">Rasgo: ${S.QUIRKS[p.quirk].name}.</b> ${S.QUIRKS[p.quirk].desc}</p>`
+    + (S.isRare(p) ? '<p><span class="tag" style="--c:var(--gold)">Color raro</span></p>' : ''));
 
   const taste = (label, id, known) => known
     ? `<div class="taste"><i class="ic ic-${id}"></i><span>${S.FOODS[id].name}<small>${label}</small></span></div>`
@@ -243,7 +265,7 @@ function renderCare() {
   room.evolveReady = !!evo?.ready;
   $('btn-evolve').hidden = !evo?.ready || !!room.mini;
   setHTML($('evo-line'), STAGES.map((name, i) =>
-    `<div class="step ${i < p.stage ? 'past' : i === p.stage ? 'now' : 'future'}"><i class="sp sp-${p.species}-${i}"></i>${name}</div>`).join('<span class="arrow">›</span>'));
+    `<div class="step ${i < p.stage ? 'past' : i === p.stage ? 'now' : 'future'}"><i class="sp sp-${p.species}-${i}"${hueStyle(p)}></i>${name}</div>`).join('<span class="arrow">›</span>'));
   $('evo-text').textContent = !evo ? 'Ya está en su forma Final.'
     : evo.ready ? `¡${p.name} puede evolucionar! Pulsa el botón dorado de la sala.`
     : `Siguiente: ${STAGES[p.stage + 1]} con nivel ${evo.req.level}` + (game.testMode ? '.' : ` y ${evo.req.days} días de vida${evo.okTime ? '' : ` (faltan ${evo.daysLeft})`}.`);
@@ -261,12 +283,15 @@ function renderCare() {
   setHTML($('powers-info'), powersOf(sp, p).map(pw => `<div class="${pw.unlocked ? '' : 'locked'}"><i class="pi pi-${slug(pw.name)}"></i><span><b>${pw.name}</b>
     <small><i>${effectOf(pw)}</i> · ${pw.unlocked ? `${pw.mp} MP` : pw.need} · ${pw.desc}</small></span></div>`).join(''));
 
-  setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"></i></div>
+  setHTML($('battle-prev'), `<div class="prev-map" style="background-image:url(${maps[0].bg})"><i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i></div>
     <span>Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b></span>
     <span>${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : prof.disobey > 0 ? 'Con tan poco vínculo puede no obedecerte.' : prof.clutch ? 'Aguantará un golpe mortal por ti.' : `${game.wins} ganados · ${game.losses} perdidos`}</span>`);
   renderHeal();
 
-  setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"></i>${esc(m.name)}</button>`).join(''));
+  setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"${hueStyle(m)}></i>${esc(m.name)}</button>`).join(''));
+  setHTML($('missions'), S.dailyMissions(game).map(m => `<div class="mission${m.done ? ' done' : ''}"><span>${m.text}</span>
+      <small>${m.done ? 'Cumplida' : `${m.got} de ${m.goal}`} · ${m.coins}<i class="ic ic-moneda"></i></small></div>`).join('')
+    + `<p class="muted">${game.missionsBonus ? '¡Las tres cumplidas! Mañana habrá nuevas.' : `Cumple las tres y ganas ${S.MISSION_BONUS} monedas más.`}</p>`);
   renderEggs();
 
   $('tip').textContent = p.asleep ? `${p.name} está durmiendo. Se despierta sola cuando esté recuperada, o puedes despertarla tú.`
@@ -446,7 +471,7 @@ function doEvolve() {
   $('btn-evolve').hidden = true;
   playEvolution({
     name: p.name, stage: STAGES[p.stage], color: ELEMENT_COLOR[sp.element], burst: vfx.destello,
-    before: spriteOf(p.species, p.stage - 1), after: spriteOf(p.species, p.stage),
+    before: tinted(spriteOf(p.species, p.stage - 1), p.hue || 0), after: petSprite(p),
     stats: [
       ...Object.keys(S.STAT_NAMES).map(k => ({ label: S.STAT_NAMES[k], before: stats0[k], after: p.stats[k] })),
       { label: 'Vida', before: prof0.maxHp, after: prof1.maxHp },
@@ -481,6 +506,7 @@ const roomHooks = {
     return `${{ perfecto: '¡Perfecto!', bien: 'Bien', flojo: 'Flojo…' }[res.grade]}\n${res.gained ? '+1 ' + S.STAT_NAMES[kind] : 'Esta vez no mejora'}`;
   },
   charColor: () => (game.pet.char ? S.CHARS[game.pet.char].color : ''),
+  wish: () => (game.pet.wish ? S.WISHES[game.pet.wish.type].icon : null),
 };
 
 // ---------- Combate ----------
@@ -495,7 +521,7 @@ function advantage(mine, theirs) {
 function renderLobby() {
   if (battle) return;
   const p = game.pet, sp = speciesOf(p.species), prof = S.profile(p), rest = S.restLeft(p);
-  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
+  setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i><div><b>${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
     Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b><br>
     ${rest ? `<b class="resting">Recuperándose: ${duration(rest)}</b>` : 'Lista para pelear.'}<br>
     Arrastra hacia atrás y suelta para disparar. Toca el suelo para moverte.</div>`);
@@ -522,7 +548,7 @@ function challenge(species = '') {
   const out = matchup(sp.element, rsp.element), back = matchup(rsp.element, sp.element);
   modal({
     title: map.name,
-    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}"></canvas>${esc(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}"></canvas>${esc(rival.name)} · Nv ${rival.level}</figure></div>
+    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${esc(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}:${rival.hue || 0}"></canvas>${esc(rival.name)} · Nv ${rival.level}</figure></div>
       <p>Te enfrentas a <b>${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
       ${out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : ''}
       ${back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : ''}
@@ -533,7 +559,7 @@ function challenge(species = '') {
 $('btn-find').onclick = () => challenge();
 $('rivals').onclick = e => { const b = e.target.closest('[data-rival]'); if (b && !b.disabled) challenge(b.dataset.rival); };
 
-let powerButtons = [];
+let powerButtons = [], itemButtons = [], hoverItem = '';
 function startBattle(map) {
   const p = game.pet;
   p.energy -= S.FIGHT_ENERGY;
@@ -549,7 +575,7 @@ function startBattle(map) {
   wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
   const side = pet => {
     const sp = speciesOf(pet.species);
-    return { pet, prof: S.profile(pet), species: sp, sprite: spriteOf(pet.species, pet.stage), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
+    return { pet, prof: S.profile(pet), species: sp, sprite: petSprite(pet), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
   };
   battle = new Battle($('field'), side(p), side(rival), map, { onEnd: endBattle }, Math.round((W * h) / w), w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] });
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
@@ -558,6 +584,8 @@ function startBattle(map) {
   $('b-powers').innerHTML = battle.player.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
     || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
   powerButtons = [...document.querySelectorAll('#b-powers .pw')];
+  $('b-items').innerHTML = Object.entries(S.ITEMS).map(([id, it]) => `<button class="item" data-item="${id}"><i class="ic ic-${it.icon}"></i><b></b></button>`).join('');
+  itemButtons = [...$('b-items').children];
 }
 
 function statusOf(f) {
@@ -584,8 +612,14 @@ function renderBattle() {
     btn.classList.toggle('armed', armed);
     btn.lastElementChild.textContent = a.cds[i] > 0 ? a.cds[i] : '';
   });
+  itemButtons.forEach(btn => {
+    const n = game.items[btn.dataset.item] || 0;
+    btn.lastElementChild.textContent = n;
+    btn.disabled = !n || !mine || battle.itemUsed;
+  });
   const pw = a.powers[hoverPower >= 0 ? hoverPower : battle.armed];
-  $('b-hint').textContent = pw && hoverPower >= 0 ? `${pw.name} (${pw.mp} MP): ${pw.desc}`
+  $('b-hint').textContent = hoverItem ? `${S.ITEMS[hoverItem].name}: ${S.ITEMS[hoverItem].desc} Uno por turno; no gasta el disparo.`
+    : pw && hoverPower >= 0 ? `${pw.name} (${pw.mp} MP): ${pw.desc}`
     : !battle.canAct() ? battle.map.effect
     : pw ? `${pw.name}: ${pw.desc} Si falla, tarda más en volver.`
     : a.frozen ? 'Congelado: este turno no puedes moverte ni ver la guía.'
@@ -596,7 +630,7 @@ function renderBattle() {
 
 function endBattle(win) {
   const p = game.pet, rsp = speciesOf(rival.species);
-  const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp);
+  const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
   S.save(game);
   if (win) sfx.win(); else sfx.lose();
   const hunt = r.egg ? `<p><b>¡Décima victoria contra ${esc(rsp.name)}!</b> Te ganaste su huevo: ya está en tu incubadora.</p>`
@@ -605,7 +639,7 @@ function endBattle(win) {
     ? `<p>Le ganaste a <b>${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
     : `<p><b>${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
-  const rest = `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>`;
+  const rest = `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p><p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
   modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + rest, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;
@@ -623,6 +657,15 @@ field.addEventListener('pointerdown', e => { if (battle) { field.setPointerCaptu
 field.addEventListener('pointermove', e => { if (battle) battle.pullMove(...toWorld(e)); });
 field.addEventListener('pointerup', () => battle?.pullEnd());
 field.addEventListener('pointercancel', () => { if (battle) battle.pull = null; });
+$('b-items').addEventListener('pointerover', e => { hoverItem = e.target.closest('[data-item]')?.dataset.item || ''; });
+$('b-items').addEventListener('pointerleave', () => { hoverItem = ''; });
+$('b-items').onclick = e => {
+  const id = e.target.closest('[data-item]')?.dataset.item;
+  if (!id || !battle || !(game.items[id] > 0)) return;
+  if (battle.useItem(id)) { S.spendItem(game, id); S.save(game); }
+  else toast(battle.itemUsed ? 'Solo un objeto por turno.' : 'Ahora mismo no hace falta.');
+};
+
 // Al pasar por encima de un poder (o mantenerlo pulsado) se lee qué hace.
 let hoverPower = -1;
 $('b-powers').addEventListener('pointerover', e => { const b = e.target.closest('[data-power]'); hoverPower = b ? +b.dataset.power : -1; });
@@ -633,6 +676,27 @@ $('b-quit').onclick = () => modal({
   body: '<p>Cuenta como derrota.</p>',
   actions: [{ label: 'Sí, me rindo', cls: 'primary', fn: () => battle?.surrender() }, closeBtn('Seguir luchando')],
 });
+
+// ---------- Tienda ----------
+
+function renderShop() {
+  const good = (icon, name, desc, have, attr, price) => `<div class="good"><i class="ic ic-${icon}"></i><span><b>${name}</b><small>${desc}</small>${have}</span>
+    <button class="btn" ${attr}>${price}<i class="ic ic-moneda"></i></button></div>`;
+  setHTML($('shop-food'), Object.entries(S.FOODS).map(([id, f]) => good(id, f.name, f.desc, `<small>Tienes ${game.foods[id]}</small>`, `data-buy-food="${id}"`, f.price)).join(''));
+  setHTML($('shop-items'), Object.entries(S.ITEMS).map(([id, it]) => good(it.icon, it.name, it.desc, `<small>Tienes ${game.items[id] || 0}</small>`, `data-buy-item="${id}"`, it.price)).join(''));
+  setHTML($('shop-egg'), good('huevomas', 'Huevo misterioso', 'Una especie que aún no tienes. Tarda un rato en abrirse.', `<small>Incubando: ${game.eggs.length}</small>`, 'data-buy-egg="1"', S.eggPrice(game)));
+}
+$('tab-shop').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const res = b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem) : b.dataset.buyEgg ? S.buyEgg(game) : null;
+  if (!res) return;
+  if (res.error) { toast(res.error); return sfx.error(); }
+  sfx.coin();
+  S.save(game);
+  renderAll();
+  if (res.species) toast(`Compraste un huevo de ${speciesOf(res.species).element}.`);
+};
 
 // ---------- Colección y ajustes ----------
 
@@ -676,6 +740,7 @@ let seconds = 0;
 setInterval(() => {
   if (!game?.pet || $('game').hidden) return;
   if (tab === 'battle' && !battle) renderLobby();      // cuenta atrás de la recuperación
+  flushNews();
   if (++seconds % 5 === 0) { S.tick(game); S.save(game); }
   if (tab !== 'care') return;
   renderCare();
@@ -703,7 +768,7 @@ try {
   vfxGrid.flat().forEach((cv, i) => { vfx[VFX_ORDER[i]] = cv; });
   despill(vfx.destello);                             // el estallido de luz debe quedar blanco y dorado, sin rosa
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
-  room = new Room($('room'), { bg: roomBg, icons, sprite: pet => spriteOf(pet.species, pet.stage) }, roomHooks);
+  room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);
   buildTray();
   window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, vfx }; // para depurar desde la consola
   game = S.load();
