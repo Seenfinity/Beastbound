@@ -245,6 +245,7 @@ $('tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) swit
 $('btn-go-battle').onclick = () => switchTab('battle');
 
 function renderAll() {
+  renderGuide();
   if (!game?.pet) return;
   $('coins').textContent = game.coins;
   $('chip-test').hidden = !game.testMode;
@@ -260,6 +261,38 @@ function renderAll() {
     $('btn-music').textContent = music.isOn() ? 'Apagar' : 'Encender';
   }
 }
+
+// ---------- Primeros pasos ----------
+// Una guía corta para quien empieza: un paso cada vez, con su recompensa. El estado va en la partida (game.guide).
+let guideStrokes = 0;
+function guideDid(kind) {
+  if (kind === 'stroke' && S.guideStep(game) === 'stroke' && ++guideStrokes < 3) return;   // unas cuantas caricias, no un roce
+  if (!S.guideAdvance(game, kind)) return;
+  sfx.good();
+  S.save(game);
+  renderGuide();
+  flushNews();
+}
+function renderGuide() {
+  const step = game?.pet && !$('game').hidden ? S.guideStep(game) : '';
+  $('guide').hidden = !step;
+  for (const el of document.querySelectorAll('.guide-target')) el.classList.remove('guide-target');
+  if (!step) return;
+  const away = step !== 'battle' && tab !== 'care';
+  $('guide-step').textContent = `Primeros pasos · ${game.guide + 1} de ${S.GUIDE.length}`;
+  $('guide-text').textContent = away ? 'Vuelve a «Cuidar» para seguir con los primeros pasos.'
+    : step === 'stroke' ? `Frota a ${game.pet.name} para acariciarla.`
+    : step === 'feed' ? 'Pulsa «Comida» y arrastra algo hasta ella.'
+    : step === 'play' ? 'Lánzale la pelota roja: arrástrala y suéltala.'
+    : step === 'train' ? 'Elige un entrenamiento en el panel «Entrenar».'
+    : battle ? 'Arrastra hacia atrás desde tu bestia y suelta para disparar. En este primer combate ves la trayectoria completa.'
+    : 'Ya está lista: ve a «Combate» y pulsa «Rival al azar».';
+  const target = away ? document.querySelector('#tabs [data-tab="care"]')
+    : step === 'feed' ? $('btn-food') : step === 'train' ? $('train-list')
+    : step === 'battle' && !battle ? (tab === 'battle' ? $('btn-find') : document.querySelector('#tabs [data-tab="battle"]')) : null;
+  target?.classList.add('guide-target');
+}
+$('guide-skip').onclick = () => { S.guideSkip(game); S.save(game); renderGuide(); };
 
 // ---------- Cuidar ----------
 
@@ -568,6 +601,7 @@ function buildTray() {
     room.eat(d.food, res.reaction, res.loved, res.hated);
     commit();
     celebrate(res.up);
+    guideDid('feed');
   };
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
@@ -610,7 +644,7 @@ $('btn-decor').onclick = () => {
 };
 
 const roomHooks = {
-  onStroke() { S.stroke(game); renderCare(); },
+  onStroke() { S.stroke(game); guideDid('stroke'); renderCare(); },
   onTap() {
     const p = game.pet;
     if (p.asleep) return 'Zzz…';
@@ -619,13 +653,14 @@ const roomHooks = {
   },
   onPlay() {
     const res = S.play(game);
-    if (!res.error) commit();
+    if (!res.error) { commit(); guideDid('play'); }
     return res;
   },
   onEvolve: doEvolve,
   onTrainDone(kind, score) {
     const res = S.train(game, kind, score);
     commit();
+    guideDid('train');
     if (res.up.levels) toast(`¡Nivel ${game.pet.level}! ${res.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}`);
     if (res.grade === 'flojo') sfx.bad(); else sfx.level();
     return `${{ perfecto: '¡Perfecto!', bien: 'Bien', flojo: 'Flojo…' }[res.grade]}\n${res.gained ? '+1 ' + S.STAT_NAMES[kind] : 'Esta vez no mejora'}`;
@@ -683,6 +718,7 @@ function challenge(species = '') {
       <p>Te enfrentas a <b translate="no">${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
       ${out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : ''}
       ${back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : ''}
+      ${S.guideStep(game) === 'battle' ? '<p class="how">Cómo se combate: arrastra hacia atrás desde tu bestia y suelta para disparar. Cuanto más estiras, más fuerza, y el viento desvía el tiro. En este primer combate verás la trayectoria completa.</p>' : ''}
       <p class="muted">${map.effect}</p>`,
     actions: [{ label: '¡A luchar!', cls: 'primary', fn: () => startBattle(map) }, closeBtn('Mejor no')],
   });
@@ -727,8 +763,10 @@ function startBattle(map) {
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
   battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
   battle.setView(viewFar, true);
+  if (S.guideStep(game) === 'battle') { battle.tutor = true; battle.player.sight = true; }   // primer combate: se ve la trayectoria entera
   music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
+  renderGuide();
   const tag = f => ` <span class="tag" style="--c:${f.color}">${f.species.element}</span>`;
   $('b-name1').innerHTML = own(p.name) + tag(battle.player);
   $('b-name2').innerHTML = tag(battle.rival) + ' ' + own(rival.name);
@@ -781,6 +819,7 @@ function renderBattle() {
 function endBattle(win) {
   const p = game.pet, rsp = speciesOf(rival.species);
   const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
+  S.guideAdvance(game, 'battle');                      // el primer combate cierra la guía, se gane o se pierda
   S.save(game);
   music.stop();
   if (win) sfx.win(); else sfx.lose();

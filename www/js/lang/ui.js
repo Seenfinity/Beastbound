@@ -146,6 +146,20 @@ export default [
   ['¡Cuántas monedas!', 'So many coins!', '好多金币！'],
   ['¡Siento que voy a evolucionar!', "I feel like I'm about to evolve!", '我感觉要进化了！'],
 
+  // ---------- Primeros pasos ----------
+  ['Primeros pasos · {#0} de {#1}', 'First steps · {0} of {1}', '新手引导 · {0}/{1}'],
+  ['Frota a {!0} para acariciarla.', 'Rub {0} to pet it.', '摩擦 {0} 来抚摸它。'],
+  ['Pulsa «Comida» y arrastra algo hasta ella.', 'Press "Food" and drag something onto it.', '点击「食物」，把食物拖到它身上。'],
+  ['Lánzale la pelota roja: arrástrala y suéltala.', 'Throw it the red ball: drag it and let go.', '把红球扔给它：拖动后松开。'],
+  ['Elige un entrenamiento en el panel «Entrenar».', 'Pick a training in the "Train" panel.', '在「训练」面板里选一项训练。'],
+  ['Ya está lista: ve a «Combate» y pulsa «Rival al azar».', 'It\'s ready: go to "Battle" and press "Random rival".', '它准备好了：前往「战斗」，点击「随机对手」。'],
+  ['Arrastra hacia atrás desde tu bestia y suelta para disparar. En este primer combate ves la trayectoria completa.', 'Drag back from your beast and release to shoot. In this first battle you see the full trajectory.', '从你的幻兽向后拖动再松开即可射击。第一场战斗会显示完整弹道。'],
+  ['Vuelve a «Cuidar» para seguir con los primeros pasos.', 'Go back to "Care" to continue the first steps.', '回到「照料」继续新手引导。'],
+  ['Saltar', 'Skip', '跳过'],
+  ['¡Bien! +{#0} monedas', 'Nice! +{0} coins', '很好！+{0} 金币'],
+  ['¡Primeros pasos completados! +{#0} monedas', 'First steps complete! +{0} coins', '新手引导完成！+{0} 金币'],
+  ['Cómo se combate: arrastra hacia atrás desde tu bestia y suelta para disparar. Cuanto más estiras, más fuerza, y el viento desvía el tiro. En este primer combate verás la trayectoria completa.', 'How to fight: drag back from your beast and release to shoot. The further you pull, the more power, and the wind pushes the shot. In this first battle you will see the full trajectory.', '战斗方法：从你的幻兽向后拖动再松开即可射击。拉得越远力度越大，风会让弹道偏移。第一场战斗会显示完整弹道。'],
+
   // ---------- Zona de incubación ----------
   ['Huevo misterioso', 'Mystery egg', '神秘蛋'],
   ['No hay huevos incubando.', 'No eggs incubating.', '没有正在孵化的蛋。'],

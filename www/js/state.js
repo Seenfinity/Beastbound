@@ -177,6 +177,10 @@ export const MISSIONS = {
 export const MISSION_BONUS = 40;
 export const MISSION_EXP = 20, MISSION_BONUS_EXP = 40;   // las misiones también dan experiencia: es lo que más ayuda a quien juega poco
 
+// Primeros pasos: una guía corta para quien empieza. g.guide es el paso por el que va; al acabar vale GUIDE.length.
+export const GUIDE = ['stroke', 'feed', 'play', 'train', 'battle'];
+export const GUIDE_COINS = 10, GUIDE_BONUS = 30;
+
 // Requisitos para evolucionar: nivel y días de vida. [Baby→Mid, Mid→Final]
 export const EVOLVE = [{ level: 10, days: 3 }, { level: 30, days: 14 }];
 
@@ -236,7 +240,7 @@ export function newGame() {
   return attach({
     v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
-    lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala', profile: { name: '', country: '' },
+    lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala', profile: { name: '', country: '' }, guide: 0,
   });
 }
 
@@ -257,6 +261,7 @@ export function adopt(g) {
     g.news = [];
     g.decor ||= []; g.decorPos ||= {}; g.rooms ||= ['sala']; g.room ||= 'sala';
     g.profile ||= { name: '', country: '' };
+    if (typeof g.guide !== 'number') g.guide = GUIDE.length;   // quien ya jugaba no necesita la guía
     for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
     return attach(g);
   } catch {
@@ -505,6 +510,20 @@ export function hatchEgg(g, index, name) {
   if (!g.seen.includes(egg.species)) g.seen.push(egg.species);
   return { pet: g.pets.length - 1, grade };
 }
+
+// --- Primeros pasos ---
+
+export const guideStep = g => GUIDE[g.guide] || '';
+// Da por hecho el paso actual si es `kind`: paga su recompensa y pasa al siguiente. null si no tocaba.
+export function guideAdvance(g, kind) {
+  if (guideStep(g) !== kind) return null;
+  g.guide++;
+  const last = g.guide >= GUIDE.length, coins = GUIDE_COINS + (last ? GUIDE_BONUS : 0);
+  g.coins += coins;
+  news(g, last ? `¡Primeros pasos completados! +${coins} monedas` : `¡Bien! +${coins} monedas`);
+  return { coins, last };
+}
+export function guideSkip(g) { g.guide = GUIDE.length; }
 
 export function setActive(g, index) {
   if (!g.pets[index]) return;

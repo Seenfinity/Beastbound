@@ -219,7 +219,7 @@ export class Battle {
     if (f.isPlayer) this.wind = this.round++ ? clamp(this.wind + Math.round(rand(-3, 3)), -8, 8) : Math.round(rand(-6, 6));
     this.phase = 'aim';
     this.clock = TURN_TIME; this.beep = 6;
-    this.itemUsed = false; f.sight = false;
+    this.itemUsed = false; f.sight = !!(this.tutor && f.isPlayer);   // tutor: en el primer combate se ve la trayectoria entera
     this.look = null;
     if (f.isPlayer) sfx.turn();
     this.say(f.frozen ? `${f.pet.name} está congelado` : f.blind ? `${f.pet.name} está cegado: apunta peor` : f.rooted ? `${f.pet.name} no puede moverse` : f.isPlayer ? '¡Tu turno!' : `Turno de ${f.pet.name}`);
