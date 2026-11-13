@@ -15,7 +15,7 @@ import { ITEMS, grantEgg } from './state.js';
 const STATS = ['pot', 'agu', 'pun', 'agi'];
 
 // Cada zona es una imagen (1536 × 864) con el suelo marcado a mano encima:
-//   ground  el contorno por donde se puede andar, más los puentes (bridges)
+//   ground  el contorno por donde se puede andar, menos los huecos (holes: un río de lava), más los puentes (bridges)
 //   blocks  lo que estorba: círculos [x, y, radio], rectángulos y el estanque
 //   trees   árboles altos (y columnas): se choca con el tronco y se puede pasar por detrás de la copa
 //   grass   hierba alta: tapa los pies (y esconde cofres)
@@ -157,8 +157,103 @@ const RUINAS = {
   ],
 };
 
+// ---------- Forja Volcánica ----------
+// La isla de ceniza: el portal en una plaza con braseros, una poza de lava, una fragua y un río de lava
+// (holes: zonas dentro de la isla que no se pisan) que se cruza por un puente pequeño.
+const CENIZA = {
+  id: 'ceniza', name: 'Isla de ceniza', img: 'assets/aventura/forja-entrada.webp', w: 1536, h: 864, start: [650, 436],
+  ground: [[210, 0], [1420, 0], [1455, 60], [1480, 140], [1480, 265], [1440, 275], [1440, 392], [1475, 410], [1490, 470], [1536, 500], [1536, 864], [560, 864], [500, 830], [420, 775], [330, 715], [230, 670], [170, 610], [160, 560], [120, 500], [60, 440], [55, 385], [115, 345], [150, 305], [265, 300], [265, 190], [150, 180], [130, 100], [150, 40]],
+  holes: [[[1536, 495], [1468, 520], [1393, 540], [1318, 560], [1258, 595], [1218, 625], [1168, 650], [1038, 715], [968, 740], [893, 775], [818, 795], [768, 815], [720, 832], [680, 864],
+    [878, 864], [900, 852], [968, 808], [1048, 778], [1088, 768], [1138, 738], [1150, 705], [1175, 692], [1218, 680], [1258, 655], [1318, 625], [1393, 600], [1468, 580], [1536, 555]]],
+  bridges: [[1430, 302, 1536, 358], [1000, 656, 1100, 694], [1080, 668, 1185, 712]],
+  circles: [
+    [440, 225, 34], [553, 165, 36], [278, 283, 26], [815, 45, 22], [1158, 65, 28], [1400, 55, 45], [1445, 40, 30], [1343, 200, 38], [1283, 250, 46], [510, 612, 36], [320, 682, 26], [475, 707, 34], [717, 667, 26], [1008, 487, 40], [1495, 770, 40], [1288, 840, 44],   // rocas
+    [590, 88, 18], [660, 135, 38], [625, 175, 22], [110, 385, 24], [215, 405, 30], [215, 600, 34], [265, 610, 34], [240, 570, 26], [662, 805, 34], [920, 570, 22], [1310, 475, 34], [1345, 445, 30], [1208, 615, 22], [1283, 690, 20], [1113, 795, 24], [990, 840, 22],   // púas de obsidiana
+    [800, 280, 26], [1400, 260, 16], [978, 370, 16], [545, 582, 16], [740, 702, 16], [750, 757, 16], [885, 530, 18], [1073, 582, 20], [1488, 832, 16],   // matas rojas
+    [380, 386, 14], [693, 353, 14], [537, 530, 14], [617, 718, 14], [1025, 416, 14], [943, 65, 16], [1088, 65, 16],                                    // braseros
+    [1025, 645, 12], [1018, 702, 12], [1157, 670, 12], [1155, 728, 12],                                                                             // pilares del puente pequeño
+  ],
+  rects: [[478, 300, 562, 400], [745, 160, 800, 235], [790, 205, 850, 262], [840, 232, 912, 292], [705, 222, 750, 262], [1040, 150, 1195, 300], [872, 402, 970, 455], [770, 455, 838, 498],
+    [1420, 268, 1536, 302], [1420, 358, 1536, 392]],   // portal, muro, fragua, cadenas, yunque y barandillas
+  ponds: [[275, 100, 122, 82]],
+  trees: [
+    [480, 138, 'round', 75, 150], [1235, 197, 'round', 72, 160], [1225, 447, 'round', 72, 160], [395, 694, 'round', 72, 160], [1395, 819, 'round', 75, 165],
+    [890, 200, 'post', 14, 100], [1110, 460, 'post', 12, 85], [1113, 632, 'post', 12, 80], [1478, 697, 'post', 12, 95], [520, 400, 'post', 45, 110],
+  ],
+  grass: [[535, 200, 680, 250], [690, 30, 835, 130], [823, 180, 953, 245], [1340, 110, 1480, 195], [1273, 10, 1368, 70], [225, 305, 320, 370], [165, 420, 375, 535], [400, 652, 560, 792], [1053, 462, 1218, 542], [1043, 802, 1208, 864], [1413, 642, 1536, 712], [785, 690, 900, 755]],
+  pois: [
+    { id: 'salida', type: 'exit', x: 520, y: 425, r: 38 },
+    { id: 'f-norte', type: 'gate', x: 1018, y: 14, r: 36, text: 'El puente del norte lleva a la fundición. Todavía está cerrado.' },
+    { id: 'f-este', type: 'gate', x: 1516, y: 330, r: 34, text: 'El puente del este lleva a la ladera del volcán. Todavía está cerrado.' },
+    { id: 'fs1', type: 'wild', x: 780, y: 340, to: [980, 322], species: 'blaziky', level: 8 },
+    { id: 'fs2', type: 'wild', x: 1290, y: 322, to: [1400, 330], species: 'mechapi', level: 9 },
+    { id: 'fs3', type: 'wild', x: 1250, y: 762, to: [1340, 702], species: 'pyrorex', level: 10 },
+    { id: 'fc1', type: 'chest', x: 1415, y: 760, item: 'pocion', hidden: true },     // al otro lado del río, detrás del árbol
+    { id: 'fc2', type: 'chest', x: 740, y: 80, coins: 80, hidden: true },            // entre la hierba seca del norte
+    { id: 'fc3', type: 'chest', x: 400, y: 640, item: 'elixir', hidden: true },      // detrás del árbol del acantilado
+    { id: 'fd1', type: 'rest', x: 655, y: 700, r: 26 },                              // junto al brasero del sur
+    { id: 'fe1', type: 'event', x: 1118, y: 326, text: 'La fragua sigue encendida, aunque no hay nadie.',
+      choices: [{ label: 'Avivar el fuego', result: 'Las llamas te llenan de energía: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Rebuscar entre las herramientas', result: 'Debajo de un cubo hay una bolsa: +35 monedas.', fx: { coins: 35 } }] },
+    { id: 'fe2', type: 'event', x: 803, y: 524, text: 'Un yunque partido. Hay algo encajado en la grieta.',
+      choices: [{ label: 'Tirar con fuerza', result: 'Sale de golpe y te llevas un rasguño: +45 monedas, pero pierdes un poco de vida.', fx: { coins: 45, hp: -0.1 } },
+        { label: 'Sentarse un momento', result: 'El metal aún guarda calor: recuperas un quinto de la vida.', fx: { hp: 0.2 } }] },
+    { id: 'ff1', type: 'food', x: 590, y: 226, food: 'chile' }, { id: 'ff2', type: 'food', x: 272, y: 340, food: 'filete' }, { id: 'ff3', type: 'food', x: 1420, y: 152, food: 'pan' },
+    { id: 'ff4', type: 'food', x: 1150, y: 505, food: 'huevo' }, { id: 'ff5', type: 'food', x: 1125, y: 838, food: 'chile' }, { id: 'ff6', type: 'food', x: 250, y: 480, food: 'filete' },
+    { id: 'fm1', type: 'coin', x: 335, y: 240, coins: 10 }, { id: 'fm2', type: 'coin', x: 1470, y: 662, coins: 14 }, { id: 'fm3', type: 'coin', x: 600, y: 800, coins: 12 }, { id: 'fm4', type: 'coin', x: 1320, y: 32, coins: 11 },
+  ],
+};
+
+// ---------- Tundra de la Aurora ----------
+// La isla nevada: el portal en una plaza despejada, un estanque helado, un santuario y cristales de hielo.
+const NEVADA = {
+  id: 'nevada', name: 'Isla nevada', img: 'assets/aventura/tundra-entrada.webp', w: 1536, h: 864, start: [705, 398],
+  ground: [[300, 0], [1180, 0], [1300, 30], [1385, 90], [1400, 150], [1365, 205], [1345, 245], [1345, 398], [1378, 405], [1378, 430], [1330, 470], [1312, 540], [1340, 600], [1390, 640], [1385, 680], [1320, 735], [1245, 785], [1170, 815], [1065, 835], [880, 840], [420, 830], [360, 805], [300, 770], [235, 730], [180, 700], [120, 630], [105, 590], [100, 420], [108, 320], [175, 300], [170, 250], [112, 240], [112, 200], [205, 150], [262, 95]],
+  bridges: [[1340, 283, 1536, 343], [915, 800, 1030, 864]],
+  circles: [
+    [280, 65, 20], [355, 268, 44], [350, 360, 20], [806, 410, 22], [235, 542, 32], [180, 567, 26], [482, 652, 28], [740, 440, 36], [735, 507, 16], [1068, 567, 42], [903, 597, 46], [813, 812, 30],   // rocas nevadas
+    [460, 60, 40], [280, 365, 44], [843, 315, 30], [600, 740, 34], [670, 777, 22], [790, 520, 30], [1123, 800, 30],                                                                             // cristales de hielo
+    [835, 55, 24], [900, 15, 30], [670, 200, 18], [700, 228, 18], [1278, 260, 26], [1183, 320, 16], [1268, 160, 18], [625, 607, 16], [620, 647, 16], [515, 747, 18], [1288, 652, 40], [1188, 590, 16], [820, 712, 20], [1098, 762, 16], [288, 170, 16],   // arbustos con nieve
+    [148, 250, 14], [300, 690, 14], [398, 175, 12], [376, 695, 12], [957, 520, 12],                                                                                                            // árboles pelados y farolas
+  ],
+  // portal, santuario, valla, tronco caído, barandillas y pilares de los puentes
+  rects: [[520, 220, 640, 350], [550, 40, 625, 145], [195, 438, 350, 466], [330, 540, 400, 592], [390, 520, 460, 572], [450, 500, 522, 550], [1345, 245, 1536, 283], [1345, 343, 1536, 398], [880, 770, 915, 864], [1030, 770, 1065, 864]],
+  ponds: [[1038, 138, 172, 110]],
+  trees: [
+    [347, 95, 'pine', 50, 95], [530, 52, 'pine', 40, 55], [640, 45, 'round', 50, 60], [322, 178, 'pine', 32, 78], [352, 198, 'pine', 36, 60], [685, 175, 'pine', 42, 125], [752, 234, 'round', 52, 120],
+    [220, 307, 'pine', 50, 160], [815, 262, 'pine', 36, 118], [1310, 154, 'pine', 50, 140], [1233, 77, 'pine', 45, 80], [1218, 537, 'pine', 42, 125], [165, 562, 'pine', 50, 135], [225, 707, 'pine', 45, 150],
+    [555, 687, 'pine', 48, 165], [450, 797, 'pine', 42, 95], [740, 842, 'pine', 45, 155], [873, 527, 'pine', 42, 105], [1140, 574, 'round', 60, 150], [1205, 774, 'round', 62, 150], [578, 350, 'post', 55, 135],
+  ],
+  grass: [[475, 85, 548, 155], [625, 50, 690, 100], [710, 0, 790, 55], [888, 225, 993, 315], [1088, 200, 1273, 320], [325, 425, 475, 510], [650, 652, 740, 722], [1018, 432, 1093, 487], [953, 600, 1168, 697], [1168, 577, 1273, 642]],
+  pois: [
+    { id: 'salida', type: 'exit', x: 578, y: 388, r: 38 },
+    { id: 't-este', type: 'gate', x: 1516, y: 313, r: 34, text: 'El puente del este lleva al bosque de cristal. Todavía está cerrado.' },
+    { id: 't-sur', type: 'gate', x: 972, y: 846, r: 34, text: 'El puente del sur lleva al observatorio. Todavía está cerrado.' },
+    { id: 'ts1', type: 'wild', x: 950, y: 376, to: [1200, 372], species: 'frostine', level: 14 },
+    { id: 'ts2', type: 'wild', x: 330, y: 640, to: [430, 650], species: 'zephyra', level: 15 },
+    { id: 'ts3', type: 'wild', x: 850, y: 200, to: [790, 100], species: 'aquarok', level: 16 },
+    { id: 'tc1', type: 'chest', x: 1215, y: 715, coins: 110, hidden: true },         // detrás del árbol nevado del sureste
+    { id: 'tc2', type: 'chest', x: 1200, y: 255, item: 'escudo', hidden: true },     // entre la hierba helada, junto al estanque
+    { id: 'tc3', type: 'chest', x: 228, y: 262, item: 'pocion', hidden: true },      // detrás del pino grande del oeste
+    { id: 'td1', type: 'rest', x: 1000, y: 540, r: 26 },                             // a la luz de la farola
+    { id: 'te1', type: 'event', x: 588, y: 170, text: 'Un santuario pequeño, medio enterrado en la nieve.',
+      choices: [{ label: 'Quitarle la nieve', result: 'Dentro arde una vela que no se apaga: recuperas un cuarto de la vida.', fx: { hp: 0.25 } },
+        { label: 'Mirar dentro', result: 'Alguien dejó una ofrenda hace mucho: +30 monedas.', fx: { coins: 30 } }] },
+    { id: 'te2', type: 'event', x: 1038, y: 272, text: 'Bajo el hielo del estanque se mueve una luz.',
+      choices: [{ label: 'Romper el hielo', result: 'El agua helada te salpica, pero sacas una bolsa: +40 monedas y pierdes un poco de vida.', fx: { coins: 40, hp: -0.1 } },
+        { label: 'Quedarse mirando', result: 'La luz baila bajo el hielo y te despeja la cabeza: recuperas todo el MP.', fx: { mp: 999 } }] },
+    { id: 'tf1', type: 'food', x: 510, y: 122, food: 'helado' }, { id: 'tf2', type: 'food', x: 940, y: 272, food: 'pescado' }, { id: 'tf3', type: 'food', x: 400, y: 485, food: 'leche' },
+    { id: 'tf4', type: 'food', x: 700, y: 690, food: 'galleta' }, { id: 'tf5', type: 'food', x: 1060, y: 652, food: 'pescado' }, { id: 'tf6', type: 'food', x: 1222, y: 612, food: 'helado' },
+    { id: 'tm1', type: 'coin', x: 150, y: 380, coins: 12 }, { id: 'tm2', type: 'coin', x: 1280, y: 440, coins: 14 }, { id: 'tm3', type: 'coin', x: 640, y: 812, coins: 12 }, { id: 'tm4', type: 'coin', x: 755, y: 62, coins: 15 },
+  ],
+};
+
+// Cada región lleva la luz con que se tiñen las bestias (tint) y lo que flota en el aire (motes).
 export const REGIONS = {
-  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' } },
+  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' },
+    tint: 'rgba(26, 34, 118, .24)', motes: 'fireflies' },
+  forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers' },
+  tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow' },
 };
 
 export const REST_HEAL = 0.5;
@@ -166,6 +261,11 @@ export const REST_HEAL = 0.5;
 export const regionOf = g => (g.adv ? REGIONS[g.adv.region] : null);
 export const zoneOf = g => (g.adv ? REGIONS[g.adv.region].zones[g.adv.zone] : null);
 export const cleared = (g, region) => (g.advCleared || {})[region] || 0;
+// De qué nivel a qué nivel son las bestias salvajes de una región.
+export function levels(region) {
+  const all = Object.values(REGIONS[region].zones).flatMap(z => z.pois.filter(p => p.type === 'wild' || p.type === 'boss').map(p => p.level));
+  return [Math.min(...all), Math.max(...all)];
+}
 
 // Sale de expedición (o sigue con la que tenía a medias, si es de esta versión del mapa).
 export function start(g, region) {
@@ -284,7 +384,8 @@ function inPolygon(poly, x, y) {
 // ¿Se puede poner un pie en (x, y)?
 export function ground(zone, x, y) {
   if (x < 0 || y < 0 || x > zone.w || y > zone.h) return false;
-  if (!inPolygon(zone.ground, x, y) && !zone.bridges.some(b => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3])) return false;
+  const bridge = zone.bridges.some(b => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
+  if (!bridge && (!inPolygon(zone.ground, x, y) || zone.holes?.some(h => inPolygon(h, x, y)))) return false;
   for (const [cx, cy, r] of zone.circles) if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return false;
   for (const [x0, y0, x1, y1] of zone.rects) if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return false;
   for (const [cx, cy, rx, ry] of zone.ponds) if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 < 1) return false;

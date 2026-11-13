@@ -490,6 +490,15 @@ canvas { display: block; }
 .adv-card .adv-thumb img { display: block; width: 100%; aspect-ratio: 16 / 6; object-fit: cover; }
 .adv-card .adv-thumb b { position: absolute; left: 12px; bottom: 8px; font-size: 17px; text-shadow: 0 2px 8px #0d0b1e, 0 0 2px #0d0b1e; }
 .adv-card { align-items: flex-start; }
+.adv-card .adv-thumb .chip { position: absolute; right: 10px; bottom: 8px; }
+.adv-regions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; }
+.adv-regions button { display: grid; gap: 2px; text-align: left; background: rgba(8, 6, 24, .45); border: 2px solid var(--line); border-radius: 10px; color: var(--muted); font: inherit; padding: 8px 10px; cursor: pointer; }
+.adv-regions button b { font-size: 14px; color: var(--ink); }
+.adv-regions button small { font-size: 11px; font-weight: 700; }
+.adv-regions button.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 200, 61, .3); }
+.adv-regions button.on small { color: var(--gold); }
+.adv-regions button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 560px) { .adv-regions { grid-template-columns: 1fr; } }
 .adventure { display: grid; gap: 10px; }
 .adv-hud { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .adv-hud > b { margin-right: auto; font-size: 18px; }

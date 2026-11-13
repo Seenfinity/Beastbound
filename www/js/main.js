@@ -880,13 +880,23 @@ function endBattle(win) {
 let explore = null, advFight = null, advNear = false;
 try { advNear = localStorage.getItem('petbound-adv-view') === 'near'; } catch { /* sin almacenamiento */ }
 const advMaps = {};                                    // imágenes de los mapas, cargadas la primera vez que se entra
-const ADV_REGION = 'islas';
+let advRegion = 'islas';                               // la región elegida en la tarjeta (se recuerda)
+try { const saved = localStorage.getItem('petbound-adv-region'); if (A.REGIONS[saved]) advRegion = saved; } catch { /* sin almacenamiento */ }
+const ADV_THUMB = { castillo: 'assets/landing/castillo.webp', volcan: 'assets/landing/volcan.webp', aurora: 'assets/landing/aurora.webp' };
 function dropAdventure() { explore = null; advFight = null; $('adventure').hidden = true; }
 
 function renderAdvCard() {
-  const on = !!game.adv;
-  $('adv-info').textContent = on ? 'Tienes una expedición a medias.'
-    : A.cleared(game, ADV_REGION) ? 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.'
+  const on = !!game.adv, shown = A.REGIONS[game.adv?.region] || A.REGIONS[advRegion], box = A.chests(game, shown.id);
+  // Con una expedición a medias se sigue en su región; para cambiar hay que volver antes a casa.
+  $('adv-regions').innerHTML = Object.values(A.REGIONS).map(r => {
+    const [lo, hi] = A.levels(r.id);
+    return `<button data-region="${r.id}" class="${r === shown ? 'on' : ''}"${on && r !== shown ? ' disabled' : ''}><b>${r.name}</b><small>Bestias de nivel ${lo} a ${hi}</small></button>`;
+  }).join('');
+  $('adv-thumb-img').src = ADV_THUMB[shown.map];
+  $('adv-thumb-name').textContent = shown.name;
+  $('adv-thumb-chests').textContent = `Cofres ${box.found} de ${box.total}`;
+  $('adv-info').textContent = on ? 'Tienes una expedición a medias. Para ir a otra región, vuelve antes a casa.'
+    : A.cleared(game, shown.id) ? 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.'
     : 'Recorre las islas a tu aire: cruza los puentes, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
   $('btn-adv').textContent = on ? 'Seguir la expedición' : 'Salir de expedición';
 }
@@ -906,7 +916,7 @@ async function openAdventure() {
   const p = game.pet;
   if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
   if (!game.adv && S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
-  const region = A.REGIONS[game.adv?.region || ADV_REGION];
+  const region = A.REGIONS[game.adv?.region] || A.REGIONS[advRegion];
   A.start(game, region.id);
   const zone = A.zoneOf(game);
   $('btn-adv').disabled = true;
@@ -1021,6 +1031,14 @@ function advReach(poi) {
   });
 }
 $('btn-adv').onclick = () => { sfx.tap(); openAdventure(); };
+$('adv-regions').addEventListener('click', e => {
+  const id = e.target.closest('button[data-region]')?.dataset.region;
+  if (!id || !A.REGIONS[id] || game.adv) return;
+  advRegion = id;
+  try { localStorage.setItem('petbound-adv-region', id); } catch { /* sin almacenamiento */ }
+  sfx.tap();
+  renderAdvCard();
+});
 $('adv-zoom').onclick = () => {
   advNear = !advNear;
   try { localStorage.setItem('petbound-adv-view', advNear ? 'near' : 'far'); } catch { /* sin almacenamiento */ }

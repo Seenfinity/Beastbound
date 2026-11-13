@@ -12,10 +12,11 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Deja un dibujo con el grano de píxel y la luz de noche del mapa, para que no parezca un recorte pegado encima.
 const cache = new WeakMap();
-function blend(img, height) {
+function blend(img, height, tint) {
   let byHeight = cache.get(img);
   if (!byHeight) cache.set(img, byHeight = new Map());
-  let out = byHeight.get(height);
+  const key = height + tint;
+  let out = byHeight.get(key);
   if (!out) {
     out = document.createElement('canvas');
     out.height = Math.max(4, Math.round(height / CELL));
@@ -24,9 +25,9 @@ function blend(img, height) {
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(img, 0, 0, out.width, out.height);
     c.globalCompositeOperation = 'source-atop';
-    c.fillStyle = 'rgba(26, 34, 118, .24)';
+    c.fillStyle = tint;
     c.fillRect(0, 0, out.width, out.height);
-    byHeight.set(height, out);
+    byHeight.set(key, out);
   }
   return out;
 }
@@ -37,6 +38,8 @@ export class Explore {
   constructor(canvas, game, art, hooks) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.g = game; this.zone = A.zoneOf(game); this.art = art; this.hooks = hooks;
+    const region = A.regionOf(game);
+    this.tint = region.tint || 'rgba(26, 34, 118, .24)'; this.motes = region.motes || 'fireflies';   // la luz y el aire de la región
     this.x = game.adv.x; this.y = game.adv.y;
     if (!A.walkable(this.zone, this.x, this.y)) [this.x, this.y] = this.zone.start;
     this.dir = 1; this.t = 0; this.hop = 0; this.moving = false; this.busy = false;
@@ -45,7 +48,7 @@ export class Explore {
     // Las bestias salvajes de la zona, con su patrulla.
     this.wilds = this.zone.pois.filter(p => p.type === 'wild' || p.type === 'boss').map(poi => ({ poi, x: poi.x, y: poi.y, way: 1, dir: -1, wait: 0, hop: 0 }));
     this.cam = { x: 0, y: 0 }; this.zoom = 1; this.near = !!art.near;
-    // Luciérnagas: puntos de luz que flotan por la zona.
+    // Lo que flota en el aire: luciérnagas, ascuas que suben o copos que caen.
     this.flies = Array.from({ length: 26 }, (_, i) => ({ x: (i * 397 + 120) % this.zone.w, y: (i * 251 + 90) % (this.zone.h - 160), p: i * 1.7, r: 26 + (i % 5) * 9 }));
     this.resize();
     this.center(true);
@@ -175,15 +178,7 @@ export class Explore {
       else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) drawn.push(this.beast(this.art.chest, it.chest.x, it.chest.y + 6, 44, 1, 0, false));
     }
 
-    // Luciérnagas
-    ctx.globalCompositeOperation = 'lighter';
-    for (const f of this.flies) {
-      const fx = f.x + Math.sin(this.t * 0.5 + f.p) * f.r, fy = f.y + Math.cos(this.t * 0.37 + f.p * 1.3) * f.r * 0.6, glow = 0.35 + 0.65 * Math.abs(Math.sin(this.t * 1.3 + f.p));
-      const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 7);
-      grad.addColorStop(0, `rgba(255, 244, 170, ${0.85 * glow})`); grad.addColorStop(1, 'rgba(255, 220, 120, 0)');
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(fx, fy, 7, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalCompositeOperation = 'source-over';
+    this.air();
 
     // Por encima de todo: rótulos, marcas y el brillo que delata un cofre escondido cuando pasas cerca.
     for (const w of this.wilds) {
@@ -205,11 +200,39 @@ export class Explore {
     }
   }
 
+  // El aire de la región: luciérnagas que rondan, ascuas que suben desde la lava o nieve que cae.
+  air() {
+    const { ctx, zone, t } = this, wrap = (v, size) => ((v % size) + size) % size;
+    if (this.motes === 'snow') {
+      ctx.fillStyle = 'rgba(240, 248, 255, .85)';
+      for (const f of this.flies) {
+        const size = 2 + (f.r % 3), fy = wrap(f.y + t * (22 + f.r * 0.6), zone.h), fx = wrap(f.x + Math.sin(t * 0.7 + f.p) * 18 + t * 6, zone.w);
+        ctx.fillRect(Math.round(fx / 2) * 2, Math.round(fy / 2) * 2, size, size);      // copos cuadrados, en la rejilla del mapa
+      }
+      return;
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of this.flies) {
+      let fx, fy, glow, radius = 7, core = '255, 244, 170', edge = '255, 220, 120';
+      if (this.motes === 'embers') {                       // suben, se mecen y se apagan arriba
+        const life = wrap(t * (0.12 + (f.r % 7) * 0.012) + f.p, 1);
+        fx = f.x + Math.sin(t * 1.1 + f.p * 3) * 14; fy = f.y + 70 - life * 190; glow = Math.sin(life * Math.PI);
+        radius = 5; core = '255, 190, 90'; edge = '255, 80, 20';
+      } else {
+        fx = f.x + Math.sin(t * 0.5 + f.p) * f.r; fy = f.y + Math.cos(t * 0.37 + f.p * 1.3) * f.r * 0.6; glow = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.3 + f.p));
+      }
+      const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, radius);
+      grad.addColorStop(0, `rgba(${core}, ${0.85 * glow})`); grad.addColorStop(1, `rgba(${edge}, 0)`);
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(fx, fy, radius, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   // Pinta una bestia (o un cofre) integrada en el mapa: sombra, grano de píxel y, en la hierba alta, los pies tapados.
   // Devuelve la caja que ocupa.
   beast(img, x, y, height, dir, lift, shadow = true) {
     if (!img) return { x, y, w: 0, h: 0 };
-    const { ctx, zone } = this, sprite = blend(img, height), w = sprite.width * CELL, h = sprite.height * CELL;
+    const { ctx, zone } = this, sprite = blend(img, height, this.tint), w = sprite.width * CELL, h = sprite.height * CELL;
     if (shadow) { ctx.fillStyle = 'rgba(6, 5, 22, .5)'; ctx.beginPath(); ctx.ellipse(x, y, w * 0.33, h * 0.11, 0, 0, Math.PI * 2); ctx.fill(); }
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y - lift));
