@@ -12,11 +12,13 @@ const types = {
   '.json': 'application/json',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
 };
 
 http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p.endsWith('/')) p += 'index.html';
+  if (!path.extname(p)) p += '.html';                  // direcciones sin .html, como en la web publicada: /jugar
   const file = path.join(root, path.normalize(p));
   if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {

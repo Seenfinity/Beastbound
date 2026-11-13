@@ -1,7 +1,7 @@
 // Cuenta del jugador: entrar con correo o wallet de Solana a través de Privy.
 // La parte de Privy (React) está compilada en cuenta/ y solo se descarga si hay un App ID configurado,
 // y después de que el juego haya cargado, para no retrasarlo.
-// De momento la cuenta solo identifica al jugador: la partida sigue guardándose en el dispositivo.
+// Para jugar hay que entrar. De momento la cuenta solo identifica al jugador: la partida sigue guardándose en el dispositivo.
 
 import { PRIVY_APP_ID, PRIVY_CLIENT_ID } from './config.js';
 import { tr } from './i18n.js';
@@ -11,7 +11,7 @@ export const account = { state: PRIVY_APP_ID ? 'loading' : 'off', user: null };
 
 const listeners = new Set();
 let api = null, started = false;
-const tell = () => { for (const cb of listeners) cb(account); };
+export const tell = () => { for (const cb of listeners) cb(account); };   // avisa a quien escucha de que la cuenta cambió
 
 export function onAccount(cb) { listeners.add(cb); cb(account); }
 

@@ -473,3 +473,5 @@ canvas { display: block; }
 .langs button:hover { color: var(--ink); }
 .langs button.on { border-color: var(--gold); color: var(--gold); }
 #screen-start .langs { margin-top: 18px; }
+#screen-login .langs { margin-top: 18px; }
+#screen-login .btn:disabled { opacity: .55; }

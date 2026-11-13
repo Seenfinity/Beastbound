@@ -14,6 +14,7 @@ import { watch, locale } from './i18n.js';
 import { account, onAccount, startAccount, login, logout, shortWallet } from './account.js';
 
 watch();                                             // traduce la página si el idioma no es español
+startAccount();                                      // las cuentas se conectan mientras cargan las imágenes
 
 const $ = id => document.getElementById(id);
 const own = s => `<span translate="no">${esc(s)}</span>`;   // nombres propios: no se traducen
@@ -872,7 +873,7 @@ function renderAccount() {
   const who = u && (u.email || shortWallet(u.wallet));
   $('account-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
     : account.state === 'failed' ? 'No se pudo conectar con el servicio de cuentas. Recarga la página para reintentar.'
-    : !u ? 'Entra con tu correo o tu wallet de Solana. Pronto servirá para llevar tu partida a cualquier dispositivo.'
+    : !u ? 'Entra con tu correo o tu wallet de Solana.'
     : u.wallet && u.email ? `Has entrado como ${who}. Wallet de Solana: ${shortWallet(u.wallet)}` : `Has entrado como ${who}.`;
   btn.hidden = account.state === 'failed';
   btn.disabled = account.state !== 'ready';
@@ -880,6 +881,32 @@ function renderAccount() {
 }
 $('btn-account').onclick = () => { sfx.tap(); if (account.user) logout(); else login(); };
 onAccount(renderAccount);
+
+// Entrada obligatoria: sin cuenta no se pasa de la pantalla de entrada. Si las cuentas no están configuradas
+// (sin App ID) no hay puerta. En el ordenador de desarrollo, ?invitado deja pasar para poder probar.
+const guest = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('invitado');
+let artReady = false, entered = false;
+function gate() {
+  if (!artReady) return;
+  const locked = account.state !== 'off' && !account.user && !guest;
+  $('screen-login').hidden = !locked;
+  if (locked) {
+    if (entered) { entered = false; battle = null; music.stop(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true; $('toast').hidden = true; }
+    $('screen-loading').hidden = true; $('screen-start').hidden = true; $('game').hidden = true;
+    const failed = account.state === 'failed';
+    $('login-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
+      : failed ? 'No se pudo conectar con el servicio de cuentas.'
+      : 'Entra con tu correo o tu wallet de Solana para empezar. Si entras con correo, te creamos una wallet.';
+    $('btn-login').textContent = failed ? 'Reintentar' : 'Entrar';
+    $('btn-login').disabled = account.state === 'loading';
+    return;
+  }
+  if (entered) return;
+  entered = true;
+  game = S.load();
+  if (game?.pet) { S.tick(game); enterGame(); } else showStart();
+}
+$('btn-login').onclick = () => { sfx.tap(); if (account.state === 'failed') location.reload(); else login(); };
 
 $('btn-test').onclick = () => { game.testMode = !game.testMode; S.save(game); renderAll(); };
 $('btn-sound').onclick = () => { setMuted(!isMuted()); renderAll(); sfx.coin(); };
@@ -955,9 +982,8 @@ try {
   room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);
   buildTray();
   window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, vfx }; // para depurar desde la consola
-  game = S.load();
-  if (game?.pet) { S.tick(game); enterGame(); } else showStart();
-  startAccount();                                     // las cuentas se cargan después, sin retrasar el juego
+  artReady = true;
+  onAccount(gate);                                    // entra al juego si hay cuenta; si no, pantalla de entrada
   requestAnimationFrame(frame);
 } catch (err) {
   console.error(err);
