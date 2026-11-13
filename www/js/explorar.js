@@ -41,7 +41,7 @@ export class Explore {
     if (!A.walkable(this.zone, this.x, this.y)) [this.x, this.y] = this.zone.start;
     this.dir = 1; this.t = 0; this.hop = 0; this.moving = false; this.busy = false;
     this.keys = { x: 0, y: 0 }; this.goal = null; this.path = []; this.stuck = 0;
-    this.skip = 'salida'; this.safe = [this.x, this.y]; this.saved = 0;
+    this.skip = this.zone.pois.find(p => Math.hypot(p.x - this.x, p.y - this.y) < (p.r || 34) + 6)?.id || ''; this.safe = [this.x, this.y]; this.saved = 0;   // si aparece encima de algo, no salta hasta que se aparte
     // Las bestias salvajes de la zona, con su patrulla.
     this.wilds = this.zone.pois.filter(p => p.type === 'wild' || p.type === 'boss').map(poi => ({ poi, x: poi.x, y: poi.y, way: 1, dir: -1, wait: 0, hop: 0 }));
     this.cam = { x: 0, y: 0 }; this.zoom = 1; this.near = !!art.near;
@@ -237,6 +237,7 @@ export class Explore {
     ctx.save();
     ctx.beginPath();
     if (kind === 'round') { ctx.ellipse(tx, ty - h + r, r + 5, r + 4, 0, 0, Math.PI * 2); ctx.rect(tx - 13, ty - h + r, 26, h - r); }
+    else if (kind === 'post') ctx.rect(tx - r, ty - h, r * 2, h);
     else { ctx.moveTo(tx, ty - h - 4); ctx.lineTo(tx + r + 2, ty - 16); ctx.lineTo(tx + 11, ty - 16); ctx.lineTo(tx + 11, ty); ctx.lineTo(tx - 11, ty); ctx.lineTo(tx - 11, ty - 16); ctx.lineTo(tx - r - 2, ty - 16); ctx.closePath(); }
     ctx.clip();
     const x0 = tx - r - 8, y0 = Math.max(0, ty - h - 8), w = (r + 8) * 2, hh = ty - y0 + 2;

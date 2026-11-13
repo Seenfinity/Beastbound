@@ -6,7 +6,7 @@
 // nivel fijo (no el tuyo), así que criar bien a la tuya sirve para llegar más lejos.
 //
 // En la partida:  g.adv        la expedición en curso (o null): { region, zone, x, y, hp, mp, done }
-//                 g.advChests  cofres ya abiertos (solo se abren una vez)
+//                 g.advChests  cofres ya abiertos (solo se abren una vez); los identificadores no se repiten entre zonas
 //                 g.advCleared regiones cuyo jefe has vencido: { islas: veces }
 
 import { speciesOf } from './roster.js';
@@ -17,10 +17,10 @@ const STATS = ['pot', 'agu', 'pun', 'agi'];
 // Cada zona es una imagen (1536 × 864) con el suelo marcado a mano encima:
 //   ground  el contorno por donde se puede andar, más los puentes (bridges)
 //   blocks  lo que estorba: círculos [x, y, radio], rectángulos y el estanque
-//   trees   árboles altos: se choca con el tronco y se puede pasar por detrás de la copa
+//   trees   árboles altos (y columnas): se choca con el tronco y se puede pasar por detrás de la copa
 //   grass   hierba alta: tapa los pies (y esconde cofres)
 const PORTAL = {
-  id: 'portal', img: 'assets/aventura/islas-portal.webp', w: 1536, h: 864, start: [700, 352],
+  id: 'portal', name: 'Isla del portal', img: 'assets/aventura/islas-portal.webp', w: 1536, h: 864, start: [700, 352],
   ground: [[80, 0], [1395, 0], [1470, 90], [1480, 280], [1450, 440], [1445, 560], [1400, 700], [1300, 758], [1250, 775], [770, 770], [600, 742], [500, 732], [400, 712], [300, 680], [215, 610], [120, 600], [95, 500], [80, 440]],
   bridges: [[1380, 306, 1536, 388]],
   circles: [
@@ -30,7 +30,7 @@ const PORTAL = {
   ],
   rects: [[906, 95, 1010, 132], [1006, 80, 1040, 198], [1038, 160, 1066, 200], [928, 192, 980, 220], [205, 512, 375, 578], [903, 492, 1030, 514], [1326, 548, 1366, 612]],   // ruinas, tronco caído, arco, valla y columna caída
   ponds: [[342, 185, 114, 90]],                                                                                                     // [x, y, radio horizontal, radio vertical]
-  // [x del tronco, y de la base, forma, radio de la copa, altura]
+  // [x del tronco, y de la base, forma, radio de la copa, altura]. La forma 'post' es una columna o una estatua: alta y estrecha.
   trees: [
     [210, 150, 'round', 60, 125], [132, 68, 'pine', 42, 150], [410, 85, 'pine', 45, 150], [750, 135, 'pine', 42, 140], [825, 125, 'pine', 45, 155], [165, 280, 'round', 55, 125],
     [88, 260, 'pine', 38, 110], [213, 485, 'pine', 40, 135], [1338, 150, 'pine', 40, 125], [1343, 295, 'round', 55, 125], [1418, 235, 'round', 45, 115], [755, 580, 'round', 55, 130],
@@ -58,14 +58,107 @@ const PORTAL = {
     { id: 'f1', type: 'food', x: 150, y: 300, food: 'bayas' }, { id: 'f2', type: 'food', x: 1180, y: 110, food: 'seta' }, { id: 'f3', type: 'food', x: 1000, y: 620, food: 'manzana' },
     { id: 'f4', type: 'food', x: 640, y: 640, food: 'semillas' }, { id: 'f5', type: 'food', x: 1270, y: 650, food: 'miel' }, { id: 'f6', type: 'food', x: 440, y: 120, food: 'bayas' },
     { id: 'm1', type: 'coin', x: 1060, y: 130, coins: 6 }, { id: 'm2', type: 'coin', x: 250, y: 420, coins: 5 }, { id: 'm3', type: 'coin', x: 1420, y: 620, coins: 8 }, { id: 'm4', type: 'coin', x: 900, y: 720, coins: 6 },
-    { id: 'cartel', type: 'sign', x: 828, y: 448, text: 'El cartel señala dos caminos: al norte, el jardín; al este, las ruinas. Los dos puentes siguen cerrados.' },
-    { id: 'norte', type: 'gate', x: 590, y: 14, r: 40, text: 'El puente del norte lleva al jardín. Todavía está cerrado.' },
-    { id: 'este', type: 'gate', x: 1512, y: 347, r: 40, text: 'El puente del este lleva a las ruinas. Todavía está cerrado.' },
+    { id: 'cartel', type: 'sign', x: 828, y: 448, text: 'El cartel señala dos caminos: al norte, el jardín; al este, las ruinas.' },
+    { id: 'norte', type: 'gate', x: 590, y: 14, r: 40, to: { zone: 'jardin', x: 546, y: 752 } },
+    { id: 'este', type: 'gate', x: 1512, y: 347, r: 40, to: { zone: 'ruinas', x: 108, y: 411 } },
+  ],
+};
+
+// El jardín, al norte del portal: un estanque con fuente en el centro, el cenador, setos y parterres.
+const JARDIN = {
+  id: 'jardin', name: 'Jardín lunar', img: 'assets/aventura/islas-jardin.webp', w: 1536, h: 864, start: [546, 752],
+  ground: [[70, 0], [1350, 0], [1400, 40], [1415, 70], [1405, 130], [1385, 200], [1375, 250], [1380, 310], [1425, 345], [1475, 410], [1505, 480], [1508, 560], [1480, 625], [1395, 662], [1340, 702], [1200, 712], [1090, 728], [1040, 765], [960, 795], [440, 790], [290, 755], [205, 700], [150, 650], [108, 570], [105, 480], [100, 400], [95, 260], [70, 200], [35, 150], [35, 60]],
+  bridges: [[472, 770, 620, 864], [1370, 256, 1536, 300]],
+  circles: [
+    [225, 490, 44], [378, 672, 48], [1188, 130, 46], [1400, 557, 48],                                                                    // rocas
+    [345, 305, 36], [472, 188, 36], [710, 128, 30], [1040, 232, 36], [1133, 28, 34], [1313, 395, 36], [538, 600, 35], [730, 717, 36],   // rosales y arbustos
+    [562, 120, 10], [1333, 292, 10], [908, 597, 10], [1133, 388, 48],                                                                    // faroles y la estatua con su corro de flores
+  ],
+  // cenador, setos, bancos, parterres, valla y los pilares del puente
+  rects: [[190, 0, 368, 200], [520, 158, 588, 208], [730, 92, 806, 128], [718, 140, 765, 222], [793, 152, 936, 238], [1028, 140, 1128, 185], [1085, 140, 1131, 270], [1198, 182, 1288, 232],
+    [960, 355, 1010, 440], [925, 420, 1000, 522], [1040, 460, 1131, 505], [995, 527, 1163, 575], [974, 607, 1196, 680], [1222, 655, 1343, 696], [272, 545, 448, 621], [445, 775, 471, 864], [621, 775, 648, 864]],
+  ponds: [[742, 388, 205, 132]],
+  trees: [
+    [95, 78, 'pine', 38, 80], [112, 158, 'pine', 30, 75], [185, 392, 'pine', 45, 155], [222, 287, 'pine', 20, 50], [287, 474, 'pine', 45, 160], [470, 58, 'pine', 35, 60], [722, 50, 'pine', 35, 55],
+    [665, 95, 'pine', 28, 68], [873, 132, 'round', 72, 140], [980, 208, 'pine', 45, 145], [1318, 170, 'round', 75, 165], [200, 617, 'round', 62, 135], [478, 722, 'pine', 42, 145],
+    [775, 697, 'round', 65, 145], [1255, 592, 'round', 70, 155], [1365, 500, 'pine', 30, 92], [843, 822, 'round', 42, 95], [1133, 398, 'post', 22, 130],
+  ],
+  grass: [[395, 60, 535, 145], [953, 25, 1100, 130], [330, 385, 410, 508], [1168, 260, 1250, 338], [836, 582, 913, 682], [888, 680, 1028, 772]],
+  pois: [
+    { id: 'j-sur', type: 'gate', x: 546, y: 842, r: 36, to: { zone: 'portal', x: 590, y: 92 } },
+    { id: 'j-este', type: 'gate', x: 1516, y: 278, r: 36, text: 'El puente del este lleva al bosque. Todavía está cerrado.' },
+    { id: 'js1', type: 'wild', x: 455, y: 330, to: [440, 480], species: 'aquarok', level: 4 },
+    { id: 'js2', type: 'wild', x: 690, y: 562, to: [860, 548], species: 'toxipuff', level: 5 },
+    { id: 'js3', type: 'wild', x: 1180, y: 302, to: [1300, 332], species: 'tropicat', level: 6 },
+    { id: 'jc1', type: 'chest', x: 1070, y: 72, coins: 50, hidden: true },           // entre las flores altas del norte
+    { id: 'jc2', type: 'chest', x: 1332, y: 108, item: 'elixir', hidden: true },     // detrás del árbol grande
+    { id: 'jc3', type: 'chest', x: 172, y: 574, item: 'escudo', hidden: true },      // detrás del árbol del acantilado
+    { id: 'jd1', type: 'rest', x: 300, y: 236, r: 26 },                              // los escalones del cenador
+    { id: 'je1', type: 'event', x: 742, y: 548, text: 'El agua de la fuente brilla con luz propia.',
+      choices: [{ label: 'Beber un poco', result: 'Está fresca y sienta bien: recuperas un tercio de la vida.', fx: { hp: 0.33 } },
+        { label: 'Echar una moneda', result: 'La moneda se hunde y el agua chispea: recuperas todo el MP.', fx: { coins: -1, mp: 999 } }] },
+    { id: 'je2', type: 'event', x: 1133, y: 458, text: 'Una estatua sostiene un cuenco de piedra vacío.',
+      choices: [{ label: 'Dejar unas flores', result: 'Sientes que alguien te lo agradece: recuperas un cuarto de la vida.', fx: { hp: 0.25 } },
+        { label: 'Mirar detrás', result: 'Alguien olvidó aquí una bolsita: +30 monedas.', fx: { coins: 30 } }] },
+    { id: 'jf1', type: 'food', x: 450, y: 104, food: 'bayas' }, { id: 'jf2', type: 'food', x: 370, y: 452, food: 'manzana' }, { id: 'jf3', type: 'food', x: 960, y: 738, food: 'sandia' },
+    { id: 'jf4', type: 'food', x: 1215, y: 284, food: 'miel' }, { id: 'jf5', type: 'food', x: 140, y: 300, food: 'zanahoria' }, { id: 'jf6', type: 'food', x: 868, y: 640, food: 'semillas' },
+    { id: 'jm1', type: 'coin', x: 640, y: 40, coins: 8 }, { id: 'jm2', type: 'coin', x: 1440, y: 500, coins: 10 }, { id: 'jm3', type: 'coin', x: 250, y: 700, coins: 7 }, { id: 'jm4', type: 'coin', x: 1285, y: 628, coins: 8 },
+  ],
+};
+
+// Las ruinas, al este del portal: una plaza de losas rotas, un arco que brilla, columnas caídas y un pozo seco.
+const RUINAS = {
+  id: 'ruinas', name: 'Ruinas antiguas', img: 'assets/aventura/islas-ruinas.webp', w: 1536, h: 864, start: [108, 411],
+  ground: [[230, 0], [1080, 0], [1085, 35], [1230, 25], [1300, 40], [1420, 80], [1480, 170], [1505, 290], [1500, 430], [1440, 490], [1410, 580], [1370, 650], [1300, 745], [1200, 790], [1085, 800], [360, 805], [340, 752], [300, 712], [215, 697], [150, 632], [100, 580], [100, 475], [40, 475], [40, 200], [70, 110], [140, 50]],
+  bridges: [[0, 388, 170, 434], [957, 0, 1040, 60], [958, 780, 1052, 864]],
+  circles: [
+    [462, 145, 44], [1235, 232, 55], [1248, 682, 44], [478, 380, 16], [783, 657, 14], [1090, 565, 32],                                           // rocas y escombros
+    [217, 240, 22], [1265, 445, 24], [557, 745, 24],                                                                                             // cristales
+    [150, 165, 22], [240, 145, 22], [492, 65, 28], [928, 150, 24], [868, 280, 22], [1108, 235, 20], [1453, 340, 26], [1185, 682, 20], [480, 792, 24],   // arbustos
+    [429, 562, 44], [270, 360, 10], [1213, 610, 10], [655, 232, 14],                                                                             // pozo, faroles y un pilar roto
+  ],
+  rects: [
+    [655, 10, 725, 240], [805, 10, 885, 245], [725, 0, 805, 205],                                                                 // el arco
+    [0, 345, 162, 388], [0, 434, 162, 472], [925, 0, 957, 88], [1040, 0, 1072, 88], [925, 755, 957, 864], [1053, 755, 1085, 864],   // barandillas y pilares de los puentes
+    [417, 213, 475, 250], [368, 268, 430, 298], [535, 615, 602, 655], [702, 605, 745, 705], [1012, 518, 1080, 553], [1333, 348, 1385, 385],   // tambores de columna caídos
+    [612, 275, 655, 320], [580, 305, 630, 350], [888, 262, 918, 305], [1026, 398, 1058, 480], [1050, 462, 1120, 498], [1105, 478, 1172, 516],
+    [405, 455, 480, 490], [465, 470, 538, 508], [525, 527, 558, 582], [548, 552, 620, 590], [605, 570, 668, 606],                 // muros derruidos
+    [1032, 265, 1098, 300], [1098, 695, 1128, 735],                                                                               // estatua y columna con hiedra
+  ],
+  ponds: [],
+  trees: [
+    [200, 152, 'round', 70, 150], [135, 346, 'round', 66, 135], [90, 192, 'pine', 40, 130], [287, 94, 'pine', 40, 95], [425, 108, 'round', 42, 85], [540, 58, 'round', 42, 60],
+    [325, 268, 'post', 20, 130], [625, 228, 'post', 22, 175], [1065, 300, 'post', 32, 145], [1315, 386, 'post', 20, 108], [1113, 735, 'post', 18, 85],
+    [527, 372, 'pine', 42, 148], [1125, 155, 'round', 30, 60], [1166, 182, 'round', 30, 60], [1250, 130, 'pine', 45, 130], [1338, 172, 'round', 66, 145], [1193, 82, 'round', 32, 70],
+    [1413, 282, 'round', 70, 145], [1085, 414, 'pine', 24, 65], [200, 624, 'pine', 58, 135], [272, 552, 'round', 30, 70], [320, 672, 'pine', 40, 135], [420, 794, 'round', 66, 135],
+    [750, 800, 'round', 32, 65], [855, 772, 'pine', 42, 140], [1168, 779, 'round', 34, 75], [1303, 662, 'pine', 45, 165], [1365, 547, 'pine', 42, 135],
+  ],
+  grass: [[505, 50, 600, 200], [360, 315, 495, 395], [1105, 345, 1228, 448], [590, 667, 720, 802]],
+  pois: [
+    { id: 'r-oeste', type: 'gate', x: 14, y: 411, r: 34, to: { zone: 'portal', x: 1425, y: 347 } },
+    { id: 'r-norte', type: 'gate', x: 998, y: 14, r: 34, text: 'El puente del norte lleva al bosque. Todavía está cerrado.' },
+    { id: 'r-sur', type: 'gate', x: 1005, y: 846, r: 34, text: 'El puente del sur lleva a la torre. Todavía está cerrado.' },
+    { id: 'rs1', type: 'wild', x: 700, y: 430, to: [900, 520], species: 'gravion', level: 5 },
+    { id: 'rs2', type: 'wild', x: 480, y: 682, to: [660, 700], species: 'shadowon', level: 6 },
+    { id: 'rs3', type: 'wild', x: 1135, y: 318, to: [1290, 322], species: 'rokky', level: 7 },
+    { id: 'rc1', type: 'chest', x: 430, y: 742, coins: 60, hidden: true },           // detrás del árbol grande del sur
+    { id: 'rc2', type: 'chest', x: 1425, y: 236, item: 'pocion', hidden: true },     // detrás del árbol del acantilado
+    { id: 'rc3', type: 'chest', x: 565, y: 122, item: 'mira', hidden: true },        // entre las flores altas, junto a la roca
+    { id: 'rd1', type: 'rest', x: 1160, y: 608, r: 26 },                             // a la luz del farol
+    { id: 're1', type: 'event', x: 765, y: 264, text: 'Dentro del arco flota una luz azul que parece llamarte.',
+      choices: [{ label: 'Tocar la luz', result: 'Un chispazo te recorre: recuperas todo el MP, pero pierdes un poco de vida.', fx: { mp: 999, hp: -0.1 } },
+        { label: 'Buscar por los escalones', result: 'Entre las losas hay monedas antiguas: +25 monedas.', fx: { coins: 25 } }] },
+    { id: 're2', type: 'event', x: 429, y: 628, text: 'Un pozo seco. Al fondo brilla algo.',
+      choices: [{ label: 'Bajar el cubo', result: 'El cubo sube con un puñado de monedas: +35 monedas.', fx: { coins: 35 } },
+        { label: 'Pedir un deseo', result: 'Pides fuerzas para seguir, y algo te escucha: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
+    { id: 'rf1', type: 'food', x: 420, y: 352, food: 'seta' }, { id: 'rf2', type: 'food', x: 640, y: 724, food: 'bayas' }, { id: 'rf3', type: 'food', x: 1165, y: 402, food: 'seta' },
+    { id: 'rf4', type: 'food', x: 900, y: 215, food: 'queso' }, { id: 'rf5', type: 'food', x: 1450, y: 420, food: 'manzana' }, { id: 'rf6', type: 'food', x: 265, y: 598, food: 'semillas' },
+    { id: 'rm1', type: 'coin', x: 770, y: 620, coins: 10 }, { id: 'rm2', type: 'coin', x: 1350, y: 462, coins: 9 }, { id: 'rm3', type: 'coin', x: 505, y: 268, coins: 8 }, { id: 'rm4', type: 'coin', x: 1088, y: 118, coins: 12 },
   ],
 };
 
 export const REGIONS = {
-  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL }, boss: 'solaris', reward: { coins: 150, item: 'pocion' } },
+  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' } },
 };
 
 export const REST_HEAL = 0.5;
@@ -83,6 +176,14 @@ export function start(g, region) {
   return g.adv;
 }
 export function leave(g) { g.adv = null; }
+
+// Cruza un puente: pasa a la zona de al lado y aparece junto al puente por el que llega. Devuelve la zona nueva.
+export function travel(g, poi) {
+  const zone = g.adv && poi.to ? REGIONS[g.adv.region].zones[poi.to.zone] : null;
+  if (!zone) return null;
+  g.adv.zone = zone.id; g.adv.x = poi.to.x; g.adv.y = poi.to.y;
+  return zone;
+}
 
 // ¿Sigue ahí? Los cofres se abren una sola vez para siempre; lo demás vuelve en cada expedición.
 export function active(g, poi) {

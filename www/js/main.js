@@ -887,12 +887,12 @@ function renderAdvCard() {
   const on = !!game.adv;
   $('adv-info').textContent = on ? 'Tienes una expedición a medias.'
     : A.cleared(game, ADV_REGION) ? 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.'
-    : 'Zona de prueba: recorre la isla del portal a tu aire, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
+    : 'Recorre las islas a tu aire: cruza los puentes, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
   $('btn-adv').textContent = on ? 'Seguir la expedición' : 'Salir de expedición';
 }
 function renderAdventure() {
   if (!game.adv) return;
-  $('adv-name').textContent = A.regionOf(game).name;
+  $('adv-name').textContent = `${A.regionOf(game).name} · ${A.zoneOf(game).name}`;
   $('adv-hp').textContent = `Vida ${Math.round(game.adv.hp * 100)} %`;
   $('adv-mp').textContent = `MP ${game.adv.mp ?? S.profile(game.pet).maxMp}`;
   $('adv-energy').textContent = `Energía ${Math.round(game.pet.energy)}`;
@@ -915,10 +915,39 @@ async function openAdventure() {
   if (tab !== 'battle' || battle) return;
   S.save(game);
   $('lobby').hidden = true; $('arena').hidden = true; $('adventure').hidden = false;
+  advMount();
+}
+// Pone en pantalla la zona en la que está la expedición (su imagen ya está cargada).
+function advMount() {
+  const zone = A.zoneOf(game);
   explore = new Explore($('adv-canvas'), game,
-    { map: advMaps[zone.img], near: advNear, player: petSprite(p), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
+    { map: advMaps[zone.img], near: advNear, player: petSprite(game.pet), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
     { onReach: advReach, onMove: () => S.save(game) });
   renderAdventure();
+  for (const poi of zone.pois) {                         // las zonas de al lado se van cargando, para cruzar sin esperas
+    const next = poi.to?.zone && A.regionOf(game).zones[poi.to.zone];
+    if (next && !advMaps[next.img]) loadImage(next.img).then(img => { advMaps[next.img] = img; }, () => {});
+  }
+}
+// Cruzar un puente: la pantalla se funde, cambia la zona y la bestia aparece al otro lado.
+async function advTravel(poi) {
+  const from = { zone: game.adv.zone, x: explore.safe[0], y: explore.safe[1] }, wrap = $('adv-canvas').parentElement;
+  const zone = A.travel(game, poi);
+  if (!zone) { explore.busy = false; return; }
+  wrap.classList.add('fade');
+  sfx.tap();
+  const pause = new Promise(done => setTimeout(done, 220));
+  try { advMaps[zone.img] ||= await loadImage(zone.img); await pause; } catch {
+    Object.assign(game.adv, from);                       // sin mapa no se cruza: se queda donde estaba
+    wrap.classList.remove('fade');
+    if (explore) { explore.back(poi); explore.busy = false; }
+    return toast('No se pudo cargar el mapa. Inténtalo de nuevo.');
+  }
+  if (!game.adv || !explore || $('adventure').hidden) return wrap.classList.remove('fade');   // se fue a casa mientras cargaba
+  S.save(game);
+  advMount();
+  wrap.classList.remove('fade');
+  toast(zone.name);
 }
 function advEnd() {
   A.leave(game);
@@ -953,6 +982,7 @@ function advReach(poi) {
     return free();
   }
   if (poi.type === 'exit') return advLeaveAsk(free);
+  if (poi.type === 'gate' && poi.to) return advTravel(poi);
   if (poi.type === 'gate' || poi.type === 'sign') { toast(poi.text); return free(); }
   if (poi.type === 'rest') {
     return modal({
