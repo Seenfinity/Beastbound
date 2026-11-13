@@ -8,6 +8,8 @@
 // En la partida:  g.adv        la expedición en curso (o null): { region, zone, x, y, hp, mp, done }
 //                 g.advChests  cofres ya abiertos (solo se abren una vez); los identificadores no se repiten entre zonas
 //                 g.advCleared regiones cuyo jefe has vencido: { islas: veces }
+//                 g.advQuest   la historia de cada región, que queda hecha para siempre:
+//                              { forja: { started, seals: [quién te lo dio], smith, coal: [trozos], clue, door } }
 
 import { speciesOf } from './roster.js';
 import { ITEMS, grantEgg } from './state.js';
@@ -187,7 +189,18 @@ const CENIZA = {
     { id: 'f-este', type: 'gate', x: 1516, y: 330, r: 34, to: { zone: 'ladera', x: 118, y: 322 } },
     { id: 'fs1', type: 'wild', x: 780, y: 340, to: [980, 322], species: 'blaziky', level: 8 },
     { id: 'fs2', type: 'wild', x: 1290, y: 322, to: [1400, 330], species: 'mechapi', level: 9 },
-    { id: 'fs3', type: 'wild', x: 1250, y: 762, to: [1340, 702], species: 'pyrorex', level: 10 },
+    // La élite: guarda uno de los tres sellos, no se mueve de su sitio y no vuelve una vez vencida.
+    { id: 'fs3', type: 'wild', x: 1250, y: 762, species: 'pyrorex', level: 11, still: true, seal: true, title: 'Guardián del sello',
+      intro: 'Guarda uno de los tres sellos y no piensa moverse. Es más fuerte que las bestias del camino.' },
+    // Brasa cuenta de qué va la región y da pistas según lo que lleves hecho.
+    { id: 'brasa', type: 'npc', role: 'guide', x: 760, y: 420, species: 'blaziky', stage: 2, name: 'Brasa', say: {
+      first: ['¡Una bestia de fuera! Soy Brasa, la que vigila este portal.',
+        'La puerta del volcán lleva años cerrada con tres sellos. Uno lo guarda un Pyrorex, al otro lado del río de lava. Otro lo tiene Yunque, el herrero de la fundición, al norte. El tercero se perdió en la ladera, al este.',
+        'Reúne los tres y la puerta se abrirá. Lo que hay detrás… mejor ve con la vida entera.'],
+      more: ['Aún te faltan sellos. Mira tu diario: ahí está lo que sabemos de cada uno.'],
+      ready: ['¡Los tres sellos! La puerta está en la ladera, al este. Descansa antes de llamar.'],
+      open: ['La puerta ya está abierta. El Señor de la Forja te espera en la ladera.'],
+      done: ['Venciste al Señor de la Forja. Por aquí se hablará de ti mucho tiempo.'] } },
     { id: 'fc1', type: 'chest', x: 1415, y: 760, item: 'pocion', hidden: true },     // al otro lado del río, detrás del árbol
     { id: 'fc2', type: 'chest', x: 740, y: 80, coins: 80, hidden: true },            // entre la hierba seca del norte
     { id: 'fc3', type: 'chest', x: 400, y: 640, item: 'elixir', hidden: true },      // detrás del árbol del acantilado
@@ -227,7 +240,14 @@ const FUNDICION = {
   grass: [[300, 30, 430, 95], [945, 312, 1040, 385], [1045, 410, 1165, 470], [540, 700, 720, 790], [1320, 620, 1440, 745], [400, 450, 510, 555], [85, 290, 150, 380]],
   pois: [
     { id: 'fu-sur', type: 'gate', x: 980, y: 846, r: 34, to: { zone: 'ceniza', x: 1018, y: 102 } },
-    { id: 'fus1', type: 'wild', x: 680, y: 400, to: [780, 480], species: 'mechapi', level: 10 },
+    // Yunque, el herrero: da su sello a cambio de carbón para el horno.
+    { id: 'yunque', type: 'npc', role: 'smith', x: 660, y: 292, species: 'gravion', stage: 1, name: 'Yunque', say: {
+      first: ['Soy Yunque, el herrero. ¿El sello? Lo tengo yo, sí; lo uso de pisapapeles.',
+        'Te lo cambio por un favor: el horno se me apaga. Tráeme tres trozos de carbón; andan tirados por la fundición.'],
+      wait: ['Aún me falta carbón. Busca por los rincones de la fundición.'],
+      give: ['¡Eso es! Con esto el horno aguanta otra temporada.', 'Toma, el sello es tuyo. Cuídalo más que yo.'],
+      after: ['El horno tira que da gusto. Suerte con esa puerta.'] } },
+    { id: 'ca1', type: 'coal', x: 598, y: 362 }, { id: 'ca2', type: 'coal', x: 1392, y: 300 }, { id: 'ca3', type: 'coal', x: 118, y: 470 },
     { id: 'fus2', type: 'wild', x: 1120, y: 522, to: [1300, 502], species: 'pyrorex', level: 11 },
     { id: 'fus3', type: 'wild', x: 1100, y: 302, to: [1290, 320], species: 'draconoid', level: 12 },
     { id: 'fuc1', type: 'chest', x: 1290, y: 630, coins: 90, hidden: true },         // detrás del árbol del sureste
@@ -271,17 +291,18 @@ const LADERA = {
     { id: 'la-oeste', type: 'gate', x: 14, y: 322, r: 34, to: { zone: 'ceniza', x: 1425, y: 330 } },
     { id: 'las1', type: 'wild', x: 330, y: 330, to: [430, 345], species: 'blaziky', level: 11 },
     { id: 'las2', type: 'wild', x: 900, y: 400, to: [1000, 440], species: 'pyrorex', level: 12 },
-    { id: 'las3', type: 'wild', x: 730, y: 222, to: [850, 226], species: 'draconoid', level: 13 },
+    { id: 'las3', type: 'wild', x: 1150, y: 485, to: [1205, 545], species: 'mechapi', level: 13 },   // lejos de la puerta: delante de ella solo espera el jefe
     { id: 'lac1', type: 'chest', x: 1440, y: 352, item: 'pocion', hidden: true },    // al otro lado del río, detrás del arbolillo
     { id: 'lac2', type: 'chest', x: 1075, y: 575, coins: 100, hidden: true },        // detrás del árbol del sur
     { id: 'lac3', type: 'chest', x: 600, y: 600, item: 'elixir', hidden: true },     // entre la hierba seca, bajo la estatua
     { id: 'lad1', type: 'rest', x: 912, y: 542, r: 26 },
-    { id: 'lae1', type: 'event', x: 788, y: 135, text: 'Una puerta enorme, sellada con runas que laten como brasas.',
-      choices: [{ label: 'Apoyar la pata', result: 'Las runas te traspasan su calor: recuperas todo el MP.', fx: { mp: 999 } },
-        { label: 'Empujar con fuerza', result: 'No se mueve ni un pelo, pero entre los escalones hay monedas: +30 monedas.', fx: { coins: 30 } }] },
-    { id: 'lae2', type: 'event', x: 702, y: 562, text: 'Una estatua de dragón. A sus pies la ceniza sigue tibia.',
-      choices: [{ label: 'Remover la ceniza', result: 'Te quemas un poco, pero debajo hay monedas: +40 monedas y pierdes un poco de vida.', fx: { coins: 40, hp: -0.1 } },
-        { label: 'Inclinarse ante ella', result: 'Sientes que el dragón te mira con buenos ojos: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
+    // La puerta se abre con los tres sellos; detrás espera el jefe, que solo está cuando la puerta ya se abrió.
+    { id: 'puerta', type: 'door', x: 788, y: 128, r: 30, text: 'Una puerta enorme, con tres huecos redondos en la piedra. Las runas laten como brasas.',
+      opens: 'Los tres sellos encajan en sus huecos. Las runas se apagan una a una, la puerta se abre… y algo enorme sale a tu encuentro.' },
+    { id: 'jefe', type: 'boss', x: 788, y: 152, species: 'draconoid', level: 15, stage: 2, still: true, locked: true, title: 'Señor de la Forja',
+      intro: 'Llevaba años encerrado tras la puerta. Es mucho más fuerte que cualquier bestia del camino.' },
+    { id: 'estatua', type: 'clue', x: 702, y: 562, text: 'En el pedestal de la estatua hay unas palabras medio borradas: «El tercer sello duerme donde la tierra respira, entre las púas del sur».' },
+    { id: 'sello', type: 'seal', x: 608, y: 770, hidden: true },   // junto al respiradero del sur; sin la pista no hay destello que lo delate
     { id: 'laf1', type: 'food', x: 170, y: 212, food: 'chile' }, { id: 'laf2', type: 'food', x: 500, y: 612, food: 'filete' }, { id: 'laf3', type: 'food', x: 1060, y: 800, food: 'pan' },
     { id: 'laf4', type: 'food', x: 460, y: 812, food: 'huevo' }, { id: 'laf5', type: 'food', x: 740, y: 552, food: 'chile' }, { id: 'laf6', type: 'food', x: 1400, y: 580, food: 'filete' },
     { id: 'lam1', type: 'coin', x: 200, y: 330, coins: 12 }, { id: 'lam2', type: 'coin', x: 1300, y: 335, coins: 13 }, { id: 'lam3', type: 'coin', x: 80, y: 610, coins: 14 }, { id: 'lam4', type: 'coin', x: 900, y: 800, coins: 12 },
@@ -423,8 +444,25 @@ const OBSERVATORIO = {
 // Cada región lleva la luz con que se tiñen las bestias (tint) y lo que flota en el aire (motes).
 export const REGIONS = {
   islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' },
+    win: '¡Has vencido al Guardián del Castillo!', again: 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.',
     tint: 'rgba(26, 34, 118, .24)', motes: 'fireflies' },
-  forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA, fundicion: FUNDICION, ladera: LADERA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers' },
+  forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA, fundicion: FUNDICION, ladera: LADERA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers',
+    // La historia de la región: tres sellos abren la puerta del jefe. `discover` esconde las marcas de lo que hay hasta que te acercas.
+    discover: true, reward: { coins: 250, item: 'pocion', again: 60 },
+    intro: 'Tres sellos cierran la puerta del volcán. Reúnelos, ábrela y vence al Señor de la Forja. La vida no se recupera entre combates.',
+    win: '¡Has vencido al Señor de la Forja!', again: 'Ya venciste al Señor de la Forja. Puedes volver a por lo que dejaste.',
+    quest: {
+      start: 'Habla con Brasa, junto al portal.',
+      elite: 'Vence al guardián del sello, al otro lado del río de lava de la isla de ceniza.',
+      ask: 'Pregunta por el sello al herrero de la fundición, al norte.',
+      fetch: 'Carbón para el herrero',
+      bring: 'Lleva el carbón al herrero.',
+      seek: 'Busca una pista del sello perdido en la ladera del volcán, al este.',
+      clue: 'El sello perdido está donde la tierra respira, entre las púas del sur de la ladera.',
+      door: 'Lleva los tres sellos a la puerta de la ladera del volcán.',
+      boss: 'Vence al Señor de la Forja.',
+      done: 'Venciste al Señor de la Forja. Puedes seguir explorando a tu aire.',
+    } },
   tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA, cristal: CRISTAL, observatorio: OBSERVATORIO }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow' },
 };
 
@@ -460,9 +498,82 @@ export function travel(g, poi) {
 // ¿Sigue ahí? Los cofres se abren una sola vez para siempre; lo demás vuelve en cada expedición.
 export function active(g, poi) {
   if (!g.adv) return false;
-  if (poi.type === 'exit' || poi.type === 'gate' || poi.type === 'sign') return true;
+  const q = questOf(g, g.adv.region);
+  if (['exit', 'gate', 'sign', 'npc', 'clue'].includes(poi.type)) return true;
   if (poi.type === 'chest') return !(g.advChests || []).includes(`${g.adv.region}:${poi.id}`);
+  if (poi.type === 'door') return !q.door;
+  if (poi.type === 'seal') return !q.seals.includes(poi.id);
+  if (poi.type === 'coal') return !!q.smith && !q.coal.includes(poi.id);     // el carbón solo importa cuando el herrero lo pide
+  if (poi.seal && q.seals.includes(poi.id)) return false;                    // la élite que ya te dio su sello
+  if (poi.locked && !q.door) return false;                                   // el jefe, mientras la puerta siga cerrada
   return !g.adv.done.includes(poi.id);
+}
+
+// ---------- La historia de una región: sellos, encargo, puerta y jefe ----------
+
+const EMPTY = { seals: [], coal: [] };
+export const questOf = (g, region) => g.advQuest?.[region] || EMPTY;
+const questW = (g, region) => ((g.advQuest ||= {})[region] ||= { seals: [], coal: [] });
+// Quién da cada sello en una región: la élite, el herrero y el que está escondido.
+function parts(region) {
+  const all = Object.values(REGIONS[region].zones).flatMap(z => z.pois);
+  return { elite: all.find(p => p.type === 'wild' && p.seal), smith: all.find(p => p.type === 'npc' && p.role === 'smith'), hidden: all.find(p => p.type === 'seal'), coal: all.filter(p => p.type === 'coal') };
+}
+// Cuántos sellos llevas y cuántos hay; null si la región no tiene historia.
+export function seals(g, region) {
+  if (!REGIONS[region].quest) return null;
+  const p = parts(region);
+  return { found: questOf(g, region).seals.length, total: [p.elite, p.smith, p.hidden].filter(Boolean).length };
+}
+// El diario: qué toca hacer ahora en la región de la expedición. Lista de frases (vacía si no hay historia).
+export function objective(g) {
+  const r = regionOf(g), t = r?.quest;
+  if (!t) return [];
+  const q = questOf(g, r.id), p = parts(r.id), s = seals(g, r.id), has = poi => poi && q.seals.includes(poi.id);
+  if (cleared(g, r.id)) return [t.done];
+  if (q.door) return [t.boss];
+  if (s.found >= s.total) return [t.door];
+  if (!q.started && !q.seals.length && !q.smith && !q.clue) return [t.start];
+  const out = [];
+  if (p.elite && !has(p.elite)) out.push(t.elite);
+  if (p.smith && !has(p.smith)) out.push(!q.smith ? t.ask : q.coal.length < p.coal.length ? `${t.fetch}: ${q.coal.length} de ${p.coal.length}` : t.bring);
+  if (p.hidden && !has(p.hidden)) out.push(q.clue ? t.clue : t.seek);
+  return out;
+}
+// Hablar con un personaje. Devuelve { text: [frases], seal } y apunta lo que cambie.
+export function talk(g, poi) {
+  const r = regionOf(g), q = questW(g, r.id), say = poi.say;
+  if (poi.role === 'smith') {
+    if (q.seals.includes(poi.id)) return { text: say.after };
+    if (!q.smith) { q.smith = true; return { text: say.first }; }
+    if (q.coal.length < parts(r.id).coal.length) return { text: say.wait };
+    q.seals.push(poi.id);
+    return { text: say.give, seal: true };
+  }
+  if (cleared(g, r.id)) return { text: say.done };
+  if (!q.started) { q.started = true; return { text: say.first }; }
+  if (q.door) return { text: say.open };
+  const s = seals(g, r.id);
+  return { text: s.found >= s.total ? say.ready : say.more };
+}
+export function takeCoal(g, poi) {
+  if (!active(g, poi)) return null;
+  const q = questW(g, g.adv.region);
+  q.coal.push(poi.id);
+  return { have: q.coal.length, need: parts(g.adv.region).coal.length };
+}
+export function takeSeal(g, poi) {
+  if (!active(g, poi)) return false;
+  questW(g, g.adv.region).seals.push(poi.id);
+  return true;
+}
+export function readClue(g) { questW(g, g.adv.region).clue = true; }
+// Llamar a la puerta: se abre (para siempre) si llevas todos los sellos.
+export function openDoor(g) {
+  const s = seals(g, g.adv.region);
+  if (s.found < s.total) return { open: false, ...s };
+  questW(g, g.adv.region).door = true;
+  return { open: true, ...s };
 }
 
 export function openChest(g, poi) {
@@ -507,6 +618,9 @@ export function resolve(g, poi, index, maxMp) {
   return choice.result;
 }
 
+// En qué forma sale una bestia del mapa: la que diga el punto o la que toque por su nivel.
+export const stageOf = poi => poi.stage ?? (poi.level >= 30 ? 2 : poi.level >= 10 ? 1 : 0);
+
 // La bestia salvaje de un punto del mapa: nivel y forma fijos, con las estadísticas que tendría una criada hasta ese nivel.
 export function makeWild(poi) {
   const sp = speciesOf(poi.species), stats = { pot: sp.base[0], agu: sp.base[1], pun: sp.base[2], agi: sp.base[3] };
@@ -514,7 +628,8 @@ export function makeWild(poi) {
   for (let lv = 1; lv < poi.level; lv++) { stats[best]++; stats[STATS[lv % 4]]++; }
   const boss = poi.type === 'boss';
   if (boss) { stats.agu += 4; stats.pot += 1; }
-  const stage = poi.stage ?? (poi.level >= 30 ? 2 : poi.level >= 10 ? 1 : 0);
+  if (poi.seal) { stats.agu += 2; stats.pot += 1; }                           // la élite aguanta y pega algo más
+  const stage = stageOf(poi);
   return {
     species: sp.id, name: sp.name, level: poi.level, stage, stats, hue: 0, hunger: 70, mood: 70, bond: 55,
     char: boss ? 'feroz' : '', mastery: stage === 2 ? best : '', wild: true, boss,
@@ -529,11 +644,15 @@ export function afterBattle(g, poi, win, hp, mp) {
   g.adv.hp = Math.max(0.02, Math.min(1, hp));
   g.adv.mp = Math.max(0, Math.round(mp));
   g.adv.done.push(poi.id);
-  if (poi.type !== 'boss') return { over: false };
+  if (poi.type !== 'boss') {
+    if (!poi.seal) return { over: false };
+    questW(g, g.adv.region).seals.push(poi.id);                               // la élite suelta su sello
+    return { over: false, seal: true };
+  }
   const region = REGIONS[g.adv.region], first = !cleared(g, region.id);
   (g.advCleared ||= {})[region.id] = cleared(g, region.id) + 1;
   g.adv = null;
-  if (!first) return { over: true, boss: true };
+  if (!first) { const coins = region.reward?.again || 0; g.coins += coins; return { over: true, boss: true, coins }; }   // repetir da solo unas monedas
   const reward = { ...region.reward, egg: grantEgg(g, poi.species) };
   g.coins += reward.coins;
   if (reward.item) g.items[reward.item] = (g.items[reward.item] || 0) + 1;

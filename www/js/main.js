@@ -836,6 +836,7 @@ function endBattle(win) {
   const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
   S.guideAdvance(game, 'battle');                      // el primer combate cierra la guía, se gane o se pierda
   let adv = null;                                      // si era un combate de la expedición: cómo sigue
+  const advZone = advFight ? A.regionOf(game) : null;  // la región, antes de que la expedición pueda terminar
   if (advFight) {
     adv = A.afterBattle(game, advFight, win, battle.player.hp / battle.player.maxHp, battle.player.mp);
     if (win) { p.restUntil = 0; r.rest = 0; }          // ganar malherida no te para: la vida ya se arrastra
@@ -852,10 +853,10 @@ function endBattle(win) {
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
   const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
   const trip = !adv ? ''
-    : adv.reward ? `<p><b>¡Has vencido al Guardián del Castillo!</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}`
-    : adv.boss ? '<p><b>¡Has vencido al Guardián del Castillo!</b></p>'
+    : adv.reward ? `<p><b>${advZone.win}</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}`
+    : adv.boss ? `<p><b>${advZone.win}</b></p>${adv.coins ? `<p>Recompensa: +${adv.coins} monedas</p>` : ''}`
     : adv.over ? '<p>La expedición termina aquí.</p>'
-    : `<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
+    : `${adv.seal ? `<p><b>¡El sello es tuyo!</b></p><p><b>Sellos ${A.seals(game, advZone.id).found} de ${A.seals(game, advZone.id).total}</b></p>` : ''}<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
   const home = () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;
@@ -896,8 +897,8 @@ function renderAdvCard() {
   $('adv-thumb-name').textContent = shown.name;
   $('adv-thumb-chests').textContent = `Cofres ${box.found} de ${box.total}`;
   $('adv-info').textContent = on ? 'Tienes una expedición a medias. Para ir a otra región, vuelve antes a casa.'
-    : A.cleared(game, shown.id) ? 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.'
-    : 'Recorre las islas a tu aire: cruza los puentes, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
+    : A.cleared(game, shown.id) ? shown.again
+    : shown.intro || 'Recorre las islas a tu aire: cruza los puentes, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
   $('btn-adv').textContent = on ? 'Seguir la expedición' : 'Salir de expedición';
 }
 function renderAdventure() {
@@ -908,6 +909,11 @@ function renderAdventure() {
   $('adv-energy').textContent = `Energía ${Math.round(game.pet.energy)}`;
   const box = A.chests(game, game.adv.region);
   $('adv-chests').textContent = `Cofres ${box.found} de ${box.total}`;
+  const seals = A.seals(game, game.adv.region), diary = A.objective(game);
+  $('adv-seals-chip').hidden = !seals;
+  if (seals) $('adv-seals').textContent = `Sellos ${seals.found} de ${seals.total}`;
+  $('adv-quest').hidden = !diary.length;
+  $('adv-quest-lines').innerHTML = diary.map(line => `<li>${esc(line)}</li>`).join('');
   $('adv-zoom').textContent = advNear ? 'Ver de lejos' : 'Ver de cerca';
   $('adv-hint').textContent = box.found < box.total ? 'Muévete con las flechas o tocando el mapa. Hay cofres escondidos: búscalos donde veas un destello.' : 'Muévete con las flechas o tocando el mapa. Las bestias salvajes van a por ti si te acercas.';
 }
@@ -931,7 +937,7 @@ async function openAdventure() {
 function advMount() {
   const zone = A.zoneOf(game);
   explore = new Explore($('adv-canvas'), game,
-    { map: advMaps[zone.img], near: advNear, player: petSprite(game.pet), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
+    { map: advMaps[zone.img], near: advNear, player: petSprite(game.pet), wild: poi => spriteOf(poi.species, A.stageOf(poi)), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
     { onReach: advReach, onMove: () => S.save(game) });
   renderAdventure();
   for (const poi of zone.pois) {                         // las zonas de al lado se van cargando, para cruzar sin esperas
@@ -992,6 +998,40 @@ function advReach(poi) {
     return free();
   }
   if (poi.type === 'exit') return advLeaveAsk(free);
+  const go = [{ label: 'Seguir', cls: 'primary', fn: free }];
+  const sealsLine = () => { const s = A.seals(game, game.adv.region); return `<p><b>Sellos ${s.found} de ${s.total}</b></p>`; };
+  if (poi.type === 'coal') {
+    const got = A.takeCoal(game, poi);
+    S.save(game);
+    sfx.coin();
+    if (got) toast(`Carbón para el herrero: ${got.have} de ${got.need}`);
+    return free();
+  }
+  if (poi.type === 'seal') {
+    A.takeSeal(game, poi);
+    S.save(game);
+    sfx.win();
+    return modal({ title: '¡El sello perdido!', body: `<p>Medio enterrado en la ceniza tibia hay un disco de piedra con una runa grabada.</p>${sealsLine()}`, actions: go });
+  }
+  if (poi.type === 'clue') {
+    A.readClue(game);
+    S.save(game);
+    return modal({ title: 'Unas palabras grabadas', body: `<p>${poi.text}</p>`, actions: go });
+  }
+  if (poi.type === 'npc') {
+    const said = A.talk(game, poi);
+    S.save(game);
+    if (said.seal) sfx.win();
+    return modal({ title: poi.name,
+      body: `<div class="sprites"><figure><canvas data-sprite="${poi.species}:${poi.stage}:0"></canvas></figure></div>${said.text.map(line => `<p>${line}</p>`).join('')}${said.seal ? `<p><b>¡El sello es tuyo!</b></p>${sealsLine()}` : ''}`,
+      actions: go });
+  }
+  if (poi.type === 'door') {
+    const door = A.openDoor(game);
+    S.save(game);
+    if (door.open) sfx.win();
+    return modal({ title: door.open ? 'La puerta se abre' : 'La puerta sellada', body: `<p>${door.open ? poi.opens : poi.text}</p>${door.open ? '' : sealsLine()}`, actions: go });
+  }
   if (poi.type === 'gate' && poi.to) return advTravel(poi);
   if (poi.type === 'gate' || poi.type === 'sign') { toast(poi.text); return free(); }
   if (poi.type === 'rest') {
@@ -1020,9 +1060,9 @@ function advReach(poi) {
   const foe = A.makeWild(poi), rsp = speciesOf(foe.species), tired = p.energy < S.FIGHT_ENERGY;
   const retreat = () => { explore?.back(poi); free(); };
   modal({
-    title: boss ? poi.title : `¡${rsp.name} salvaje!`,
+    title: poi.title || `¡${rsp.name} salvaje!`,
     body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${own(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${foe.species}:${foe.stage}:0"></canvas>${own(rsp.name)} · Nv ${foe.level}</figure></div>
-      <p>${boss ? 'El guardián no deja pasar a nadie. Es mucho más fuerte que las bestias del camino.' : 'Te corta el paso. Puedes luchar o dar media vuelta.'}</p>
+      <p>${poi.intro || (boss ? 'El guardián no deja pasar a nadie. Es mucho más fuerte que las bestias del camino.' : 'Te corta el paso. Puedes luchar o dar media vuelta.')}</p>
       <p>Entras con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>
       ${matchLines(sp, rsp)}
       ${tired ? `<p class="adv down">${esc(p.name)} no tiene energía para luchar. Vuelve a casa y deja que descanse.</p>` : ''}`,

@@ -7,7 +7,7 @@ import * as A from './aventura.js';
 import { tr } from './i18n.js';
 
 const SPEED = 165, WILD_SLOW = 42, WILD_FAST = 92, NOTICE = 150, LEASH = 250, TOUCH = 40, REVEAL = 105, HINT = 330;   // en píxeles del mapa
-const ME = 66, WILD = 62, BOSS = 120, CELL = 2;        // alturas de las bestias y tamaño del «píxel» del mapa
+const ME = 66, WILD = 62, BOSS = 120, NPC = 72, NEAR = 190, CELL = 2;        // alturas de las bestias y tamaño del «píxel» del mapa
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Deja un dibujo con el grano de píxel y la luz de noche del mapa, para que no parezca un recorte pegado encima.
@@ -40,6 +40,7 @@ export class Explore {
     this.g = game; this.zone = A.zoneOf(game); this.art = art; this.hooks = hooks;
     const region = A.regionOf(game);
     this.tint = region.tint || 'rgba(26, 34, 118, .24)'; this.motes = region.motes || 'fireflies';   // la luz y el aire de la región
+    this.region = region; this.discover = !!region.discover;                   // con `discover`, las marcas solo salen de cerca
     this.x = game.adv.x; this.y = game.adv.y;
     if (!A.walkable(this.zone, this.x, this.y)) [this.x, this.y] = this.zone.start;
     this.dir = 1; this.t = 0; this.hop = 0; this.moving = false; this.busy = false;
@@ -146,7 +147,7 @@ export class Explore {
     let near = false;
     for (const poi of this.pois()) {
       const w = this.wilds.find(v => v.poi === poi), px = w ? w.x : poi.x, py = w ? w.y : poi.y;
-      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : poi.type === 'food' || poi.type === 'coin' ? 24 : poi.type === 'chest' ? 32 : 34);
+      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : ['food', 'coin', 'coal'].includes(poi.type) ? 24 : poi.type === 'chest' || poi.type === 'seal' ? 32 : 34);
       if (d < r + (w ? 70 : 24)) near = true;
       if (d > r || this.skip === poi.id || (poi.type === 'exit' && !this.wantExit)) continue;
       this.halt(); this.skip = poi.id;
@@ -164,7 +165,11 @@ export class Explore {
     // Todo lo que tiene altura se pinta de atrás hacia delante: bestias, cofres y los árboles que tapan.
     const list = [{ me: true, y: this.y }];
     for (const w of this.wilds) if (A.active(this.g, w.poi)) list.push({ wild: w, y: w.y });
-    for (const poi of this.pois()) if (poi.type === 'chest') list.push({ chest: poi, y: poi.y }); else if (poi.type === 'food' || poi.type === 'coin') list.push({ loot: poi, y: poi.y });
+    for (const poi of this.pois()) {
+      if (poi.type === 'chest' || poi.type === 'seal') list.push({ chest: poi, y: poi.y });
+      else if (['food', 'coin', 'coal'].includes(poi.type)) list.push({ loot: poi, y: poi.y });
+      else if (poi.type === 'npc') list.push({ npc: poi, y: poi.y });
+    }
     for (const tree of zone.trees) list.push({ tree, y: tree[1] });
     list.sort((p, q) => p.y - q.y);
     const drawn = [];                                    // lo ya pintado, por si un árbol de delante tiene que taparlo
@@ -174,8 +179,12 @@ export class Explore {
       else if (it.wild) {
         const w = it.wild, boss = w.poi.type === 'boss';
         drawn.push(this.beast(this.art.wild(w.poi), w.x, w.y, boss ? BOSS : WILD, w.dir, w.hop ? Math.abs(Math.sin(w.hop * (w.chasing ? 14 : 9))) * 6 : 0));
-      } else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
-      else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) drawn.push(this.beast(this.art.chest, it.chest.x, it.chest.y + 6, 44, 1, 0, false));
+      } else if (it.npc) drawn.push(this.beast(this.art.wild(it.npc), it.npc.x, it.npc.y, NPC, this.x < it.npc.x ? -1 : 1, Math.sin(this.t * 2.1 + it.npc.x) * 1.2));   // los personajes te miran
+      else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.type === 'coal' ? 'roca' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
+      else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) {
+        const seal = it.chest.type === 'seal';
+        drawn.push(this.beast(seal ? this.art.icon('escudo') : this.art.chest, it.chest.x, it.chest.y + 6, seal ? 34 : 44, 1, 0, false));
+      }
     }
 
     this.air();
@@ -184,14 +193,17 @@ export class Explore {
     for (const w of this.wilds) {
       if (!A.active(this.g, w.poi)) continue;
       const boss = w.poi.type === 'boss';
-      this.label(`${boss ? tr(w.poi.title) : tr('Salvaje')} · ${tr(`Nv ${w.poi.level}`)}`, w.x, w.y - (boss ? BOSS : WILD) - 8, w.chasing ? '#ff9d7a' : boss ? '#ffd76a' : '#ffffff');
+      this.label(`${tr(w.poi.title || 'Salvaje')} · ${tr(`Nv ${w.poi.level}`)}`, w.x, w.y - (boss ? BOSS : WILD) - 8, w.chasing ? '#ff9d7a' : w.poi.title ? '#ffd76a' : '#ffffff');
     }
+    const clue = A.questOf(this.g, this.region.id).clue;
     for (const poi of this.pois()) {
       const d = Math.hypot(poi.x - this.x, poi.y - this.y);
+      if (poi.type === 'npc') { this.label(tr(poi.name), poi.x, poi.y - NPC - 8, '#9ff0c8'); continue; }
+      if (this.discover && d > NEAR && (poi.type === 'rest' || poi.type === 'event')) continue;   // se descubre al acercarse
       if (poi.type === 'rest') this.marker(this.art.icon('corazon'), poi.x, poi.y - 34 + Math.sin(this.t * 2.2) * 3, 26);
       else if (poi.type === 'event') this.marker(this.art.icon('estrella'), poi.x, poi.y - 30 + Math.sin(this.t * 2.2 + 1) * 3, 26);
       else if (poi.type === 'exit' && d > 80) this.marker(this.art.icon('casa'), poi.x, poi.y - 46 + Math.sin(this.t * 2.2) * 3, 28);
-      else if (poi.type === 'chest' && poi.hidden && d > REVEAL && d < HINT && this.art.glint) {
+      else if ((poi.type === 'chest' || (poi.type === 'seal' && clue)) && poi.hidden && d > REVEAL && d < HINT && this.art.glint) {   // el sello solo destella si ya leíste la pista
         const pulse = 0.5 + 0.5 * Math.sin(this.t * 3.2 + poi.x), close = 1 - (d - REVEAL) / (HINT - REVEAL);   // más fuerte cuanto más cerca
         ctx.globalAlpha = 0.35 + 0.65 * pulse;
         this.marker(this.art.glint, poi.x, poi.y - 14, 22 + pulse * 16 + close * 18);
