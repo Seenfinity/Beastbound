@@ -245,9 +245,9 @@ export function startWith(g, index, name) {
   g.active = 0;
 }
 
-export function load() {
+// Da por buena una partida que viene de fuera (del navegador o de la nube) y la deja lista para jugar. null si no vale.
+export function adopt(g) {
   try {
-    const g = JSON.parse(localStorage.getItem(KEY));
     if (!(g && g.v === 3 && Array.isArray(g.pets) && g.pets.every(p => speciesOf(p.species)))) return null;
     g.defeats ||= {};                     // partidas guardadas antes de que existieran estas cosas
     g.items ||= { pocion: 1, elixir: 0, escudo: 0, mira: 1 };
@@ -260,7 +260,13 @@ export function load() {
     return null;
   }
 }
+export function load() {
+  try { return adopt(JSON.parse(localStorage.getItem(KEY))); } catch { return null; }
+}
+let beforeSave = null;
+export function onSave(cb) { beforeSave = cb; }       // la nube se entera de cada guardado
 export function save(g) {
+  beforeSave?.(g);
   try { localStorage.setItem(KEY, JSON.stringify(g)); } catch { /* sin almacenamiento: se juega igual */ }
 }
 export function reset() {

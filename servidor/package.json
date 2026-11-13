@@ -1,0 +1,19 @@
+{
+  "name": "beast-bound-servidor",
+  "private": true,
+  "type": "module",
+  "description": "Servidor de Beast Bound: partida en la nube, perfil y ranking. Se despliega en Railway.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "DEV_AUTH=1 DEV_DB=mem PORT=8787 node src/index.js",
+    "test": "node test/servidor.test.mjs"
+  },
+  "dependencies": {
+    "jose": "^6.0.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.5"
+  }
+}

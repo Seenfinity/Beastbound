@@ -12,6 +12,7 @@ import * as RK from './ranking.js';
 import { playEvolution } from './evolution.js';
 import { watch, locale } from './i18n.js';
 import { account, onAccount, startAccount, login, logout, shortWallet } from './account.js';
+import { cloud, guest, DEV, me as myId, pull, touch, flush, forget, wipe, saveProfile, fetchRanking, watchCloud } from './nube.js';
 
 watch();                                             // traduce la página si el idioma no es español
 startAccount();                                      // las cuentas se conectan mientras cargan las imágenes
@@ -146,6 +147,7 @@ $('btn-start').onclick = () => {
   const name = $('start-name').value.trim().slice(0, 12);
   if (!name) return toast('Ponle un nombre antes de abrir el huevo.');
   S.startWith(game, startPick, name);
+  if (lockTest) game.testMode = false;
   S.save(game);
   enterGame();
   birthModal(game.pet);
@@ -166,16 +168,31 @@ function birthModal(pet, grade = null) {
 
 // ---------- Ranking ----------
 // De momento no hay servidor: la tabla enseña tu fila y, en modo prueba, unas filas de muestra marcadas como ejemplo.
-let rankSort = 'level', rankOthers = [];
+let rankSort = 'level', rankRows = null, rankState = '', rankAt = 0, rankKey = '';
+// Pide la tabla al servidor (como mucho cada 20 segundos por orden).
+async function refreshRanking() {
+  if (!cloud.on || (rankKey === rankSort && Date.now() - rankAt < 20000)) return;
+  rankKey = rankSort; rankAt = Date.now();
+  const rows = await fetchRanking(rankSort);
+  if (rows) rankRows = rows;
+  rankState = rows ? 'ok' : 'fail';
+  if (tab === 'ranking' && game?.pet && !$('game').hidden) renderRanking();
+}
 function renderRanking() {
   const prof = game.profile, me = { ...RK.myStats(game), name: prof.name || 'Tú (sin usuario)', country: prof.country, me: true };
   if (document.activeElement !== $('rk-name')) $('rk-name').value = prof.name;
   if (!$('rk-country').options.length) $('rk-country').innerHTML = '<option value="">Elige tu país…</option>' + RK.COUNTRIES.map(([code, name]) => `<option value="${code}">${RK.flag(code)} ${name}</option>`).join('');
   if (document.activeElement !== $('rk-country')) $('rk-country').value = prof.country;
   setHTML($('rk-me'), `<span>Nivel <b>${me.level}</b></span><span>Oro <b>${me.coins}</b></span><span>Ganadas <b>${me.wins}</b></span><span>Perdidas <b>${me.losses}</b></span>`);
-  const demo = !rankOthers.length && game.testMode, rows = RK.buildBoard([me, ...(demo ? RK.EXAMPLES : rankOthers)], rankSort);
-  $('rk-note').textContent = rankOthers.length ? '' : demo
-    ? 'Vista previa: todavía no hay servidor ni cuentas. Las filas marcadas «ejemplo» son de muestra para ver cómo quedará; los jugadores reales aparecerán cuando activemos el registro.'
+  // Con servidor: los jugadores reales y tu fila con tus cifras de ahora. Sin servidor: tu fila y, en modo prueba, unas de ejemplo.
+  const demo = !cloud.on && game.testMode;
+  const others = cloud.on ? (rankRows || []).filter(r => !r.me) : demo ? RK.EXAMPLES : [];
+  const rows = RK.buildBoard([me, ...others], rankSort);
+  $('rk-note').textContent = cloud.on
+    ? (rankState === 'fail' && !rankRows ? 'No se pudo cargar el ranking.' : !rankRows ? 'Cargando el ranking…'
+      : !prof.name ? 'Pon un usuario y un país para aparecer en el ranking.'
+      : game.testMode ? 'Con el modo prueba activado, los demás no te ven en el ranking.' : '')
+    : demo ? 'Vista previa: todavía no hay servidor ni cuentas. Las filas marcadas «ejemplo» son de muestra para ver cómo quedará; los jugadores reales aparecerán cuando activemos el registro.'
     : 'El ranking mundial todavía no está conectado: de momento solo apareces tú. Se activará con el registro.';
   setHTML($('rk-sorts'), Object.entries(RK.SORTS).map(([k, label]) => `<button class="${k === rankSort ? 'on' : ''}" data-sort="${k}">Por ${label.toLowerCase()}</button>`).join(''));
   const cell = (r, k) => `<span class="num${k === rankSort ? ' key' : ''}">${r[k]}</span>`;
@@ -184,21 +201,30 @@ function renderRanking() {
       <span class="who"><i class="flag" title="${RK.flag(r.country)} ${esc(RK.countryName(r.country))}">${RK.flag(r.country)}</i><b${r.me && !prof.name ? '' : ' translate="no"'}>${esc(r.name)}</b>${r.me ? '<em>tú</em>' : r.demo ? '<em>ejemplo</em>' : ''}</span>
       ${cell(r, 'level')}${cell(r, 'coins')}${cell(r, 'wins')}<span class="num">${r.losses}</span></div>`).join(''));
 }
-$('rk-sorts').onclick = e => { const b = e.target.closest('[data-sort]'); if (b) { rankSort = b.dataset.sort; sfx.tap(); renderRanking(); } };
-$('rk-save').onclick = () => {
+$('rk-sorts').onclick = e => { const b = e.target.closest('[data-sort]'); if (b) { rankSort = b.dataset.sort; sfx.tap(); renderRanking(); refreshRanking(); } };
+$('rk-save').onclick = async () => {
   const name = $('rk-name').value.trim(), country = $('rk-country').value;
   if (!RK.validName(name)) { sfx.error(); return toast('El usuario debe tener de 3 a 16 letras, números o guion bajo, sin espacios.'); }
   if (!country) { sfx.error(); return toast('Elige tu país.'); }
+  if (cloud.on) {                                      // el servidor decide si el usuario está libre
+    $('rk-save').disabled = true;
+    const out = await saveProfile(name, country);
+    $('rk-save').disabled = false;
+    if (out !== 'ok') { sfx.error(); return toast(out === 'taken' ? 'Ese usuario ya está en uso. Prueba con otro.' : 'No se pudo guardar. Inténtalo de nuevo.'); }
+    rankAt = 0;
+  }
   game.profile = { name, country };
   S.save(game);
   sfx.good();
   toast(`Ficha guardada: ${RK.flag(country)} ${name}`);
   renderRanking();
+  refreshRanking();
 };
 
 // ---------- Pestañas ----------
 
 function enterGame() {
+  if (lockTest) game.testMode = false;                 // con ranking real, el modo prueba es solo para desarrollo
   $('screen-loading').hidden = true;
   $('screen-start').hidden = true;
   $('game').hidden = false;
@@ -226,8 +252,9 @@ function renderAll() {
   if (tab === 'battle') renderLobby();
   if (tab === 'collection') renderDex();
   if (tab === 'shop') renderShop();
-  if (tab === 'ranking') renderRanking();
+  if (tab === 'ranking') { renderRanking(); refreshRanking(); }
   if (tab === 'settings') {
+    $('test-row').hidden = lockTest;
     $('btn-test').textContent = game.testMode ? 'Desactivar' : 'Activar';
     $('btn-sound').textContent = isMuted() ? 'Activar' : 'Silenciar';
     $('btn-music').textContent = music.isOn() ? 'Apagar' : 'Encender';
@@ -875,23 +902,27 @@ function renderAccount() {
     : account.state === 'failed' ? 'No se pudo conectar con el servicio de cuentas. Recarga la página para reintentar.'
     : !u ? 'Entra con Google, con tu correo o con tu wallet de Solana.'
     : u.wallet && u.email ? `Has entrado como ${who}. Wallet de Solana: ${shortWallet(u.wallet)}` : `Has entrado como ${who}.`;
+  const sync = cloud.on && (u || guest) ? cloud.status : '';
+  $('cloud-text').hidden = !sync;
+  $('cloud-text').textContent = sync === 'saving' ? 'Guardando tu partida…' : sync === 'offline' ? 'Sin conexión con el servidor: tu partida se guardará en cuanto vuelva.' : sync === 'saved' ? 'Tu partida está guardada en tu cuenta.' : '';
   btn.hidden = account.state === 'failed';
   btn.disabled = account.state !== 'ready';
   btn.textContent = u ? 'Salir' : 'Entrar';
 }
-$('btn-account').onclick = () => { sfx.tap(); if (account.user) logout(); else login(); };
+$('btn-account').onclick = async () => { sfx.tap(); if (!account.user) return login(); await flush(); logout(); };   // antes de salir, sube lo pendiente
 onAccount(renderAccount);
 
 // Entrada obligatoria: sin cuenta no se pasa de la pantalla de entrada. Si las cuentas no están configuradas
 // (sin App ID) no hay puerta. En el ordenador de desarrollo, ?invitado deja pasar para poder probar.
-const guest = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('invitado');
-let artReady = false, entered = false;
+const lockTest = cloud.on && !DEV;
+let artReady = false, entered = false, pullFailed = false;
 function gate() {
   if (!artReady) return;
   const locked = account.state !== 'off' && !account.user && !guest;
-  $('screen-login').hidden = !locked;
+  $('screen-login').hidden = !(locked || pullFailed);
   if (locked) {
     if (entered) { entered = false; battle = null; music.stop(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true; $('toast').hidden = true; }
+    forget(); pullFailed = false;
     $('screen-loading').hidden = true; $('screen-start').hidden = true; $('game').hidden = true;
     const failed = account.state === 'failed';
     $('login-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
@@ -903,10 +934,53 @@ function gate() {
   }
   if (entered) return;
   entered = true;
-  game = S.load();
-  if (game?.pet) { S.tick(game); enterGame(); } else showStart();
+  enter();
 }
-$('btn-login').onclick = () => { sfx.tap(); if (account.state === 'failed') location.reload(); else login(); };
+// Ya hay cuenta: se carga su partida (de la nube si hay servidor) y se entra.
+async function enter() {
+  pullFailed = false;
+  let mine = S.load();
+  if (cloud.on) {
+    $('screen-login').hidden = true; $('screen-start').hidden = true; $('game').hidden = true;
+    $('screen-loading').hidden = false; $('load-tip').textContent = 'Cargando tu partida…';
+    try {
+      const remote = await pull();
+      if (!entered) return;                              // salió de la cuenta mientras cargaba
+      const theirs = S.adopt(remote.save);
+      if (theirs) mine = theirs;                         // manda la de la cuenta
+      else if (mine?.owner && mine.owner !== myId()) mine = null;   // la copia de este navegador es de otra cuenta
+      if (mine && remote.profile?.name) mine.profile = remote.profile;
+    } catch (err) {
+      console.error(err);
+      if (!entered) return;
+      entered = false; pullFailed = true;
+      $('screen-loading').hidden = true; $('screen-login').hidden = false;
+      $('login-text').textContent = 'No se pudo cargar tu partida. Comprueba tu conexión.';
+      $('btn-login').textContent = 'Reintentar'; $('btn-login').disabled = false;
+      return;
+    }
+  }
+  game = mine;
+  if (game?.pet) { S.tick(game); enterGame(); S.save(game); } else showStart();
+}
+$('btn-login').onclick = () => { sfx.tap(); if (pullFailed) { pullFailed = false; gate(); } else if (account.state === 'failed') location.reload(); else login(); };
+
+// La nube: cada guardado se sube solo; si otro dispositivo guardó antes, se carga su partida.
+S.onSave(touch);
+watchCloud({
+  status: () => renderAccount(),
+  conflict(save) {
+    const theirs = S.adopt(save);
+    if (!theirs?.pet || !entered) return;
+    game = theirs;
+    battle = null; music.stop(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true;
+    S.save(game);
+    room.setPet(game.pet);
+    switchTab('care');
+    toast('Tu partida se actualizó desde otro dispositivo.');
+  },
+});
+for (const ev of ['pagehide', 'visibilitychange']) window.addEventListener(ev, () => { if (ev === 'pagehide' || document.hidden) flush(true); });
 
 $('btn-test').onclick = () => { game.testMode = !game.testMode; S.save(game); renderAll(); };
 $('btn-sound').onclick = () => { setMuted(!isMuted()); renderAll(); sfx.coin(); };
@@ -915,7 +989,7 @@ document.addEventListener('visibilitychange', () => music.pause(document.hidden)
 $('btn-reset').onclick = () => modal({
   title: '¿Empezar de cero?',
   body: '<p>Perderás todas tus bestias, huevos y monedas. No se puede deshacer.</p>',
-  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); music.stop(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
+  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); if (cloud.on) wipe(); music.stop(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
 });
 
 // ---------- Bucle y arranque ----------

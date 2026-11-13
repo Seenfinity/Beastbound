@@ -370,6 +370,19 @@ export default [
   ['Entra en Beast Bound', 'Log in to Beast Bound', '登录 Beast Bound'],
   ['Con Google, tu correo o tu wallet de Solana.', 'With Google, your email or your Solana wallet.', '使用 Google、邮箱或 Solana 钱包。'],
 
+  ['Cargando tu partida…', 'Loading your game…', '正在加载你的存档…'],
+  ['No se pudo cargar tu partida. Comprueba tu conexión.', "Couldn't load your game. Check your connection.", '无法加载你的存档。请检查网络连接。'],
+  ['Guardando tu partida…', 'Saving your game…', '正在保存存档…'],
+  ['Tu partida está guardada en tu cuenta.', 'Your game is saved to your account.', '存档已保存到你的账号。'],
+  ['Sin conexión con el servidor: tu partida se guardará en cuanto vuelva.', 'No connection to the server: your game will be saved as soon as it is back.', '无法连接服务器：恢复连接后会自动保存存档。'],
+  ['Tu partida se actualizó desde otro dispositivo.', 'Your game was updated from another device.', '你的存档已在另一台设备上更新。'],
+  ['Cargando el ranking…', 'Loading the ranking…', '正在加载排行榜…'],
+  ['No se pudo cargar el ranking.', "Couldn't load the ranking.", '无法加载排行榜。'],
+  ['Pon un usuario y un país para aparecer en el ranking.', 'Set a username and a country to appear in the ranking.', '设置用户名和国家后才会出现在排行榜上。'],
+  ['Con el modo prueba activado, los demás no te ven en el ranking.', "With test mode on, other players can't see you in the ranking.", '开启测试模式时，其他玩家在排行榜上看不到你。'],
+  ['Ese usuario ya está en uso. Prueba con otro.', 'That username is already taken. Try another one.', '这个用户名已被使用，换一个试试。'],
+  ['No se pudo guardar. Inténtalo de nuevo.', "Couldn't save. Try again.", '保存失败，请重试。'],
+
   // ---------- Ajustes ----------
   ['Idioma', 'Language', '语言'],
   ['Se elige solo según tu dispositivo. Aquí puedes cambiarlo.', 'Picked automatically from your device. You can change it here.', '默认跟随你的设备语言，也可以在这里切换。'],
