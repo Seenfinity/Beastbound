@@ -509,3 +509,33 @@ canvas { display: block; }
 .adv-quest b { display: block; color: var(--gold); font-size: 12px; margin-bottom: 3px; }
 .adv-quest ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
 .adv-hint { position: absolute; left: 12px; bottom: 10px; margin: 0; max-width: calc(100% - 24px); font-size: 13px; font-weight: 700; color: var(--ink); text-shadow: 0 1px 6px #0d0b1e, 0 0 2px #0d0b1e; pointer-events: none; }
+/* En el móvil el mapa ocupa casi toda la pantalla: los datos se aprietan arriba y el diario y la ayuda salen de encima del mapa */
+@media (max-width: 620px) {
+  .adventure { gap: 6px; }
+  .adv-hud { gap: 5px; }
+  .adv-hud > b { flex-basis: 100%; margin: 0; font-size: 15px; }
+  .adv-hud .chip { font-size: 12px; padding: 2px 8px; gap: 4px; border-width: 1px; }
+  .adv-hud .btn { font-size: 12px; padding: 5px 10px; border-radius: 10px; margin-left: auto; }
+  .adv-hud .btn + .btn { margin-left: 0; }
+  .adv-wrap { height: auto; min-height: 0; display: flex; flex-direction: column; }
+  #adv-canvas { flex: none; height: min(50dvh, 150vw); }
+  .adv-quest { order: -1; position: static; max-width: none; border: 0; border-bottom: 2px solid var(--line); border-radius: 0; padding: 6px 10px 7px; font-size: 12px; background: rgba(13, 11, 30, .9); }
+  .adv-quest b { display: none; }
+  .adv-hint { position: static; max-width: none; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--muted); }
+}
+
+/* Repaso en móvil: cabecera del combate sin recortes y botones lo bastante grandes para el dedo */
+@media (max-width: 620px) {
+  .vs { gap: 6px; }
+  .side b { white-space: normal; overflow: visible; display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+  .side.right b { justify-content: flex-end; }
+  .quit { padding: 8px 14px; }
+  .quit.view { top: 52px; }
+  .rk-sorts button { padding: 8px 14px; }
+  .thermo button { min-width: 38px; min-height: 38px; }
+}
+/* Teléfono en horizontal: el mapa de la aventura llena la pantalla al bajar hasta él */
+@media (max-height: 520px) and (orientation: landscape) {
+  .adv-wrap { height: calc(100dvh - 12px); min-height: 220px; }
+  .adv-quest { font-size: 12px; max-width: min(300px, 46%); }
+}

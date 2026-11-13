@@ -61,8 +61,10 @@ export class Explore {
     this.vw = Math.max(1, box.width); this.vh = Math.max(1, box.height);
     this.canvas.width = Math.round(this.vw * dpr); this.canvas.height = Math.round(this.vh * dpr);
     this.dpr = dpr;
-    // De lejos se ve casi toda la zona a lo ancho; de cerca, algo más de la mitad.
-    this.zoom = Math.max(this.vw / Math.min(this.zone.w, this.near ? 840 : 1240), this.vh / this.zone.h, this.vw / this.zone.w);
+    // De lejos se ve casi toda la zona a lo ancho; de cerca, algo más de la mitad. En una pantalla estrecha (móvil en vertical)
+    // se ve menos trozo de mapa, para que las bestias no queden diminutas.
+    const narrow = this.vw < 560, wide = narrow ? (this.near ? 430 : 620) : (this.near ? 840 : 1240);
+    this.zoom = Math.max(this.vw / Math.min(this.zone.w, wide), this.vh / this.zone.h, this.vw / this.zone.w);
   }
   center(now = false) {
     const w = this.vw / this.zoom, h = this.vh / this.zoom;
@@ -333,8 +335,9 @@ export class Explore {
   marker(img, x, y, size) { if (img) this.ctx.drawImage(img, x - size / 2, y - size / 2, size, size); }
   label(text, x, y, color) {
     const { ctx } = this;
-    ctx.font = '800 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 4; ctx.strokeStyle = '#120c24'; ctx.strokeText(text, x, y);
+    const size = Math.max(12, 11 / this.zoom);            // en el móvil el mapa se ve más pequeño: el rótulo no puede encoger con él
+    ctx.font = `800 ${size}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.lineWidth = size / 3; ctx.strokeStyle = '#120c24'; ctx.strokeText(text, x, y);
     ctx.fillStyle = color; ctx.fillText(text, x, y);
   }
 }

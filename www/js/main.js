@@ -1119,7 +1119,12 @@ $('adv-leave').onclick = () => { if (explore && !explore.busy) { explore.busy = 
 const advOn = () => explore && !battle && tab === 'battle' && !$('adventure').hidden && $('modal').hidden;
 let advHold = false;
 const advPoint = e => { const box = $('adv-canvas').getBoundingClientRect(); explore.goTo(e.clientX - box.left, e.clientY - box.top); };
-$('adv-canvas').addEventListener('pointerdown', e => { if (advOn()) { advHold = true; e.currentTarget.setPointerCapture(e.pointerId); advPoint(e); } });
+$('adv-canvas').addEventListener('pointerdown', e => {
+  if (!advOn()) return;
+  advHold = true;
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* si el navegador no deja capturar el dedo, el toque sigue valiendo */ }
+  advPoint(e);
+});
 let advAimed = 0;
 $('adv-canvas').addEventListener('pointermove', e => { if (advHold && advOn() && performance.now() - advAimed > 160) { advAimed = performance.now(); advPoint(e); } });   // al arrastrar, recalcula el camino unas pocas veces por segundo
 for (const ev of ['pointerup', 'pointercancel']) $('adv-canvas').addEventListener(ev, () => { advHold = false; });
