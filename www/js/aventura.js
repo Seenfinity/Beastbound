@@ -183,8 +183,8 @@ const CENIZA = {
   grass: [[535, 200, 680, 250], [690, 30, 835, 130], [823, 180, 953, 245], [1340, 110, 1480, 195], [1273, 10, 1368, 70], [225, 305, 320, 370], [165, 420, 375, 535], [400, 652, 560, 792], [1053, 462, 1218, 542], [1043, 802, 1208, 864], [1413, 642, 1536, 712], [785, 690, 900, 755]],
   pois: [
     { id: 'salida', type: 'exit', x: 520, y: 425, r: 38 },
-    { id: 'f-norte', type: 'gate', x: 1018, y: 14, r: 36, text: 'El puente del norte lleva a la fundición. Todavía está cerrado.' },
-    { id: 'f-este', type: 'gate', x: 1516, y: 330, r: 34, text: 'El puente del este lleva a la ladera del volcán. Todavía está cerrado.' },
+    { id: 'f-norte', type: 'gate', x: 1018, y: 14, r: 36, to: { zone: 'fundicion', x: 980, y: 752 } },
+    { id: 'f-este', type: 'gate', x: 1516, y: 330, r: 34, to: { zone: 'ladera', x: 118, y: 322 } },
     { id: 'fs1', type: 'wild', x: 780, y: 340, to: [980, 322], species: 'blaziky', level: 8 },
     { id: 'fs2', type: 'wild', x: 1290, y: 322, to: [1400, 330], species: 'mechapi', level: 9 },
     { id: 'fs3', type: 'wild', x: 1250, y: 762, to: [1340, 702], species: 'pyrorex', level: 10 },
@@ -201,6 +201,90 @@ const CENIZA = {
     { id: 'ff1', type: 'food', x: 590, y: 226, food: 'chile' }, { id: 'ff2', type: 'food', x: 272, y: 340, food: 'filete' }, { id: 'ff3', type: 'food', x: 1420, y: 152, food: 'pan' },
     { id: 'ff4', type: 'food', x: 1150, y: 505, food: 'huevo' }, { id: 'ff5', type: 'food', x: 1125, y: 838, food: 'chile' }, { id: 'ff6', type: 'food', x: 250, y: 480, food: 'filete' },
     { id: 'fm1', type: 'coin', x: 335, y: 240, coins: 10 }, { id: 'fm2', type: 'coin', x: 1470, y: 662, coins: 14 }, { id: 'fm3', type: 'coin', x: 600, y: 800, coins: 12 }, { id: 'fm4', type: 'coin', x: 1320, y: 32, coins: 11 },
+  ],
+};
+
+// La fundición, al norte de la isla de ceniza: el horno grande, dos crisoles de metal fundido y un canal que se cruza por un puente.
+const FUNDICION = {
+  id: 'fundicion', name: 'La fundición', img: 'assets/aventura/forja-fundicion.webp', w: 1536, h: 864, start: [980, 752],
+  ground: [[110, 0], [1200, 0], [1300, 25], [1355, 70], [1370, 140], [1425, 185], [1460, 230], [1450, 320], [1490, 345], [1495, 520], [1470, 610], [1440, 700], [1395, 750], [1250, 800], [1070, 812], [890, 812], [420, 808], [300, 788], [200, 758], [125, 700], [92, 640], [62, 560], [72, 500], [50, 400], [35, 300], [45, 200], [62, 100]],
+  holes: [[[1022, 350], [1500, 350], [1500, 392], [1022, 392]]],
+  bridges: [[918, 780, 1040, 864], [1183, 335, 1252, 405]],
+  circles: [
+    [568, 500, 50], [1250, 155, 40], [1410, 185, 25], [1345, 465, 18], [1162, 668, 26],                                            // rocas
+    [470, 75, 26], [525, 55, 28], [675, 650, 34], [780, 760, 42], [1408, 492, 40],                                                 // púas de obsidiana
+    [285, 162, 14], [1135, 188, 14], [330, 722, 14], [1210, 750, 14], [360, 185, 26], [405, 605, 26], [1097, 695, 36],            // braseros, chimeneas y cadenas
+  ],
+  rects: [
+    [578, 0, 938, 232],                                                                                                             // el horno
+    [398, 198, 462, 246], [843, 278, 908, 330], [473, 368, 550, 422], [1313, 256, 1368, 302], [935, 526, 998, 580], [1240, 434, 1288, 472],   // lingotes
+    [430, 152, 550, 200], [520, 190, 578, 248], [1060, 205, 1128, 250], [1105, 240, 1155, 282], [888, 455, 975, 500], [960, 480, 1050, 515], [1040, 500, 1092, 630], [380, 678, 535, 738],   // muros
+    [418, 250, 510, 304], [555, 268, 640, 338], [828, 372, 918, 444], [710, 312, 780, 352], [948, 222, 1000, 278], [1178, 222, 1280, 272], [972, 590, 1040, 632],                          // carbón, carros, yunques y pilas
+    [888, 760, 917, 864], [1041, 760, 1070, 864],
+  ],
+  ponds: [[250, 285, 104, 70], [290, 437, 104, 72]],
+  trees: [[170, 172, 'round', 85, 170], [1040, 162, 'round', 85, 165], [222, 697, 'round', 85, 165], [575, 707, 'round', 55, 120], [1265, 682, 'round', 85, 175], [360, 205, 'post', 26, 110], [405, 625, 'post', 26, 110]],
+  grass: [[300, 30, 430, 95], [945, 312, 1040, 385], [1045, 410, 1165, 470], [540, 700, 720, 790], [1320, 620, 1440, 745], [400, 450, 510, 555], [85, 290, 150, 380]],
+  pois: [
+    { id: 'fu-sur', type: 'gate', x: 980, y: 846, r: 34, to: { zone: 'ceniza', x: 1018, y: 102 } },
+    { id: 'fus1', type: 'wild', x: 680, y: 400, to: [780, 480], species: 'mechapi', level: 10 },
+    { id: 'fus2', type: 'wild', x: 1120, y: 522, to: [1300, 502], species: 'pyrorex', level: 11 },
+    { id: 'fus3', type: 'wild', x: 1100, y: 302, to: [1290, 320], species: 'draconoid', level: 12 },
+    { id: 'fuc1', type: 'chest', x: 1290, y: 630, coins: 90, hidden: true },         // detrás del árbol del sureste
+    { id: 'fuc2', type: 'chest', x: 200, y: 120, item: 'mira', hidden: true },       // detrás del árbol de la esquina
+    { id: 'fuc3', type: 'chest', x: 640, y: 745, item: 'escudo', hidden: true },     // entre la hierba seca del sur
+    { id: 'fud1', type: 'rest', x: 1170, y: 770, r: 26 },
+    { id: 'fue1', type: 'event', x: 755, y: 262, text: 'El horno grande ruge solo, como si alguien lo alimentara.',
+      choices: [{ label: 'Echar carbón', result: 'El fuego crece y te contagia su fuerza: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Calentarse un rato', result: 'El calor te afloja los músculos: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
+    { id: 'fue2', type: 'event', x: 402, y: 348, text: 'El metal del crisol sigue líquido. Algo brilla en el borde.',
+      choices: [{ label: 'Cogerlo deprisa', result: 'Quema, pero es una pepita de oro: +50 monedas y pierdes un poco de vida.', fx: { coins: 50, hp: -0.1 } },
+        { label: 'Empujarlo con un palo', result: 'Cae al suelo y se enfría: +25 monedas.', fx: { coins: 25 } }] },
+    { id: 'fuf1', type: 'food', x: 360, y: 62, food: 'pan' }, { id: 'fuf2', type: 'food', x: 990, y: 350, food: 'filete' }, { id: 'fuf3', type: 'food', x: 1100, y: 440, food: 'chile' },
+    { id: 'fuf4', type: 'food', x: 450, y: 502, food: 'huevo' }, { id: 'fuf5', type: 'food', x: 1380, y: 680, food: 'filete' }, { id: 'fuf6', type: 'food', x: 112, y: 340, food: 'pan' },
+    { id: 'fum1', type: 'coin', x: 1400, y: 262, coins: 12 }, { id: 'fum2', type: 'coin', x: 150, y: 540, coins: 12 }, { id: 'fum3', type: 'coin', x: 830, y: 690, coins: 10 }, { id: 'fum4', type: 'coin', x: 1320, y: 420, coins: 13 },
+  ],
+};
+
+// La ladera del volcán, al este: la puerta sellada, dos pozas, campos de púas y el río de lava con su puente.
+const LADERA = {
+  id: 'ladera', name: 'Ladera del volcán', img: 'assets/aventura/forja-ladera.webp', w: 1536, h: 864, start: [118, 322],
+  ground: [[18, 88], [1480, 88], [1500, 200], [1505, 420], [1495, 480], [1455, 530], [1440, 620], [1400, 700], [1350, 735], [1280, 735], [1215, 712], [1135, 755], [1100, 835], [430, 850], [330, 818], [235, 780], [180, 740], [110, 690], [42, 640], [15, 580], [32, 520], [80, 440], [62, 380], [18, 380]],
+  holes: [[[1380, 0], [1400, 50], [1415, 100], [1365, 180], [1380, 250], [1355, 330], [1340, 385], [1285, 480], [1250, 560], [1265, 620], [1295, 680], [1285, 730], [1285, 864],
+    [1345, 864], [1345, 730], [1350, 680], [1325, 620], [1315, 560], [1345, 480], [1395, 385], [1405, 330], [1430, 250], [1425, 180], [1475, 100], [1450, 50], [1425, 0]]],
+  bridges: [[0, 300, 110, 345], [1262, 402, 1395, 452]],
+  circles: [
+    [1185, 225, 30], [1305, 275, 28], [1225, 300, 26], [570, 540, 20], [856, 580, 38], [1152, 655, 36], [930, 635, 16], [990, 662, 16], [430, 645, 30], [665, 715, 40], [1205, 400, 48],   // rocas, respiradero y púas
+    [160, 180, 18], [690, 265, 28], [822, 330, 44], [990, 245, 42], [385, 480, 22], [330, 510, 18], [135, 405, 42], [95, 545, 30], [795, 460, 40], [985, 610, 20], [1130, 598, 18], [970, 520, 22], [385, 755, 18], [790, 645, 25], [680, 830, 40],   // matas y arbolillos
+    [145, 288, 14], [640, 175, 16], [908, 175, 16], [1263, 242, 14], [880, 512, 14], [1278, 392, 10], [1385, 390, 10], [1268, 460, 10], [1378, 462, 10],                                       // braseros y pilares del puente
+  ],
+  rects: [
+    [690, 0, 890, 105], [545, 85, 655, 150], [895, 85, 985, 150], [365, 85, 525, 135], [1175, 25, 1345, 170],   // la puerta y la pared de roca
+    [245, 150, 460, 268], [125, 520, 320, 635], [420, 670, 568, 775], [955, 680, 1125, 765],                       // campos de púas
+    [645, 440, 760, 528], [842, 645, 925, 745], [738, 725, 858, 815], [0, 262, 100, 300], [0, 345, 100, 372], [1425, 88, 1536, 285],     // estatua, columna caída, basalto, barandillas y el acantilado del noreste
+  ],
+  ponds: [[565, 290, 102, 58], [1105, 325, 88, 54]],
+  trees: [[60, 192, 'round', 62, 150], [1030, 227, 'round', 45, 100], [290, 492, 'round', 75, 150], [1060, 632, 'round', 75, 160], [315, 777, 'round', 60, 130], [1455, 395, 'round', 45, 95],
+    [1118, 247, 'post', 14, 100], [540, 532, 'post', 14, 115], [1250, 692, 'post', 12, 80], [702, 528, 'post', 45, 165]],
+  grass: [[100, 170, 240, 250], [385, 530, 650, 640], [600, 530, 780, 572], [1010, 765, 1110, 835], [400, 778, 530, 845]],
+  pois: [
+    { id: 'la-oeste', type: 'gate', x: 14, y: 322, r: 34, to: { zone: 'ceniza', x: 1425, y: 330 } },
+    { id: 'las1', type: 'wild', x: 330, y: 330, to: [430, 345], species: 'blaziky', level: 11 },
+    { id: 'las2', type: 'wild', x: 900, y: 400, to: [1000, 440], species: 'pyrorex', level: 12 },
+    { id: 'las3', type: 'wild', x: 730, y: 222, to: [850, 226], species: 'draconoid', level: 13 },
+    { id: 'lac1', type: 'chest', x: 1440, y: 352, item: 'pocion', hidden: true },    // al otro lado del río, detrás del arbolillo
+    { id: 'lac2', type: 'chest', x: 1075, y: 575, coins: 100, hidden: true },        // detrás del árbol del sur
+    { id: 'lac3', type: 'chest', x: 600, y: 600, item: 'elixir', hidden: true },     // entre la hierba seca, bajo la estatua
+    { id: 'lad1', type: 'rest', x: 912, y: 542, r: 26 },
+    { id: 'lae1', type: 'event', x: 788, y: 135, text: 'Una puerta enorme, sellada con runas que laten como brasas.',
+      choices: [{ label: 'Apoyar la pata', result: 'Las runas te traspasan su calor: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Empujar con fuerza', result: 'No se mueve ni un pelo, pero entre los escalones hay monedas: +30 monedas.', fx: { coins: 30 } }] },
+    { id: 'lae2', type: 'event', x: 702, y: 562, text: 'Una estatua de dragón. A sus pies la ceniza sigue tibia.',
+      choices: [{ label: 'Remover la ceniza', result: 'Te quemas un poco, pero debajo hay monedas: +40 monedas y pierdes un poco de vida.', fx: { coins: 40, hp: -0.1 } },
+        { label: 'Inclinarse ante ella', result: 'Sientes que el dragón te mira con buenos ojos: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
+    { id: 'laf1', type: 'food', x: 170, y: 212, food: 'chile' }, { id: 'laf2', type: 'food', x: 500, y: 612, food: 'filete' }, { id: 'laf3', type: 'food', x: 1060, y: 800, food: 'pan' },
+    { id: 'laf4', type: 'food', x: 460, y: 812, food: 'huevo' }, { id: 'laf5', type: 'food', x: 740, y: 552, food: 'chile' }, { id: 'laf6', type: 'food', x: 1400, y: 580, food: 'filete' },
+    { id: 'lam1', type: 'coin', x: 200, y: 330, coins: 12 }, { id: 'lam2', type: 'coin', x: 1300, y: 335, coins: 13 }, { id: 'lam3', type: 'coin', x: 80, y: 610, coins: 14 }, { id: 'lam4', type: 'coin', x: 900, y: 800, coins: 12 },
   ],
 };
 
@@ -227,8 +311,8 @@ const NEVADA = {
   grass: [[475, 85, 548, 155], [625, 50, 690, 100], [710, 0, 790, 55], [888, 225, 993, 315], [1088, 200, 1273, 320], [325, 425, 475, 510], [650, 652, 740, 722], [1018, 432, 1093, 487], [953, 600, 1168, 697], [1168, 577, 1273, 642]],
   pois: [
     { id: 'salida', type: 'exit', x: 578, y: 388, r: 38 },
-    { id: 't-este', type: 'gate', x: 1516, y: 313, r: 34, text: 'El puente del este lleva al bosque de cristal. Todavía está cerrado.' },
-    { id: 't-sur', type: 'gate', x: 972, y: 846, r: 34, text: 'El puente del sur lleva al observatorio. Todavía está cerrado.' },
+    { id: 't-este', type: 'gate', x: 1516, y: 313, r: 34, to: { zone: 'cristal', x: 138, y: 372 } },
+    { id: 't-sur', type: 'gate', x: 972, y: 846, r: 34, to: { zone: 'observatorio', x: 985, y: 128 } },
     { id: 'ts1', type: 'wild', x: 950, y: 376, to: [1200, 372], species: 'frostine', level: 14 },
     { id: 'ts2', type: 'wild', x: 330, y: 640, to: [430, 650], species: 'zephyra', level: 15 },
     { id: 'ts3', type: 'wild', x: 850, y: 200, to: [790, 100], species: 'aquarok', level: 16 },
@@ -248,12 +332,100 @@ const NEVADA = {
   ],
 };
 
+// El bosque de cristal, al este de la isla nevada: cristales gigantes y un arroyo helado con su puente.
+// Los cristales grandes van como árboles de copa en punta ('pine'): se pasa por detrás.
+const CRISTAL = {
+  id: 'cristal', name: 'Bosque de cristal', img: 'assets/aventura/tundra-cristal.webp', w: 1536, h: 864, start: [138, 372],
+  ground: [[150, 0], [1395, 0], [1425, 60], [1450, 130], [1445, 250], [1385, 300], [1400, 380], [1435, 430], [1452, 520], [1445, 600], [1395, 680], [1290, 695], [1230, 735], [1010, 775], [1000, 864], [400, 864], [390, 800], [330, 762], [250, 748], [110, 705], [100, 650], [72, 600], [75, 555], [100, 500], [80, 420], [80, 320], [85, 250], [100, 130], [130, 60]],
+  holes: [[[1000, 0], [998, 100], [1015, 200], [1035, 290], [1045, 390], [1058, 480], [1055, 570], [1085, 610], [1140, 655], [1215, 700], [1215, 760],
+    [1300, 760], [1295, 690], [1265, 650], [1200, 600], [1135, 560], [1145, 480], [1145, 390], [1145, 290], [1100, 200], [1080, 100], [1150, 20], [1150, 0]]],
+  bridges: [[0, 350, 140, 395], [1005, 312, 1165, 350]],
+  circles: [
+    [770, 145, 22], [865, 200, 30], [945, 50, 30], [462, 635, 38], [857, 815, 44], [985, 395, 22], [1130, 240, 30], [1170, 270, 22],                                   // rocas nevadas
+    [470, 325, 30], [755, 185, 25], [967, 245, 38], [205, 500, 40], [1015, 418, 26], [1340, 245, 28], [1165, 540, 26], [880, 570, 14],                                 // cristales pequeños
+    [165, 265, 35], [500, 270, 36], [585, 70, 25], [780, 40, 18], [235, 445, 30], [105, 535, 16], [135, 450, 18], [355, 565, 32], [430, 465, 30], [178, 695, 48], [545, 665, 28], [700, 830, 18], [1015, 730, 30], [1095, 745, 34],
+    [995, 545, 38], [1335, 80, 30], [1280, 45, 28], [1190, 405, 28], [1222, 515, 34], [1410, 545, 24], [170, 95, 16],                                                   // arbustos y pinos pequeños
+    [505, 195, 12], [495, 562, 12], [960, 692, 12], [1008, 300, 10], [1158, 300, 10], [1008, 362, 10], [1158, 362, 10],                                              // farolas y pilares del puente
+  ],
+  rects: [
+    [145, 110, 320, 225], [258, 240, 368, 335], [608, 40, 740, 138], [220, 590, 352, 692], [620, 665, 778, 748], [1268, 510, 1392, 585], [1082, 100, 1180, 168],   // la base de los cristales grandes
+    [1188, 160, 1305, 248], [1015, 630, 1100, 690], [1085, 655, 1170, 718], [0, 320, 135, 350], [0, 395, 135, 420],                                               // estatua, tronco caído y barandillas
+  ],
+  ponds: [[732, 400, 108, 72]],                         // el cristal del claro, con su corro de piedras
+  trees: [
+    [230, 225, 'pine', 88, 175], [312, 335, 'pine', 55, 130], [672, 138, 'pine', 66, 138], [735, 440, 'pine', 75, 185], [285, 692, 'pine', 66, 165], [697, 748, 'pine', 78, 145], [1330, 585, 'pine', 62, 150], [1130, 168, 'pine', 50, 128],
+    [345, 162, 'pine', 40, 130], [115, 264, 'pine', 38, 120], [425, 314, 'pine', 42, 125], [460, 152, 'round', 55, 125], [835, 162, 'round', 60, 125], [925, 214, 'pine', 40, 125],
+    [295, 530, 'pine', 40, 115], [385, 535, 'pine', 42, 115], [180, 602, 'pine', 35, 95], [395, 740, 'pine', 42, 130], [515, 760, 'pine', 38, 110], [460, 834, 'pine', 42, 130], [632, 850, 'pine', 42, 135],
+    [920, 605, 'pine', 42, 125], [1365, 170, 'pine', 40, 110], [1290, 420, 'pine', 40, 120], [1240, 474, 'pine', 40, 100], [1375, 607, 'pine', 32, 88], [1245, 248, 'post', 45, 172],
+  ],
+  grass: [[545, 135, 720, 250], [810, 245, 910, 330], [805, 455, 900, 520], [540, 510, 720, 610], [815, 705, 965, 800]],
+  pois: [
+    { id: 'cr-oeste', type: 'gate', x: 14, y: 372, r: 34, to: { zone: 'nevada', x: 1420, y: 313 } },
+    { id: 'crs1', type: 'wild', x: 330, y: 380, to: [520, 385], species: 'frostine', level: 16 },
+    { id: 'crs2', type: 'wild', x: 760, y: 620, to: [860, 652], species: 'zephyra', level: 17 },
+    { id: 'crs3', type: 'wild', x: 1250, y: 300, to: [1340, 320], species: 'voltix', level: 18 },
+    { id: 'crc1', type: 'chest', x: 230, y: 95, coins: 120, hidden: true },          // detrás del cristal grande del noroeste
+    { id: 'crc2', type: 'chest', x: 1330, y: 495, item: 'mira', hidden: true },      // al otro lado del arroyo, detrás del cristal
+    { id: 'crc3', type: 'chest', x: 640, y: 560, item: 'elixir', hidden: true },     // entre la hierba helada
+    { id: 'crd1', type: 'rest', x: 925, y: 702, r: 26 },
+    { id: 'cre1', type: 'event', x: 735, y: 494, text: 'El cristal gigante vibra con un zumbido grave.',
+      choices: [{ label: 'Apoyarse en él', result: 'El zumbido te recorre entera: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Arrancar una esquirla', result: 'Corta como el hielo, pero vale lo suyo: +45 monedas y pierdes un poco de vida.', fx: { coins: 45, hp: -0.1 } }] },
+    { id: 'cre2', type: 'event', x: 1245, y: 276, text: 'Una bestia de piedra cubierta de escarcha. Parece vigilar el arroyo.',
+      choices: [{ label: 'Quitarle la escarcha', result: 'Bajo el hielo la piedra está tibia: recuperas un tercio de la vida.', fx: { hp: 0.33 } },
+        { label: 'Mirar entre sus patas', result: 'Alguien escondió aquí una bolsa: +35 monedas.', fx: { coins: 35 } }] },
+    { id: 'crf1', type: 'food', x: 630, y: 192, food: 'helado' }, { id: 'crf2', type: 'food', x: 860, y: 290, food: 'pescado' }, { id: 'crf3', type: 'food', x: 850, y: 490, food: 'leche' },
+    { id: 'crf4', type: 'food', x: 572, y: 542, food: 'galleta' }, { id: 'crf5', type: 'food', x: 890, y: 752, food: 'pescado' }, { id: 'crf6', type: 'food', x: 1400, y: 252, food: 'helado' },
+    { id: 'crm1', type: 'coin', x: 700, y: 282, coins: 14 }, { id: 'crm2', type: 'coin', x: 300, y: 722, coins: 15 }, { id: 'crm3', type: 'coin', x: 1212, y: 52, coins: 16 }, { id: 'crm4', type: 'coin', x: 1390, y: 440, coins: 14 },
+  ],
+};
+
+// El observatorio, al sur: el edificio con cúpula, la terraza con el mapa de estrellas, telescopios y un estanque helado.
+const OBSERVATORIO = {
+  id: 'observatorio', name: 'El observatorio', img: 'assets/aventura/tundra-observatorio.webp', w: 1536, h: 864, start: [985, 128],
+  ground: [[170, 55], [900, 55], [1085, 62], [1170, 55], [1335, 95], [1405, 150], [1480, 235], [1500, 290], [1450, 345], [1495, 470], [1500, 545], [1465, 610], [1445, 685], [1375, 745], [1220, 782], [1050, 802], [1000, 864], [700, 864], [690, 800], [640, 765], [300, 762], [225, 722], [130, 690], [100, 620], [82, 560], [108, 500], [62, 430], [52, 330], [32, 250], [28, 190], [62, 120], [130, 88]],
+  bridges: [[925, 0, 1045, 70]],
+  circles: [
+    [505, 265, 28], [1115, 432, 34], [987, 688, 38], [1205, 548, 45], [1075, 632, 32], [1355, 630, 34], [1110, 715, 22], [1130, 580, 26],   // rocas nevadas
+    [467, 228, 32], [1118, 150, 42], [1310, 392, 42], [345, 545, 50], [355, 640, 36],                                                       // cristales de hielo
+    [150, 110, 18], [688, 248, 36], [750, 165, 32], [470, 375, 30], [1430, 280, 50], [1380, 580, 34], [1340, 690, 28], [540, 695, 52], [635, 705, 28], [860, 590, 26],   // arbustos con nieve
+    [252, 335, 20], [428, 315, 20], [893, 190, 12], [600, 430, 14], [998, 430, 14], [693, 732, 14], [685, 215, 20], [485, 525, 22], [1140, 312, 22], [998, 528, 52],   // farolas, columna, telescopios y reloj de sol
+  ],
+  rects: [[160, 0, 418, 290], [505, 140, 600, 185], [585, 160, 665, 215], [1105, 365, 1190, 402], [1180, 320, 1272, 392], [400, 575, 515, 660], [838, 622, 952, 682], [890, 0, 924, 100], [1046, 0, 1082, 100]],   // edificio, muros, cajas, columna caída y pilares
+  ponds: [[1215, 648, 150, 100]],
+  trees: [
+    [90, 290, 'pine', 42, 150], [150, 332, 'pine', 45, 135], [605, 105, 'pine', 50, 105], [1240, 167, 'round', 75, 145], [1300, 240, 'pine', 38, 110], [1345, 182, 'pine', 35, 100], [1400, 252, 'pine', 42, 150],
+    [1390, 490, 'pine', 40, 135], [1440, 552, 'round', 45, 100], [235, 537, 'round', 62, 130], [185, 650, 'pine', 45, 140], [265, 690, 'pine', 42, 145], [1030, 817, 'pine', 42, 115],
+    [685, 228, 'post', 22, 135], [485, 540, 'post', 34, 120], [1140, 326, 'post', 34, 110],
+  ],
+  grass: [[430, 45, 530, 110], [760, 78, 880, 150], [745, 190, 862, 248], [510, 262, 628, 335], [85, 352, 212, 430], [245, 405, 345, 478], [515, 500, 670, 585], [300, 672, 430, 748], [880, 685, 990, 760], [1000, 272, 1075, 328], [1172, 198, 1292, 272], [1120, 432, 1195, 496], [1240, 482, 1365, 540]],
+  pois: [
+    { id: 'ob-norte', type: 'gate', x: 985, y: 14, r: 34, to: { zone: 'nevada', x: 972, y: 758 } },
+    { id: 'obs1', type: 'wild', x: 720, y: 380, to: [880, 420], species: 'aquarok', level: 18 },
+    { id: 'obs2', type: 'wild', x: 760, y: 620, to: [640, 622], species: 'frostine', level: 19 },
+    { id: 'obs3', type: 'wild', x: 330, y: 396, to: [420, 420], species: 'rokky', level: 20 },
+    { id: 'obc1', type: 'chest', x: 250, y: 495, coins: 130, hidden: true },         // detrás del árbol nevado del oeste
+    { id: 'obc2', type: 'chest', x: 1260, y: 120, item: 'pocion', hidden: true },    // detrás del árbol grande del noreste
+    { id: 'obc3', type: 'chest', x: 915, y: 730, item: 'escudo', hidden: true },     // entre la hierba helada del sur
+    { id: 'obd1', type: 'rest', x: 998, y: 600, r: 26 },                             // al pie del reloj de sol
+    { id: 'obe1', type: 'event', x: 342, y: 332, text: 'La puerta del observatorio está cerrada. Por una rendija se escapa luz de estrellas.',
+      choices: [{ label: 'Llamar a la puerta', result: 'Nadie contesta, pero en el escalón hay monedas: +35 monedas.', fx: { coins: 35 } },
+        { label: 'Sentarse en los escalones', result: 'La luz que sale por la rendija reconforta: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
+    { id: 'obe2', type: 'event', x: 1140, y: 348, text: 'Un telescopio apunta al cielo. La lente sigue limpia.',
+      choices: [{ label: 'Mirar por él', result: 'Ves la aurora tan cerca que casi la tocas: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Desmontar una pieza', result: 'Una rueda de latón siempre se vende bien: +40 monedas.', fx: { coins: 40 } }] },
+    { id: 'obf1', type: 'food', x: 480, y: 80, food: 'helado' }, { id: 'obf2', type: 'food', x: 820, y: 116, food: 'pescado' }, { id: 'obf3', type: 'food', x: 150, y: 396, food: 'leche' },
+    { id: 'obf4', type: 'food', x: 590, y: 545, food: 'galleta' }, { id: 'obf5', type: 'food', x: 1300, y: 512, food: 'pescado' }, { id: 'obf6', type: 'food', x: 360, y: 716, food: 'helado' },
+    { id: 'obm1', type: 'coin', x: 1230, y: 236, coins: 15 }, { id: 'obm2', type: 'coin', x: 780, y: 830, coins: 14 }, { id: 'obm3', type: 'coin', x: 130, y: 470, coins: 16 }, { id: 'obm4', type: 'coin', x: 1420, y: 420, coins: 15 },
+  ],
+};
+
 // Cada región lleva la luz con que se tiñen las bestias (tint) y lo que flota en el aire (motes).
 export const REGIONS = {
   islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' },
     tint: 'rgba(26, 34, 118, .24)', motes: 'fireflies' },
-  forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers' },
-  tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow' },
+  forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA, fundicion: FUNDICION, ladera: LADERA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers' },
+  tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA, cristal: CRISTAL, observatorio: OBSERVATORIO }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow' },
 };
 
 export const REST_HEAL = 0.5;
