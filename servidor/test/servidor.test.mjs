@@ -1,7 +1,9 @@
 // Pruebas del servidor con una base de datos Postgres en memoria y un verificador de sesión falso.
 import http from 'node:http';
 import { newDb } from 'pg-mem';
-import { createApp, inspect } from '../src/app.js';
+import { createApp, inspect, replay } from '../src/app.js';
+import * as S from '../reglas/state.js';
+import { apply, MIN_FIGHT } from '../reglas/acciones.js';
 import { migrate } from '../src/db.js';
 
 const pool = new (newDb({ noAstCoverageCheck: true }).adapters.createPg().Pool)();
@@ -17,38 +19,125 @@ const call = async (method, path, { as, body, origin } = {}) => {
   return { status: res.status, json: await res.json().catch(() => null), cors: res.headers.get('access-control-allow-origin') };
 };
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const save = (over = {}) => ({ v: 3, coins: 120, wins: 4, losses: 1, testMode: false, eggs: [], pets: [{ species: 'solaris', name: 'Sol', level: 7, stage: 0 }], profile: { name: '', country: '' }, ...over });
+
+const GAP = 650;                                       // lo que hay que esperar entre dos envíos de la misma cuenta
+const acts = (as, rev, ...actions) => call('POST', '/acciones', { as, body: { rev, actions: actions.map(([k, ...a]) => ({ k, a, t: Date.now() })) } });
 
 let r = await call('GET', '/salud');
 check('el servidor responde', r.status === 200 && r.json.ok);
 r = await call('GET', '/partida');
 check('sin sesión no se entra', r.status === 401);
+r = await call('POST', '/acciones', { body: { rev: 0, actions: [{ k: 'new', a: [], t: 0 }] } });
+check('sin sesión no se juega', r.status === 401);
 r = await call('GET', '/partida', { as: 'ana' });
-check('jugadora nueva: aún no tiene partida', r.status === 404);
-r = await call('PUT', '/partida', { as: 'ana', body: { save: save(), rev: 0 } });
-check('guarda la primera partida', r.status === 200 && r.json.rev === 1, JSON.stringify(r.json));
+check('jugadora nueva: aún no tiene partida, y recibe la hora del servidor', r.status === 404 && Math.abs(r.json.now - Date.now()) < 5000);
+
+// --- empezar: la partida la crea el servidor
+r = await acts('ana', 0, ['new']);
+check('la partida nueva la crea el servidor, con tres huevos a elegir', r.status === 200 && r.json.rev === 1 && r.json.save.offer.length === 3 && r.json.save.pets.length === 0 && r.json.save.coins === 30, JSON.stringify(r.json).slice(0, 200));
+check('sin modo prueba y con su semilla', r.json.save.testMode === false && Number.isInteger(r.json.save.rng.s));
+r = await acts('ana', 1, ['start', 0, 'Sol']);
+check('jugar demasiado seguido se frena', r.status === 429);
+await wait(GAP);
+r = await acts('ana', 1, ['start', 0, 'Sol']);
+check('abre el huevo elegido', r.status === 200 && r.json.rev === 2 && r.json.save.pets.length === 1 && r.json.save.pets[0].name === 'Sol' && r.json.save.pets[0].level === 1 && !r.json.resync, JSON.stringify(r.json).slice(0, 200));
+const species = r.json.save.pets[0].species;
 r = await call('GET', '/partida', { as: 'ana' });
-check('la recupera igual', r.status === 200 && r.json.rev === 1 && r.json.save.pets[0].name === 'Sol' && r.json.save.coins === 120);
-r = await call('PUT', '/partida', { as: 'ana', body: { save: save({ coins: 150 }), rev: 1 } });
-check('guardar demasiado seguido se frena', r.status === 429);
-await wait(2100);
-r = await call('PUT', '/partida', { as: 'ana', body: { save: save({ coins: 150 }), rev: 1 } });
-check('guarda la siguiente versión', r.status === 200 && r.json.rev === 2);
-await wait(2100);
-r = await call('PUT', '/partida', { as: 'ana', body: { save: save({ coins: 999 }), rev: 1 } });
-check('otro dispositivo con versión vieja: conflicto y devuelve la buena', r.status === 409 && r.json.rev === 2 && r.json.save.coins === 150, `${r.status}`);
+check('la recupera igual', r.status === 200 && r.json.rev === 2 && r.json.save.pets[0].name === 'Sol' && r.json.save.pets[0].species === species && r.json.save.coins === 30);
+await wait(GAP);
+r = await acts('ana', 2, ['feed', 'bayas'], ['stroke'], ['buyFood', 'galleta']);
+check('varias acciones de una vez: comer, acariciar y comprar', r.status === 200 && r.json.rev === 3 && r.json.save.foods.bayas === 1 && r.json.save.foods.galleta === 1 && r.json.save.coins === 28 && !r.json.resync, JSON.stringify(r.json.save.foods));
+await wait(GAP);
+r = await acts('ana', 2, ['feed', 'bayas']);
+check('otro dispositivo con versión vieja: conflicto y devuelve la buena', r.status === 409 && r.json.rev === 3 && r.json.save.coins === 28, `${r.status}`);
 r = await call('GET', '/partida', { as: 'luis' });
 check('cada cuenta ve solo lo suyo', r.status === 404);
 
-// partidas que no cuelan
-check('rechaza monedas imposibles', inspect(save({ coins: 9e9 })) === null);
-check('rechaza nivel imposible', inspect(save({ pets: [{ species: 'solaris', name: 'Sol', level: 5000, stage: 0 }] })) === null);
-check('rechaza demasiadas bestias', inspect(save({ pets: Array(7).fill({ species: 'solaris', name: 'Sol', level: 2, stage: 0 }) })) === null);
-check('rechaza lo que no es una partida', inspect('hola') === null && inspect({ v: 2 }) === null && inspect(null) === null);
-r = await call('PUT', '/partida', { as: 'luis', body: { save: { v: 3, coins: -5, pets: [], eggs: [] }, rev: 0 } });
-check('el servidor responde 400 a una partida mala', r.status === 400);
-r = await call('PUT', '/partida', { as: 'gordo', body: { save: save({ relleno: 'x'.repeat(400 * 1024) }), rev: 0 } }).catch(e => ({ status: 413, err: String(e) }));
-check('rechaza partidas enormes', r.status === 413, `${r.status}`);
+// --- lo que ya no se puede hacer
+r = await call('PUT', '/partida', { as: 'ana', body: { save: { v: 3, coins: 999999, pets: [{ species: 'solaris', name: 'Sol', level: 50, stage: 2 }], eggs: [] }, rev: 3 } });
+check('ya no se puede subir una partida entera', r.status === 410);
+r = await call('GET', '/partida', { as: 'ana' });
+check('y la partida sigue como la dejó el servidor', r.json.save.coins === 28 && r.json.save.pets[0].level === 1);
+await wait(GAP);
+r = await acts('ana', 3, ['buyItem', 'pocion']);
+check('comprar sin monedas no cuela (y no es una trampa: solo un no)', r.status === 200 && !r.json.resync && r.json.save.coins === 28 && r.json.save.items.pocion === 0);
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['hacerse-rica']);
+check('una acción inventada se rechaza y manda la partida del servidor', r.status === 200 && r.json.resync === true && r.json.save.coins === 28);
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['feed', { coins: 999 }]);
+check('datos imposibles en una acción: rechazada', r.json.resync === true && r.json.save.coins === 28);
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['fight']);
+check('no se puede empezar un combate sin rival', r.json.resync === true && !r.json.save.fight);
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['foe', ''], ['fight'], ['fightEnd', true, 1, 5, 5, 20]);
+check('ganar un combate en el acto no cuela: se queda empezado y sin premio', r.json.resync === true && r.json.save.wins === 0 && r.json.save.coins === 28 && !!r.json.save.fight && r.json.save.pets[0].energy < 100, JSON.stringify({ w: r.json.save.wins, c: r.json.save.coins }));
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['train', 1]);
+check('entrenar sin haber empezado el entrenamiento: rechazado', r.json.resync === true && r.json.save.pets[0].trainsToday === 0);
+await wait(GAP);
+r = await acts('ana', r.json.rev, ['evolve']);
+check('evolucionar sin nivel ni días: rechazado', r.json.resync === true && r.json.save.pets[0].stage === 0);
+await wait(GAP);
+r = await call('POST', '/acciones', { as: 'ana', body: { rev: r.json.rev, actions: [{ k: 'tick', a: [], t: Date.now() + 30 * 864e5 }] } });
+check('una acción con fecha del mes que viene se queda en la hora del servidor', r.status === 200 && r.json.save.clock <= Date.now() + 2000, `${r.json.save.clock - Date.now()}`);
+await wait(GAP);
+r = await call('POST', '/acciones', { as: 'ana', body: { rev: r.json.rev, actions: Array(400).fill({ k: 'stroke', a: [], t: 0 }) } });
+check('demasiadas acciones de golpe: no', r.status === 400);
+const anaRev = (await call('GET', '/partida', { as: 'ana' })).json.rev;
+r = await call('POST', '/acciones', { as: 'gordo', body: { rev: 0, actions: [{ k: 'new', a: ['x'.repeat(400 * 1024)], t: 0 }] } }).catch(e => ({ status: 413, err: String(e) }));
+check('rechaza envíos enormes', r.status === 413, `${r.status}`);
+r = await acts('nadie', 0, ['feed', 'bayas']);
+check('sin partida no se puede hacer nada', r.status === 400);
+
+// --- las mismas reglas, con el reloj en la mano (sin pasar por la red)
+const fresh = t => { let { g } = replay(null, [{ k: 'new', a: [], t }], t); ({ g } = replay(g, [{ k: 'start', a: [1, 'Uno'], t }], t)); return g; };
+const T0 = 1800000000000, HOUR = 3600e3, DAY = 24 * HOUR;
+let g = fresh(T0), res;
+g.coins = 500;
+({ g, result: res } = replay(g, [{ k: 'buyEgg', a: [], t: T0 }], T0));
+check('comprar un huevo: el servidor dice cuál toca', g.eggs.length === 1 && res.species === g.eggs[0].species && g.coins === 400);
+({ g, result: res, resync: r } = replay(g, [{ k: 'hatch', a: [0, 'Dos'], t: T0 + 10 * DAY }], T0 + HOUR));
+check('adelantar el reloj del dispositivo no abre el huevo', !r && !!res.error && g.eggs.length === 1 && g.pets.length === 1 && g.clock <= T0 + HOUR + 2000);
+({ g, result: res } = replay(g, [{ k: 'hatch', a: [0, 'Dos'], t: T0 + 3 * DAY + 1000 }], T0 + 3 * DAY + 1000));
+check('a los tres días de verdad sí se abre', !res.error && g.pets.length === 2 && g.pets[1].name === 'Dos' && g.active === 1 && g.eggs.length === 0);
+g = fresh(T0);
+({ g, resync: r } = replay(g, [{ k: 'foe', a: [''], t: T0 }, { k: 'fight', a: [], t: T0 + 1000 }, { k: 'fightEnd', a: [true, 0.8, 1, 0, 10], t: T0 + 1000 + MIN_FIGHT }], T0 + 60000));
+check('un combate de verdad: rival, empezar, ganar', !r && g.wins === 1 && g.coins > 30 && g.pets[0].energy <= 86 && !g.fight && !g.foe, JSON.stringify({ w: g.wins, c: g.coins, e: g.pets[0].energy }));
+const paid = g.coins;
+({ g, resync: r } = replay(g, [{ k: 'fightEnd', a: [true, 1, 0, 0, 10], t: T0 + 70000 }], T0 + 80000));
+check('un combate no se cobra dos veces', r === true && g.coins === paid && g.wins === 1);
+g = fresh(T0); g.pets[0].energy = 10;
+({ g, resync: r } = replay(g, [{ k: 'foe', a: [''], t: T0 }, { k: 'fight', a: [], t: T0 }], T0 + 1000));
+check('sin energía no hay combate', r === true && !g.fight);
+g = fresh(T0);
+({ g, resync: r } = replay(g, [{ k: 'trainStart', a: ['pot'], t: T0 }, { k: 'train', a: [1], t: T0 + 5000 }], T0 + 6000));
+const pot = g.pets[0].stats.pot;
+check('un entrenamiento de verdad sube la estadística', !r && g.pets[0].trainsToday === 1 && !g.training);
+({ g } = replay(g, [1, 2, 3, 4].flatMap(i => [{ k: 'trainStart', a: ['pot'], t: T0 + i * 10000 }, { k: 'train', a: [1], t: T0 + i * 10000 + 5000 }]), T0 + 60000));
+check('solo tres entrenamientos al día, por mucho que se pidan', g.pets[0].trainsToday === 3 && g.pets[0].trained.pot === 3 && g.pets[0].stats.pot >= pot + 2, `${g.pets[0].trainsToday} ${g.pets[0].trained.pot}`);
+g = fresh(T0); g.pets[0].level = 10;
+({ g, resync: r } = replay(g, [{ k: 'evolve', a: [], t: T0 + DAY }], T0 + DAY));
+check('con nivel pero sin los días de vida no evoluciona', r === true && g.pets[0].stage === 0);
+({ g, resync: r } = replay(g, [{ k: 'evolve', a: [], t: T0 + 3 * DAY + 1000 }], T0 + 3 * DAY + 1000));
+check('con nivel y sus tres días, sí', !r && g.pets[0].stage === 1);
+g = fresh(T0);
+({ g } = replay(g, [{ k: 'advStart', a: ['forja'], t: T0 }], T0));
+check('una región cerrada no se abre pidiéndola', !g.adv);
+({ g } = replay(g, [{ k: 'advStart', a: ['islas'], t: T0 }, { k: 'advChest', a: ['c1'], t: T0 + 1000 }, { k: 'advChest', a: ['c1'], t: T0 + 2000 }, { k: 'advChest', a: ['no-existe'], t: T0 + 3000 }], T0 + 5000));
+check('un cofre se abre una sola vez, y solo si existe en esa zona', g.adv?.region === 'islas' && g.advChests.length === 1, JSON.stringify(g.advChests));
+// El juego y el servidor sacan lo mismo: las mismas acciones sobre la misma partida dan la misma partida
+g = fresh(T0);
+const script = [{ k: 'tz', a: [120], t: T0 }, { k: 'daily', a: [], t: T0 + 500 }, { k: 'feed', a: ['bayas'], t: T0 + 1000 }, { k: 'stroke', a: [], t: T0 + 2000 }, { k: 'play', a: [], t: T0 + 3000 },
+  { k: 'tick', a: [], t: T0 + 2 * HOUR }, { k: 'tick', a: [], t: T0 + 5 * HOUR }, { k: 'event', a: [], t: T0 + 5 * HOUR + 1 }, { k: 'eventPick', a: [0], t: T0 + 5 * HOUR + 2 },
+  { k: 'foe', a: [''], t: T0 + 6 * HOUR }, { k: 'fight', a: [], t: T0 + 6 * HOUR + 10 }, { k: 'fightEnd', a: [true, 0.5, 2, 1, 8], t: T0 + 6 * HOUR + 30000 }, { k: 'tick', a: [], t: T0 + 30 * HOUR }];
+const mine = S.adopt(JSON.parse(JSON.stringify(g)));
+for (const a of script) apply(mine, a.k, a.a, a.t);         // así lo aplica el juego
+mine.news = [];
+({ g, resync: r } = replay(g, script, T0 + 31 * HOUR));    // y así el servidor
+check('el juego y el servidor llegan a la misma partida', !r && JSON.stringify(mine) === JSON.stringify(g) && g.wins === 1 && g.tz === 120 && g.missions.length === 3);
+check('las cifras del ranking salen de la partida del servidor', inspect(g).level === g.pets[0].level && inspect(g).wins === 1 && inspect(g).testMode === false && inspect('hola') === null && inspect({ v: 2 }) === null);
 
 // perfil y ranking
 r = await call('PUT', '/perfil', { as: 'ana', body: { name: 'AnaPixel', country: 'ES' } });
@@ -63,43 +152,52 @@ r = await call('PUT', '/perfil', { as: 'luis', body: { name: 'LuisRex', country:
 check('perfil antes de tener partida', r.status === 200);
 r = await call('GET', '/ranking');
 check('sin partida no sales en el ranking', r.status === 200 && r.json.rows.length === 1 && r.json.rows[0].name === 'AnaPixel' && r.json.rows[0].country === 'AR', JSON.stringify(r.json.rows));
+check('y en el ranking salen las cifras de verdad, no las que se intentaron colar', r.json.rows[0].level === 1 && r.json.rows[0].coins === 28 && r.json.rows[0].wins === 0, JSON.stringify(r.json.rows[0]));
 r = await call('GET', '/partida', { as: 'luis' });
 check('con perfil pero sin partida: devuelve el perfil y ninguna partida', r.status === 200 && r.json.save === null && r.json.rev === 0 && r.json.profile.name === 'LuisRex');
-await wait(2100);
-r = await call('PUT', '/partida', { as: 'luis', body: { save: save({ coins: 900, wins: 30, pets: [{ species: 'voltix', name: 'Rayo', level: 3, stage: 0 }] }), rev: 0 } });
-check('guarda la partida de quien ya tenía perfil', r.status === 200 && r.json.rev === 1, JSON.stringify(r.json));
-r = await call('GET', '/partida', { as: 'luis' });
-check('y devuelve su perfil con la partida', r.json.profile.name === 'LuisRex' && r.json.profile.country === 'MX');
+r = await acts('luis', 0, ['new']);
+await wait(GAP);
+r = await acts('luis', r.json.rev, ['start', 2, 'Rayo'], ['foe', '']);
+check('la partida de quien ya tenía perfil lleva su ficha', r.status === 200 && r.json.save.profile.name === 'LuisRex' && r.json.save.profile.country === 'MX' && r.json.save.pets[0].name === 'Rayo', JSON.stringify(r.json).slice(0, 160));
 r = await call('GET', '/ranking?sort=level', { as: 'luis' });
-check('ranking por nivel, marcando tu fila', r.json.rows.map(x => x.name).join() === 'AnaPixel,LuisRex' && r.json.rows[1].me === true && !r.json.rows[0].me);
+check('ranking por nivel, marcando tu fila', r.json.rows.map(x => x.name).sort().join() === 'AnaPixel,LuisRex' && r.json.rows.find(x => x.name === 'LuisRex').me === true && !r.json.rows.find(x => x.name === 'AnaPixel').me);
 r = await call('GET', '/ranking?sort=coins');
 check('ranking por oro', r.json.rows.map(x => x.name).join() === 'LuisRex,AnaPixel');
 r = await call('GET', '/ranking?sort=wins;drop table players');
 check('un orden raro no rompe nada', r.status === 200 && r.json.rows.length === 2);
-r = await call('PUT', '/partida', { as: 'trampa', body: { save: save({ testMode: true, coins: 4000 }), rev: 0 } });
-await call('PUT', '/perfil', { as: 'trampa', body: { name: 'Tester', country: 'US' } });
-r = await call('GET', '/ranking?sort=coins');
-check('con modo prueba no se entra en el ranking', !r.json.rows.some(x => x.name === 'Tester'));
 check('el ranking no enseña identificadores', !JSON.stringify(r.json).includes('did:privy'));
+
+// una partida de antes (sin semilla ni zona horaria): se completa al leerla y sigue valiendo
+await pool.query("insert into players (id, save, level, coins, wins, losses, test_mode, rev) values ('did:privy:vieja', $1, 7, 120, 4, 1, true, 5)",
+  [JSON.stringify({ v: 3, coins: 120, wins: 4, losses: 1, testMode: true, eggs: [], active: 0, seen: [], foods: {}, lastTick: Date.now() - 60000, lastEvent: Date.now(), pets: [{ species: 'solaris', name: 'Sol', level: 7, exp: 0, stage: 0, stats: { pot: 5, agu: 5, pun: 5, agi: 5 }, hunger: 50, energy: 80, mood: 60, bond: 30, axes: { carino: 0, disciplina: 0, bravura: 0, descuido: 0 }, diet: {}, trained: { pot: 0, agu: 0, pun: 0, agi: 0 }, diary: [], born: Date.now() - 864e5, day: '' }] })]);
+r = await call('GET', '/partida', { as: 'vieja' });
+check('una partida de antes se completa al leerla', r.status === 200 && r.json.rev === 5 && Number.isInteger(r.json.save.rng.s) && r.json.save.tz === 0 && r.json.save.testMode === false && r.json.save.pets[0].level === 7);
+const seed = r.json.save.rng.s;
+r = await acts('vieja', 5, ['stroke']);
+check('pero, como se jugó en modo prueba, sigue sin salir en el ranking', r.json.save.tested === true && !(await call('GET', '/ranking')).json.rows.some(x => x.level === 7));
+check('y se puede seguir jugando con ella, con la misma semilla', r.status === 200 && r.json.rev === 6 && r.json.save.rng.s === seed && r.json.save.pets[0].strokesToday === 1, JSON.stringify(r.json).slice(0, 200));
 
 // empezar de cero
 r = await call('DELETE', '/partida', { as: 'ana' });
-check('empezar de cero borra la partida', r.status === 200 && r.json.rev === 3, JSON.stringify(r.json));
+check('empezar de cero borra la partida', r.status === 200 && r.json.rev === anaRev + 1, JSON.stringify(r.json));
 r = await call('GET', '/partida', { as: 'ana' });
-check('y conserva el perfil', r.json.save === null && r.json.profile.name === 'AnaPixel' && r.json.rev === 3);
+check('y conserva el perfil', r.json.save === null && r.json.profile.name === 'AnaPixel' && r.json.rev === anaRev + 1);
 r = await call('GET', '/ranking');
 check('sin partida sale del ranking', !r.json.rows.some(x => x.name === 'AnaPixel'));
-await wait(2100);
-r = await call('PUT', '/partida', { as: 'ana', body: { save: save({ coins: 30 }), rev: 3 } });
-check('la partida nueva se guarda encima', r.status === 200 && r.json.rev === 4);
+await wait(GAP);
+r = await acts('ana', anaRev + 1, ['new']);
+check('la partida nueva se crea encima', r.status === 200 && r.json.rev === anaRev + 2 && r.json.save.pets.length === 0 && r.json.save.coins === 30);
+await wait(GAP);
+r = await acts('ana', anaRev + 2, ['start', 0, 'Luna'], ['new']);
+check('con una bestia ya no se puede pedir otra partida nueva sin borrar', r.json.resync === true && r.json.save.pets[0].name === 'Luna');
 
 // CORS
 r = await call('GET', '/salud', { origin: 'https://www.beastbound.fun' });
 check('la web del juego puede llamar', r.cors === 'https://www.beastbound.fun');
 r = await call('GET', '/salud', { origin: 'https://otra-web.com' });
 check('otras webs no', r.cors === null);
-const pre = await fetch(base + '/partida', { method: 'OPTIONS', headers: { Origin: 'https://www.beastbound.fun', 'Access-Control-Request-Method': 'PUT' } });
-check('responde a la consulta previa del navegador', pre.status === 204 && /PUT/.test(pre.headers.get('access-control-allow-methods') || ''));
+const pre = await fetch(base + '/acciones', { method: 'OPTIONS', headers: { Origin: 'https://www.beastbound.fun', 'Access-Control-Request-Method': 'POST' } });
+check('responde a la consulta previa del navegador', pre.status === 204 && /POST/.test(pre.headers.get('access-control-allow-methods') || ''));
 r = await call('GET', '/nada', { as: 'ana' });
 check('ruta desconocida', r.status === 404);
 

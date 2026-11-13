@@ -39,6 +39,11 @@ export async function putSave(pool, id, save, stats, rev) {
   return { rev: current.rev + 1 };
 }
 
+// Retoca la partida guardada sin cambiar su versión (para completar partidas de antes).
+export async function fixSave(pool, id, save, rev) {
+  await pool.query('update players set save = $1 where id = $2 and rev = $3', [JSON.stringify(save), id, rev]);
+}
+
 // Empezar de cero: quita la partida y deja el perfil.
 export async function clearSave(pool, id) {
   await pool.query('update players set save = null, level = 1, coins = 0, wins = 0, losses = 0, rev = rev + 1, updated_at = now() where id = $1', [id]);
