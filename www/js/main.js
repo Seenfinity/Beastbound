@@ -1000,11 +1000,12 @@ function advReach(poi) {
   if (poi.type === 'exit') return advLeaveAsk(free);
   const go = [{ label: 'Seguir', cls: 'primary', fn: free }];
   const sealsLine = () => advTokens(game.adv.region);
-  if (poi.type === 'coal') {
+  if (poi.type === 'coal' || poi.type === 'cub') {       // algo que un personaje te mandó buscar
     const got = A.takeCoal(game, poi);
     S.save(game);
     sfx.coin();
-    if (got) toast(`Carbón para el herrero: ${got.have} de ${got.need}`);
+    if (got) toast(`${got.label}: ${got.have} de ${got.need}`);
+    if (got && poi.type === 'cub' && A.zoneOf(game).pois.includes(got.home)) explore.runHome(poi, got.home);   // la cría vuelve corriendo
     return free();
   }
   if (poi.type === 'seal') {

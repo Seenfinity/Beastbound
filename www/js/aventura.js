@@ -17,7 +17,8 @@ import { ITEMS, grantEgg } from './state.js';
 const STATS = ['pot', 'agu', 'pun', 'agi'];
 
 // Cada zona es una imagen (1536 × 864) con el suelo marcado a mano encima:
-//   ground  el contorno por donde se puede andar, menos los huecos (holes: un río de lava), más los puentes (bridges)
+//   ground  el contorno por donde se puede andar, menos los huecos (holes: un río de lava), más los puentes (bridges).
+//           Un bosque cerrado se marca al revés: ground y areas son los claros y caminos por donde sí se pasa.
 //   blocks  lo que estorba: círculos [x, y, radio], rectángulos y el estanque
 //   trees   árboles altos (y columnas): se choca con el tronco y se puede pasar por detrás de la copa
 //   grass   hierba alta: tapa los pies (y esconde cofres)
@@ -43,6 +44,14 @@ const PORTAL = {
   pois: [
     { id: 'salida', type: 'exit', x: 590, y: 345, r: 38 },
     { id: 's1', type: 'wild', x: 1010, y: 362, to: [1240, 358], species: 'zephyra', level: 2 },
+    { id: 'brinco', type: 'npc', role: 'guide', x: 800, y: 362, species: 'bounzy', stage: 2, name: 'Brinco', say: {
+      first: ['¡Hola! Soy Brinco. Vigilo el portal y recibo a quien llega.',
+        'El castillo está cerrado: su portón solo se abre con tres rayos de sol. Uno lo tiene Pétalo, en el jardín, al norte. Otro lo guarda Espora en el árbol hueco del bosque, pasado el jardín. El tercero está en la torre, al sur de las ruinas, y su guardián no deja pasar a nadie.',
+        'Reúne los tres y ve al castillo, al este del bosque. El Guardián te estará esperando.'],
+      more: ['Aún te faltan rayos de sol. Mira tu diario: ahí está lo que sabemos de cada uno.'],
+      ready: ['¡Los tres rayos! El castillo está al este del bosque. Descansa antes de llamar al portón.'],
+      open: ['El portón ya está abierto. El Guardián del Castillo te espera.'],
+      done: ['Venciste al Guardián del Castillo. ¡Sabía que podías!'] } },
     { id: 's2', type: 'wild', x: 545, y: 688, to: [735, 716], species: 'tropicat', level: 3 },
     { id: 's3', type: 'wild', x: 1120, y: 204, to: [1300, 206], species: 'bounzy', level: 4 },
     { id: 'c1', type: 'chest', x: 1215, y: 138, coins: 40, hidden: true },
@@ -88,7 +97,15 @@ const JARDIN = {
   grass: [[395, 60, 535, 145], [953, 25, 1100, 130], [330, 385, 410, 508], [1168, 260, 1250, 338], [836, 582, 913, 682], [888, 680, 1028, 772]],
   pois: [
     { id: 'j-sur', type: 'gate', x: 546, y: 842, r: 36, to: { zone: 'portal', x: 590, y: 92 } },
-    { id: 'j-este', type: 'gate', x: 1516, y: 278, r: 36, text: 'El puente del este lleva al bosque. Todavía está cerrado.' },
+    { id: 'j-este', type: 'gate', x: 1516, y: 278, r: 36, to: { zone: 'bosque', x: 140, y: 340 } },
+    // Pétalo presta su rayo de sol a cambio de las tres semillas de luna que se llevó el viento.
+    { id: 'petalo', type: 'npc', role: 'smith', seal: true, x: 640, y: 750, species: 'tropicat', stage: 2, name: 'Pétalo',
+      quest: { ask: 'Pregunta por el rayo de sol a Pétalo, en el jardín lunar, al norte.', fetch: 'Semillas de luna para Pétalo', bring: 'Lleva las semillas de luna a Pétalo.' }, say: {
+        first: ['Soy Pétalo, cuido este jardín. ¿El rayo de sol? Lo uso para que las flores crezcan de noche.', 'Te lo doy si me ayudas: el viento se llevó mis tres semillas de luna. Andan por el jardín.'],
+        wait: ['Aún me faltan semillas de luna. Mira bien por los rincones del jardín.'],
+        give: ['¡Las tres! Ya puedo volver a sembrar.', 'Toma el rayo de sol. A ti te hace más falta.'],
+        after: ['Las semillas ya están brotando. ¡Suerte en el castillo!'] } },
+    { id: 'se1', type: 'coal', for: 'petalo', icon: 'semillas', x: 140, y: 360 }, { id: 'se2', type: 'coal', for: 'petalo', icon: 'semillas', x: 1450, y: 440 }, { id: 'se3', type: 'coal', for: 'petalo', icon: 'semillas', x: 620, y: 250 },
     { id: 'js1', type: 'wild', x: 455, y: 330, to: [440, 480], species: 'aquarok', level: 4 },
     { id: 'js2', type: 'wild', x: 690, y: 562, to: [860, 548], species: 'toxipuff', level: 5 },
     { id: 'js3', type: 'wild', x: 1180, y: 302, to: [1300, 332], species: 'tropicat', level: 6 },
@@ -103,7 +120,7 @@ const JARDIN = {
       choices: [{ label: 'Dejar unas flores', result: 'Sientes que alguien te lo agradece: recuperas un cuarto de la vida.', fx: { hp: 0.25 } },
         { label: 'Mirar detrás', result: 'Alguien olvidó aquí una bolsita: +30 monedas.', fx: { coins: 30 } }] },
     { id: 'jf1', type: 'food', x: 450, y: 104, food: 'bayas' }, { id: 'jf2', type: 'food', x: 370, y: 452, food: 'manzana' }, { id: 'jf3', type: 'food', x: 960, y: 738, food: 'sandia' },
-    { id: 'jf4', type: 'food', x: 1215, y: 284, food: 'miel' }, { id: 'jf5', type: 'food', x: 140, y: 300, food: 'zanahoria' }, { id: 'jf6', type: 'food', x: 868, y: 640, food: 'semillas' },
+    { id: 'jf4', type: 'food', x: 1215, y: 284, food: 'miel' }, { id: 'jf5', type: 'food', x: 140, y: 300, food: 'zanahoria' }, { id: 'jf6', type: 'food', x: 868, y: 640, food: 'queso' },
     { id: 'jm1', type: 'coin', x: 640, y: 40, coins: 8 }, { id: 'jm2', type: 'coin', x: 1440, y: 500, coins: 10 }, { id: 'jm3', type: 'coin', x: 250, y: 700, coins: 7 }, { id: 'jm4', type: 'coin', x: 1285, y: 628, coins: 8 },
   ],
 };
@@ -138,8 +155,8 @@ const RUINAS = {
   grass: [[505, 50, 600, 200], [360, 315, 495, 395], [1105, 345, 1228, 448], [590, 667, 720, 802]],
   pois: [
     { id: 'r-oeste', type: 'gate', x: 14, y: 411, r: 34, to: { zone: 'portal', x: 1425, y: 347 } },
-    { id: 'r-norte', type: 'gate', x: 998, y: 14, r: 34, text: 'El puente del norte lleva al bosque. Todavía está cerrado.' },
-    { id: 'r-sur', type: 'gate', x: 1005, y: 846, r: 34, text: 'El puente del sur lleva a la torre. Todavía está cerrado.' },
+    { id: 'r-norte', type: 'gate', x: 998, y: 14, r: 34, to: { zone: 'bosque', x: 1073, y: 762 } },
+    { id: 'r-sur', type: 'gate', x: 1005, y: 846, r: 34, to: { zone: 'torre', x: 1035, y: 122 } },
     { id: 'rs1', type: 'wild', x: 700, y: 430, to: [900, 520], species: 'gravion', level: 5 },
     { id: 'rs2', type: 'wild', x: 480, y: 682, to: [660, 700], species: 'shadowon', level: 6 },
     { id: 'rs3', type: 'wild', x: 1135, y: 318, to: [1290, 322], species: 'rokky', level: 7 },
@@ -156,6 +173,159 @@ const RUINAS = {
     { id: 'rf1', type: 'food', x: 420, y: 352, food: 'seta' }, { id: 'rf2', type: 'food', x: 640, y: 724, food: 'bayas' }, { id: 'rf3', type: 'food', x: 1165, y: 402, food: 'seta' },
     { id: 'rf4', type: 'food', x: 900, y: 215, food: 'queso' }, { id: 'rf5', type: 'food', x: 1450, y: 420, food: 'manzana' }, { id: 'rf6', type: 'food', x: 265, y: 598, food: 'semillas' },
     { id: 'rm1', type: 'coin', x: 770, y: 620, coins: 10 }, { id: 'rm2', type: 'coin', x: 1350, y: 462, coins: 9 }, { id: 'rm3', type: 'coin', x: 505, y: 268, coins: 8 }, { id: 'rm4', type: 'coin', x: 1088, y: 118, coins: 12 },
+  ],
+};
+
+// El bosque, al este del jardín y al norte de las ruinas: un bosque cerrado, así que se marcan los caminos y claros (ground + areas).
+const BOSQUE = {
+  id: 'bosque', name: 'Bosque del árbol hueco', img: 'assets/aventura/islas-bosque.webp', w: 1536, h: 864, start: [140, 340],
+  ground: [[590, 300], [680, 278], [850, 278], [940, 330], [965, 420], [900, 485], [640, 492], [575, 430]],      // el claro del árbol hueco
+  areas: [
+    [[115, 300], [230, 305], [330, 340], [420, 378], [590, 385], [600, 462], [420, 458], [310, 418], [220, 388], [115, 382]],                     // del puente del oeste al árbol
+    [[570, 440], [650, 470], [760, 498], [860, 498], [960, 440], [1000, 420], [1012, 472], [900, 545], [820, 585], [700, 562], [620, 532], [560, 482]],   // por el sur del árbol
+    [[930, 300], [900, 258], [930, 205], [1000, 160], [1032, 200], [978, 240], [968, 272], [1000, 330], [1012, 420], [950, 442]],                // hacia el arroyo
+    [[1120, 150], [1150, 108], [1235, 120], [1300, 170], [1332, 232], [1300, 268], [1210, 232], [1138, 200]],                                    // al otro lado del arroyo
+    [[1000, 400], [1090, 430], [1200, 455], [1290, 420], [1360, 360], [1440, 318], [1472, 330], [1472, 402], [1400, 422], [1320, 482], [1230, 522], [1120, 512], [1010, 472]],   // hacia el castillo
+    [[1000, 300], [1062, 290], [1182, 300], [1192, 472], [1090, 472], [1000, 402]],                                                              // el santuario
+    [[1170, 500], [1252, 500], [1242, 600], [1202, 690], [1122, 742], [1030, 742], [1030, 690], [1120, 650], [1160, 580]],                      // hacia las ruinas
+    [[790, 540], [852, 545], [902, 610], [1002, 650], [1062, 665], [1052, 722], [960, 702], [860, 662], [800, 602]],                            // el rodeo del sur
+    [[385, 440], [468, 450], [458, 548], [402, 562], [378, 500]],                                                                                // bajada al corro de setas
+    [[250, 560], [330, 540], [470, 540], [562, 560], [542, 642], [482, 702], [330, 712], [250, 662]],                                            // el corro de setas
+    [[385, 215], [470, 205], [562, 200], [617, 230], [642, 292], [592, 312], [560, 257], [470, 252], [390, 257]],                                // el rincón del noroeste
+  ],
+  bridges: [[0, 305, 125, 372], [1005, 150, 1130, 205], [1450, 330, 1536, 400], [1035, 720, 1112, 864]],
+  circles: [
+    [328, 582, 22], [410, 586, 22], [300, 616, 13], [332, 652, 15], [422, 642, 14],        // las setas del corro
+    [368, 428, 10], [1240, 520, 10], [1437, 335, 10], [968, 705, 10], [1158, 722, 10],     // faroles
+    [505, 522, 40], [560, 292, 16], [1030, 410, 10],                                       // rocas
+  ],
+  rects: [[695, 285, 840, 445], [1065, 318, 1170, 430], [0, 280, 120, 305], [0, 372, 120, 400], [1455, 305, 1536, 330], [1455, 400, 1536, 420], [1018, 730, 1035, 864], [1112, 730, 1128, 864], [862, 628, 906, 656], [900, 646, 954, 676]],   // tronco, santuario, barandillas y la valla corta
+  ponds: [],
+  // el árbol hueco tapa lo que tiene detrás; los demás son los que asoman por el sur de los caminos
+  trees: [[765, 440, 'round', 150, 340], [530, 472, 'pine', 32, 82], [612, 580, 'pine', 40, 100], [1005, 602, 'round', 62, 150], [1100, 602, 'pine', 36, 105], [1135, 582, 'pine', 30, 85], [1295, 602, 'round', 60, 110], [450, 365, 'round', 45, 110]],
+  grass: [[1000, 290, 1065, 400], [385, 200, 560, 257], [1150, 110, 1320, 190], [250, 660, 470, 712]],
+  pois: [
+    { id: 'b-oeste', type: 'gate', x: 14, y: 338, r: 34, to: { zone: 'jardin', x: 1420, y: 278 } },
+    { id: 'b-sur', type: 'gate', x: 1073, y: 846, r: 34, to: { zone: 'ruinas', x: 998, y: 104 } },
+    { id: 'b-este', type: 'gate', x: 1516, y: 365, r: 34, to: { zone: 'castillo', x: 135, y: 357 } },
+    // Espora da su rayo de sol cuando sus tres crías, que se han escondido por el bosque, vuelven a casa.
+    { id: 'espora', type: 'npc', role: 'smith', seal: true, x: 765, y: 472, species: 'toxipuff', stage: 2, name: 'Espora',
+      quest: { ask: 'Pregunta por el rayo de sol a Espora, en el árbol hueco del bosque.', fetch: 'Crías de Espora encontradas', bring: 'Vuelve con Espora, al árbol hueco del bosque.' }, say: {
+        first: ['Soy Espora. Este árbol es mi casa, y el rayo de sol, la lámpara de mis crías.', 'Te lo doy si me echas una pata: las tres se han escondido por el bosque y no las encuentro. Cuando las veas, tócalas y volverán corriendo.'],
+        wait: ['Aún falta alguna cría. Les gusta esconderse lejos del camino.'],
+        give: ['¡Ya están las tres en casa! Qué susto.', 'Lo prometido: el rayo de sol es tuyo.'],
+        after: ['Ahora no salen sin avisar. ¡Gracias!'] } },
+    { id: 'cu1', type: 'cub', for: 'espora', x: 598, y: 240, species: 'toxipuff', stage: 0, hidden: true },
+    { id: 'cu2', type: 'cub', for: 'espora', x: 1040, y: 696, species: 'toxipuff', stage: 0, hidden: true },
+    { id: 'cu3', type: 'cub', for: 'espora', x: 1262, y: 205, species: 'toxipuff', stage: 0, hidden: true },
+    { id: 'bs1', type: 'wild', x: 300, y: 352, to: [400, 412], species: 'shadowon', level: 6 },
+    { id: 'bs2', type: 'wild', x: 1105, y: 478, to: [1290, 455], species: 'gravion', level: 7 },
+    { id: 'bc1', type: 'chest', x: 650, y: 332, coins: 60, hidden: true },           // detrás de la copa del árbol hueco
+    { id: 'bc2', type: 'chest', x: 1030, y: 345, item: 'escudo', hidden: true },     // entre las flores, junto al santuario
+    { id: 'bc3', type: 'chest', x: 412, y: 232, item: 'elixir', hidden: true },      // en el rincón del noroeste
+    { id: 'bd1', type: 'rest', x: 500, y: 228, r: 26 },                              // un rincón tranquilo entre las flores del noroeste
+    { id: 'be1', type: 'event', x: 372, y: 628, text: 'Un corro de setas que brillan. En el centro hay un círculo de piedras.',
+      choices: [{ label: 'Sentarse en el centro', result: 'La luz de las setas te despeja: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Arrancar una seta', result: 'Se apaga en cuanto la tocas, pero alguien la querrá: +20 monedas.', fx: { coins: 20 } }] },
+    { id: 'bf1', type: 'food', x: 280, y: 352, food: 'seta' }, { id: 'bf2', type: 'food', x: 880, y: 310, food: 'bayas' }, { id: 'bf3', type: 'food', x: 1380, y: 380, food: 'manzana' },
+    { id: 'bf4', type: 'food', x: 1200, y: 600, food: 'seta' }, { id: 'bf5', type: 'food', x: 500, y: 650, food: 'miel' },
+    { id: 'bm1', type: 'coin', x: 960, y: 215, coins: 8 }, { id: 'bm2', type: 'coin', x: 1180, y: 160, coins: 12 }, { id: 'bm3', type: 'coin', x: 430, y: 500, coins: 7 }, { id: 'bm4', type: 'coin', x: 1010, y: 680, coins: 8 },
+  ],
+};
+
+// La torre, al sur de las ruinas: la atalaya, un círculo de piedras, un huerto amurallado y una campana caída.
+const TORRE = {
+  id: 'torre', name: 'La torre', img: 'assets/aventura/islas-torre.webp', w: 1536, h: 864, start: [1035, 122],
+  ground: [[20, 300], [355, 300], [355, 15], [1300, 10], [1420, 40], [1490, 120], [1510, 250], [1505, 420], [1490, 560], [1440, 650], [1380, 720], [1260, 760], [1100, 785], [800, 800], [560, 790], [380, 770], [250, 720], [150, 650], [70, 600], [25, 500]],
+  holes: [[[980, 565], [1185, 468], [1350, 555], [1350, 660], [1150, 722], [985, 628]]],          // el huerto amurallado
+  bridges: [[985, 0, 1085, 90]],
+  circles: [
+    [958, 45, 24], [1110, 40, 24], [395, 50, 40], [470, 20, 30], [620, 25, 30], [830, 45, 28], [900, 55, 26], [1190, 50, 34],           // pilares del puente y arbustos del borde norte
+    [650, 172, 28], [795, 220, 36], [490, 262, 22], [688, 268, 12], [958, 338, 10], [1100, 155, 24], [1048, 262, 22], [1210, 150, 30], [1330, 205, 28], [1275, 240, 34],
+    [1150, 405, 50], [1030, 462, 42], [1100, 420, 26], [985, 480, 22], [1000, 560, 22], [1285, 465, 26], [1440, 580, 26],                 // rocas y matas
+    [722, 375, 15], [785, 352, 15], [845, 375, 15], [862, 427, 15], [815, 465, 15], [745, 462, 15], [705, 430, 15],                       // el círculo de piedras
+    [1385, 182, 22], [242, 628, 20], [930, 738, 24], [480, 725, 38], [565, 715, 10], [1345, 645, 10], [655, 535, 26], [600, 575, 24], [520, 655, 26], [455, 685, 26], [800, 615, 24],
+    [300, 520, 22], [100, 560, 20], [1400, 690, 28], [1255, 735, 26],
+  ],
+  rects: [
+    [95, 0, 355, 300], [205, 288, 232, 345], [338, 250, 372, 318],                                                        // la torre y los pilares de su escalera
+    [400, 280, 545, 365], [240, 400, 365, 470], [245, 440, 300, 482],                                                     // cajas y la mesa de frascos
+    [1035, 265, 1100, 322], [1090, 225, 1162, 277], [1150, 195, 1252, 237], [1095, 175, 1137, 232], [1148, 235, 1192, 277], [1048, 305, 1090, 345],   // el muro del noreste y sus cajas
+    [1175, 255, 1287, 337], [1050, 375, 1112, 437], [1268, 480, 1348, 532], [1328, 520, 1392, 572], [1020, 640, 1065, 680], [975, 745, 1032, 795],     // la campana, cajas y maceteros
+    [435, 595, 502, 652], [490, 560, 572, 612], [560, 520, 642, 572],                                                     // el muro del suroeste
+  ],
+  ponds: [[515, 130, 118, 78]],
+  trees: [[740, 168, 'round', 68, 135], [515, 458, 'pine', 38, 72], [35, 442, 'pine', 40, 170], [125, 472, 'round', 62, 122], [215, 558, 'pine', 45, 150], [305, 642, 'round', 45, 100], [370, 705, 'pine', 48, 140],
+    [720, 718, 'round', 70, 148], [845, 768, 'pine', 48, 152], [1430, 362, 'round', 68, 140], [1430, 545, 'pine', 48, 135], [1310, 152, 'pine', 62, 150], [1425, 122, 'round', 55, 95]],
+  grass: [[545, 245, 665, 330], [810, 85, 945, 190], [340, 455, 490, 545], [1265, 345, 1420, 445], [590, 720, 760, 792], [30, 455, 150, 592]],
+  pois: [
+    { id: 'to-norte', type: 'gate', x: 1035, y: 14, r: 34, to: { zone: 'ruinas', x: 1005, y: 758 } },
+    { id: 'tog', type: 'wild', x: 270, y: 372, species: 'mechapi', level: 8, still: true, seal: true, title: 'Guardián de la torre',
+      intro: 'Guarda la puerta de la torre y el rayo de sol que hay dentro. Es más fuerte que las bestias del camino.' },
+    { id: 'tos1', type: 'wild', x: 900, y: 230, to: [840, 130], species: 'voltix', level: 6 },
+    { id: 'tos2', type: 'wild', x: 900, y: 600, to: [930, 690], species: 'gravion', level: 7 },
+    { id: 'toc1', type: 'chest', x: 1440, y: 300, coins: 70, hidden: true },         // detrás del árbol del este
+    { id: 'toc2', type: 'chest', x: 90, y: 525, item: 'pocion', hidden: true },      // entre las flores del acantilado
+    { id: 'toc3', type: 'chest', x: 1300, y: 95, item: 'mira', hidden: true },       // detrás del pino del noreste
+    { id: 'tod1', type: 'rest', x: 790, y: 415, r: 26 },                             // dentro del círculo de piedras
+    { id: 'toe1', type: 'event', x: 1230, y: 358, text: 'Una campana de bronce caída. Todavía vibra un poco.',
+      choices: [{ label: 'Darle un golpe', result: 'El tañido te recorre entera: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Mirar dentro', result: 'Alguien guardó aquí unas monedas: +25 monedas.', fx: { coins: 25 } }] },
+    { id: 'toe2', type: 'event', x: 1235, y: 742, text: 'Tras la verja, un huerto de hierbas que brillan.',
+      choices: [{ label: 'Probar una hoja', result: 'Amarga, pero reconforta: recuperas un tercio de la vida.', fx: { hp: 0.33 } },
+        { label: 'Coger un manojo', result: 'Las hierbas que brillan se pagan bien: +20 monedas.', fx: { coins: 20 } }] },
+    { id: 'tof1', type: 'food', x: 600, y: 290, food: 'bayas' }, { id: 'tof2', type: 'food', x: 870, y: 140, food: 'miel' }, { id: 'tof3', type: 'food', x: 410, y: 500, food: 'zanahoria' },
+    { id: 'tof4', type: 'food', x: 1340, y: 400, food: 'manzana' }, { id: 'tof5', type: 'food', x: 680, y: 760, food: 'queso' },
+    { id: 'tom1', type: 'coin', x: 420, y: 230, coins: 9 }, { id: 'tom2', type: 'coin', x: 1420, y: 480, coins: 10 }, { id: 'tom3', type: 'coin', x: 200, y: 640, coins: 9 }, { id: 'tom4', type: 'coin', x: 1130, y: 100, coins: 8 },
+  ],
+};
+
+// El castillo, al este del bosque: la explanada con la fuente, los estanques y el portón del Guardián.
+const CASTILLO = {
+  id: 'castillo', name: 'El castillo', img: 'assets/aventura/islas-castillo.webp', w: 1536, h: 864, start: [135, 357],
+  ground: [[40, 160], [110, 140], [1400, 140], [1470, 200], [1495, 300], [1500, 430], [1480, 560], [1440, 650], [1370, 700], [1250, 722], [1000, 737], [800, 742], [500, 742], [300, 722], [180, 690], [120, 620], [80, 540], [70, 420], [210, 400], [210, 318], [60, 300], [30, 230]],
+  bridges: [[0, 315, 215, 395]],
+  circles: [
+    [650, 215, 12], [858, 215, 12], [548, 258, 8], [960, 258, 8], [257, 322, 8], [640, 672, 8], [862, 672, 8],                            // pilares de la escalinata y mástiles
+    [623, 288, 10], [882, 288, 10], [385, 538, 10], [1122, 538, 10], [676, 738, 10], [829, 738, 10],                                      // faroles
+    [342, 300, 28], [342, 445, 26], [1160, 290, 26], [1295, 335, 30], [1175, 445, 28], [462, 705, 30], [1030, 705, 30], [135, 285, 26],   // rosales
+    [440, 335, 22], [595, 340, 18], [912, 340, 18], [1068, 340, 22], [515, 538, 24], [992, 538, 24], [437, 512, 16], [597, 522, 16], [912, 522, 16], [1067, 512, 16],   // maceteros
+    [1328, 602, 18], [1465, 398, 14], [1235, 715, 16], [1350, 538, 22], [1310, 150, 26], [1385, 120, 24], [398, 708, 16], [605, 715, 26], [915, 722, 28],
+    [565, 130, 20], [625, 128, 18], [885, 128, 18], [945, 128, 20],
+  ],
+  rects: [
+    [425, 0, 550, 157], [960, 0, 1085, 157], [0, 0, 655, 140], [855, 0, 1536, 140],                                        // la muralla y sus torreones
+    [470, 190, 500, 272], [585, 150, 617, 237], [465, 270, 577, 302], [895, 150, 927, 237], [1010, 190, 1042, 272], [935, 270, 1042, 302],   // setos
+    [395, 225, 452, 277], [1055, 225, 1112, 277],                                                                          // pedestales de las estatuas
+    [280, 190, 344, 224], [1138, 200, 1202, 234], [1238, 408, 1302, 442], [305, 665, 369, 702], [1095, 645, 1157, 692],     // bancos
+    [470, 322, 562, 537], [945, 322, 1042, 537], [1318, 452, 1402, 500],                                                    // los estanques y una columna caída
+    [0, 290, 205, 318], [0, 395, 205, 420],                                                                                 // barandillas del puente
+  ],
+  ponds: [[752, 420, 128, 82]],
+  trees: [[275, 182, 'round', 55, 120], [400, 162, 'pine', 42, 105], [203, 270, 'round', 38, 82], [267, 510, 'pine', 44, 138], [237, 610, 'round', 52, 118], [438, 662, 'round', 40, 90], [548, 710, 'pine', 44, 133],
+    [960, 710, 'pine', 44, 133], [1088, 647, 'round', 36, 75], [1213, 685, 'pine', 44, 143], [1270, 570, 'round', 55, 118], [1215, 387, 'pine', 44, 135], [1262, 272, 'round', 48, 105], [1112, 162, 'pine', 38, 105],
+    [1200, 187, 'pine', 40, 130], [1360, 407, 'round', 30, 65], [420, 277, 'post', 35, 140], [1082, 277, 'post', 35, 140], [1405, 420, 'post', 16, 85], [1392, 580, 'post', 18, 95], [1275, 697, 'post', 16, 70],
+    [752, 420, 'post', 55, 150]],
+  grass: [[255, 575, 375, 647], [1305, 215, 1432, 297], [85, 425, 207, 492]],
+  pois: [
+    { id: 'c-oeste', type: 'gate', x: 14, y: 355, r: 34, to: { zone: 'bosque', x: 1425, y: 365 } },
+    { id: 'porton', type: 'door', x: 755, y: 152, r: 30, text: 'Un portón enorme de madera y oro. Bajo el sol dorado hay tres huecos alargados, como rayos que faltan.',
+      opens: 'Los tres rayos encajan y el sol del portón se enciende. Las hojas se abren despacio… y el Guardián del Castillo baja la escalinata.' },
+    { id: 'guardian', type: 'boss', x: 755, y: 182, species: 'solaris', level: 9, stage: 2, still: true, locked: true, title: 'Guardián del Castillo',
+      intro: 'Lleva toda la vida guardando este portón. Es mucho más fuerte que las bestias del camino.' },
+    { id: 'cs1', type: 'wild', x: 1130, y: 570, to: [1140, 620], species: 'aquarok', level: 7 },
+    { id: 'cs2', type: 'wild', x: 692, y: 635, to: [815, 635], species: 'shadowon', level: 8 },
+    { id: 'cc1', type: 'chest', x: 1278, y: 215, coins: 80, hidden: true },          // detrás del árbol del noreste
+    { id: 'cc2', type: 'chest', x: 302, y: 612, item: 'pocion', hidden: true },      // entre las flores del suroeste
+    { id: 'cc3', type: 'chest', x: 548, y: 640, item: 'escudo', hidden: true },      // detrás del pino del sur
+    { id: 'cd1', type: 'rest', x: 1268, y: 462, r: 26 },                             // junto al banco del este
+    { id: 'ce1', type: 'event', x: 424, y: 300, text: 'Una estatua de bestia alada. Sus ojos de piedra parecen seguirte.',
+      choices: [{ label: 'Saludarla', result: 'Te sientes observada… y más tranquila: recuperas un cuarto de la vida.', fx: { hp: 0.25 } },
+        { label: 'Mirar el pedestal', result: 'En una rendija hay monedas viejas: +30 monedas.', fx: { coins: 30 } }] },
+    { id: 'escalera', type: 'sign', x: 752, y: 722, text: 'La escalera baja hacia las nubes. Una cadena la cierra.' },
+    { id: 'cf1', type: 'food', x: 150, y: 460, food: 'manzana' }, { id: 'cf2', type: 'food', x: 1360, y: 260, food: 'miel' }, { id: 'cf3', type: 'food', x: 1120, y: 600, food: 'pastel' },
+    { id: 'cf4', type: 'food', x: 700, y: 560, food: 'queso' }, { id: 'cf5', type: 'food', x: 320, y: 250, food: 'bayas' },
+    { id: 'cm1', type: 'coin', x: 1440, y: 500, coins: 12 }, { id: 'cm2', type: 'coin', x: 180, y: 620, coins: 10 }, { id: 'cm3', type: 'coin', x: 1150, y: 170, coins: 11 }, { id: 'cm4', type: 'coin', x: 860, y: 590, coins: 10 },
   ],
 };
 
@@ -187,8 +357,8 @@ const CENIZA = {
     { id: 'salida', type: 'exit', x: 520, y: 425, r: 38 },
     { id: 'f-norte', type: 'gate', x: 1018, y: 14, r: 36, to: { zone: 'fundicion', x: 980, y: 752 } },
     { id: 'f-este', type: 'gate', x: 1516, y: 330, r: 34, to: { zone: 'ladera', x: 118, y: 322 } },
-    { id: 'fs1', type: 'wild', x: 780, y: 340, to: [980, 322], species: 'blaziky', level: 8 },
-    { id: 'fs2', type: 'wild', x: 1290, y: 322, to: [1400, 330], species: 'mechapi', level: 9 },
+    { id: 'fs1', type: 'wild', x: 930, y: 340, to: [1010, 270], species: 'blaziky', level: 8 },
+    { id: 'fs2', type: 'wild', x: 1295, y: 322, to: [1210, 345], species: 'mechapi', level: 9 },
     // La élite: guarda uno de los tres sellos, no se mueve de su sitio y no vuelve una vez vencida.
     { id: 'fs3', type: 'wild', x: 1250, y: 762, species: 'pyrorex', level: 11, still: true, seal: true, title: 'Guardián del sello',
       intro: 'Guarda uno de los tres sellos y no piensa moverse. Es más fuerte que las bestias del camino.' },
@@ -241,13 +411,14 @@ const FUNDICION = {
   pois: [
     { id: 'fu-sur', type: 'gate', x: 980, y: 846, r: 34, to: { zone: 'ceniza', x: 1018, y: 102 } },
     // Yunque, el herrero: da su sello a cambio de carbón para el horno.
-    { id: 'yunque', type: 'npc', role: 'smith', seal: true, x: 660, y: 292, species: 'gravion', stage: 1, name: 'Yunque', say: {
+    { id: 'yunque', type: 'npc', role: 'smith', seal: true, x: 660, y: 292, species: 'gravion', stage: 1, name: 'Yunque',
+      quest: { ask: 'Pregunta por el sello al herrero de la fundición, al norte.', fetch: 'Carbón para el herrero', bring: 'Lleva el carbón al herrero.' }, say: {
       first: ['Soy Yunque, el herrero. ¿El sello? Lo tengo yo, sí; lo uso de pisapapeles.',
         'Te lo cambio por un favor: el horno se me apaga. Tráeme tres trozos de carbón; andan tirados por la fundición.'],
       wait: ['Aún me falta carbón. Busca por los rincones de la fundición.'],
       give: ['¡Eso es! Con esto el horno aguanta otra temporada.', 'Toma, el sello es tuyo. Cuídalo más que yo.'],
       after: ['El horno tira que da gusto. Suerte con esa puerta.'] } },
-    { id: 'ca1', type: 'coal', x: 598, y: 362 }, { id: 'ca2', type: 'coal', x: 1392, y: 300 }, { id: 'ca3', type: 'coal', x: 118, y: 470 },
+    { id: 'ca1', type: 'coal', for: 'yunque', x: 598, y: 362 }, { id: 'ca2', type: 'coal', for: 'yunque', x: 1392, y: 300 }, { id: 'ca3', type: 'coal', for: 'yunque', x: 118, y: 470 },
     { id: 'fus2', type: 'wild', x: 1120, y: 522, to: [1300, 502], species: 'pyrorex', level: 11 },
     { id: 'fus3', type: 'wild', x: 1100, y: 302, to: [1290, 320], species: 'draconoid', level: 12 },
     { id: 'fuc1', type: 'chest', x: 1290, y: 630, coins: 90, hidden: true },         // detrás del árbol del sureste
@@ -295,7 +466,7 @@ const LADERA = {
     { id: 'lac1', type: 'chest', x: 1440, y: 352, item: 'pocion', hidden: true },    // al otro lado del río, detrás del arbolillo
     { id: 'lac2', type: 'chest', x: 1075, y: 575, coins: 100, hidden: true },        // detrás del árbol del sur
     { id: 'lac3', type: 'chest', x: 600, y: 600, item: 'elixir', hidden: true },     // entre la hierba seca, bajo la estatua
-    { id: 'lad1', type: 'rest', x: 912, y: 542, r: 26 },
+    { id: 'lad1', type: 'rest', x: 940, y: 585, r: 26 },
     // La puerta se abre con los tres sellos; detrás espera el jefe, que solo está cuando la puerta ya se abrió.
     { id: 'puerta', type: 'door', x: 788, y: 128, r: 30, text: 'Una puerta enorme, con tres huecos redondos en la piedra. Las runas laten como brasas.',
       opens: 'Los tres sellos encajan en sus huecos. Las runas se apagan una a una, la puerta se abre… y algo enorme sale a tu encuentro.' },
@@ -405,7 +576,7 @@ const CRISTAL = {
       wait: ['¿Traes sopa? No… Pues aquí sigo, tiritando. La venden en la tienda de casa.'],
       give: ['¡Sopa! ¡Y todavía humea!', 'Toma la lente. A mí me sirve más esto.'],
       after: ['Ya noto las patas otra vez. ¡Gracias por la sopa!'] } },
-    { id: 'crs2', type: 'wild', x: 760, y: 620, to: [860, 652], species: 'zephyra', level: 17 },
+    { id: 'crs2', type: 'wild', x: 760, y: 620, to: [640, 640], species: 'zephyra', level: 17 },
     { id: 'crs3', type: 'wild', x: 1250, y: 300, to: [1340, 320], species: 'voltix', level: 18 },
     { id: 'crc1', type: 'chest', x: 230, y: 95, coins: 120, hidden: true },          // detrás del cristal grande del noroeste
     { id: 'crc2', type: 'chest', x: 1330, y: 495, item: 'mira', hidden: true },      // al otro lado del arroyo, detrás del cristal
@@ -444,7 +615,7 @@ const OBSERVATORIO = {
   grass: [[430, 45, 530, 110], [760, 78, 880, 150], [745, 190, 862, 248], [510, 262, 628, 335], [85, 352, 212, 430], [245, 405, 345, 478], [515, 500, 670, 585], [300, 672, 430, 748], [880, 685, 990, 760], [1000, 272, 1075, 328], [1172, 198, 1292, 272], [1120, 432, 1195, 496], [1240, 482, 1365, 540]],
   pois: [
     { id: 'ob-norte', type: 'gate', x: 985, y: 14, r: 34, to: { zone: 'nevada', x: 972, y: 758 } },
-    { id: 'obs2', type: 'wild', x: 760, y: 620, to: [640, 622], species: 'aquarok', level: 19 },
+    { id: 'obs2', type: 'wild', x: 1290, y: 450, to: [1400, 450], species: 'aquarok', level: 19 },
     { id: 'obs3', type: 'wild', x: 1285, y: 300, to: [1340, 330], species: 'voltix', level: 20 },
     // El acertijo: cuatro farolas alrededor del mapa de estrellas, que hay que encender en el orden que dice el reloj de sol.
     { id: 'fa-n', type: 'switch', key: 'n', x: 893, y: 190 }, { id: 'fa-o', type: 'switch', key: 'o', x: 600, y: 430 },
@@ -470,7 +641,16 @@ const OBSERVATORIO = {
 
 // Cada región lleva la luz con que se tiñen las bestias (tint) y lo que flota en el aire (motes).
 export const REGIONS = {
-  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS }, boss: 'solaris', reward: { coins: 150, item: 'pocion' },
+  islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS, bosque: BOSQUE, torre: TORRE, castillo: CASTILLO }, boss: 'solaris', reward: { coins: 150, item: 'pocion', again: 40 }, discover: true,
+    intro: 'El portón del castillo se abre con tres rayos de sol. Reúnelos y vence al Guardián del Castillo. La vida no se recupera entre combates.',
+    quest: {
+      token: { hud: 'Rayos de sol', got: '¡El rayo de sol es tuyo!', icon: 'estrella' },
+      start: 'Habla con Brinco, junto al portal.',
+      elite: 'Vence al guardián de la torre, al sur de las ruinas.',
+      door: 'Lleva los tres rayos de sol al portón del castillo, al este del bosque.',
+      boss: 'Vence al Guardián del Castillo.',
+      done: 'Venciste al Guardián del Castillo. Puedes seguir explorando a tu aire.',
+    },
     win: '¡Has vencido al Guardián del Castillo!', again: 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.',
     tint: 'rgba(26, 34, 118, .24)', motes: 'fireflies' },
   forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA, fundicion: FUNDICION, ladera: LADERA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers',
@@ -482,9 +662,6 @@ export const REGIONS = {
       token: { hud: 'Sellos', got: '¡El sello es tuyo!', icon: 'escudo' },
       start: 'Habla con Brasa, junto al portal.',
       elite: 'Vence al guardián del sello, al otro lado del río de lava de la isla de ceniza.',
-      ask: 'Pregunta por el sello al herrero de la fundición, al norte.',
-      fetch: 'Carbón para el herrero',
-      bring: 'Lleva el carbón al herrero.',
       seek: 'Busca una pista del sello perdido en la ladera del volcán, al este.',
       clue: 'El sello perdido está donde la tierra respira, entre las púas del sur de la ladera.',
       door: 'Lleva los tres sellos a la puerta de la ladera del volcán.',
@@ -548,7 +725,7 @@ export function active(g, poi) {
   if (poi.type === 'chest') return !(g.advChests || []).includes(`${g.adv.region}:${poi.id}`);
   if (poi.type === 'door') return !q.door;
   if (poi.type === 'seal') return !q.seals.includes(poi.id) && (!poi.after || !!q[poi.after]);   // algunas piezas solo aparecen al resolver algo
-  if (poi.type === 'coal') return !!q.smith && !q.coal.includes(poi.id);     // el carbón solo importa cuando el herrero lo pide
+  if (poi.type === 'coal' || poi.type === 'cub') return asked(q, poi.for) && !q.coal.includes(poi.id);   // lo que pide un personaje solo aparece cuando lo pide
   if (poi.seal && q.seals.includes(poi.id)) return false;                    // la élite que ya te dio su sello
   if (poi.locked && !q.door) return false;                                   // el jefe, mientras la puerta siga cerrada
   return !g.adv.done.includes(poi.id);
@@ -562,7 +739,10 @@ const questW = (g, region) => ((g.advQuest ||= {})[region] ||= { seals: [], coal
 // Las piezas de una región (sellos, lentes…) las da quien lleve `seal`: una élite, un personaje o un punto del mapa.
 const allPois = region => Object.values(REGIONS[region].zones).flatMap(z => z.pois);
 const givers = region => allPois(region).filter(p => p.seal || p.type === 'seal');
-const coalOf = region => allPois(region).filter(p => p.type === 'coal');
+// Lo que un personaje te manda buscar (carbón, semillas, sus crías) lleva `for` con su identificador.
+const coalOf = (region, npc) => allPois(region).filter(p => p.for === npc);
+const asked = (q, npc) => (q.met || []).includes(npc) || (npc === 'yunque' && !!q.smith);   // q.smith: partidas de antes de los encargos por personaje
+const fetched = (q, region, npc) => coalOf(region, npc).filter(p => q.coal.includes(p.id)).length;
 // Cuántas piezas llevas y cuántas hay; null si la región no tiene historia.
 export function seals(g, region) {
   if (!REGIONS[region].quest) return null;
@@ -574,7 +754,7 @@ export const tokenOf = region => REGIONS[region].quest?.token || null;
 export function objective(g) {
   const r = regionOf(g), t = r?.quest;
   if (!t) return [];
-  const q = questOf(g, r.id), s = seals(g, r.id), coal = coalOf(r.id);
+  const q = questOf(g, r.id), s = seals(g, r.id);
   if (cleared(g, r.id)) return [t.done];
   if (q.door) return [t.boss];
   if (s.found >= s.total) return [t.door];
@@ -582,7 +762,7 @@ export function objective(g) {
   if (!begun) return [t.start];
   return givers(r.id).filter(p => !q.seals.includes(p.id)).map(p => {
     if (p.type === 'wild') return t.elite;
-    if (p.role === 'smith') return !q.smith ? t.ask : q.coal.length < coal.length ? `${t.fetch}: ${q.coal.length} de ${coal.length}` : t.bring;
+    if (p.role === 'smith') { const need = coalOf(r.id, p.id).length, have = fetched(q, r.id, p.id); return !asked(q, p.id) ? p.quest.ask : have < need ? `${p.quest.fetch}: ${have} de ${need}` : p.quest.bring; }
     if (p.role === 'racer') return t.race;
     if (p.role === 'hungry') return (q.met || []).includes(p.id) ? t.feed : t.hungry;
     return p.after && q[p.after] ? t.pick : q.clue ? t.clue : t.seek;      // una pieza escondida
@@ -593,8 +773,8 @@ export function talk(g, poi) {
   const r = regionOf(g), q = questW(g, r.id), say = poi.say;
   if (poi.role === 'smith') {
     if (q.seals.includes(poi.id)) return { text: say.after };
-    if (!q.smith) { q.smith = true; return { text: say.first }; }
-    if (q.coal.length < coalOf(r.id).length) return { text: say.wait };
+    if (!asked(q, poi.id)) { (q.met ||= []).push(poi.id); return { text: say.first }; }
+    if (fetched(q, r.id, poi.id) < coalOf(r.id, poi.id).length) return { text: say.wait };
     q.seals.push(poi.id);
     return { text: say.give, seal: true };
   }
@@ -622,7 +802,8 @@ export function takeCoal(g, poi) {
   if (!active(g, poi)) return null;
   const q = questW(g, g.adv.region);
   q.coal.push(poi.id);
-  return { have: q.coal.length, need: coalOf(g.adv.region).length };
+  const npc = allPois(g.adv.region).find(p => p.id === poi.for);
+  return { have: fetched(q, g.adv.region, poi.for), need: coalOf(g.adv.region, poi.for).length, label: npc.quest.fetch, home: npc };
 }
 export function takeSeal(g, poi) {
   if (!active(g, poi)) return false;
@@ -761,7 +942,7 @@ function inPolygon(poly, x, y) {
 export function ground(zone, x, y) {
   if (x < 0 || y < 0 || x > zone.w || y > zone.h) return false;
   const bridge = zone.bridges.some(b => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
-  if (!bridge && (!inPolygon(zone.ground, x, y) || zone.holes?.some(h => inPolygon(h, x, y)))) return false;
+  if (!bridge && ((!inPolygon(zone.ground, x, y) && !zone.areas?.some(a => inPolygon(a, x, y))) || zone.holes?.some(h => inPolygon(h, x, y)))) return false;
   for (const [cx, cy, r] of zone.circles) if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return false;
   for (const [x0, y0, x1, y1] of zone.rects) if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return false;
   for (const [cx, cy, rx, ry] of zone.ponds) if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 < 1) return false;

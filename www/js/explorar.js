@@ -7,7 +7,7 @@ import * as A from './aventura.js';
 import { tr } from './i18n.js';
 
 const SPEED = 165, WILD_SLOW = 42, WILD_FAST = 92, NOTICE = 150, LEASH = 250, TOUCH = 40, REVEAL = 105, HINT = 330;   // en píxeles del mapa
-const ME = 66, WILD = 62, BOSS = 120, NPC = 72, NEAR = 190, CELL = 2;        // alturas de las bestias y tamaño del «píxel» del mapa
+const ME = 66, WILD = 62, BOSS = 120, NPC = 72, CUB = 42, NEAR = 190, CELL = 2;        // alturas de las bestias y tamaño del «píxel» del mapa
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Deja un dibujo con el grano de píxel y la luz de noche del mapa, para que no parezca un recorte pegado encima.
@@ -40,7 +40,7 @@ export class Explore {
     this.g = game; this.zone = A.zoneOf(game); this.art = art; this.hooks = hooks;
     const region = A.regionOf(game);
     this.tint = region.tint || 'rgba(26, 34, 118, .24)'; this.motes = region.motes || 'fireflies';   // la luz y el aire de la región
-    this.region = region; this.discover = !!region.discover; this.token = A.tokenOf(region.id); this.race = null;                   // con `discover`, las marcas solo salen de cerca
+    this.region = region; this.discover = !!region.discover; this.token = A.tokenOf(region.id); this.race = null; this.runners = [];                   // con `discover`, las marcas solo salen de cerca
     this.x = game.adv.x; this.y = game.adv.y;
     if (!A.walkable(this.zone, this.x, this.y)) [this.x, this.y] = this.zone.start;
     this.dir = 1; this.t = 0; this.hop = 0; this.moving = false; this.busy = false;
@@ -149,6 +149,17 @@ export class Explore {
       if ((this.saved += dt) > 4) { this.saved = 0; this.hooks.onMove?.(); }
     } else this.hop = 0;
 
+    for (const r of this.runners) {                      // las crías encontradas corren de vuelta a casa
+      let left = 210 * dt;
+      while (left > 0 && r.path.length) {
+        const [tx, ty] = r.path[0], d = Math.hypot(tx - r.x, ty - r.y);
+        if (d <= left) { r.x = tx; r.y = ty; left -= d; r.path.shift(); continue; }
+        if (Math.abs(tx - r.x) > 1) r.dir = tx > r.x ? 1 : -1;
+        r.x += ((tx - r.x) / d) * left; r.y += ((ty - r.y) / d) * left; left = 0;
+      }
+      r.hop += dt;
+    }
+    this.runners = this.runners.filter(r => r.path.length);
     if (this.race) this.runRace(dt);                    // durante la carrera nadie más se mueve ni te corta el paso
     else { this.roam(dt); this.meet(); }
     this.center();
@@ -177,7 +188,7 @@ export class Explore {
     let near = false;
     for (const poi of this.pois()) {
       const w = this.wilds.find(v => v.poi === poi), px = w ? w.x : poi.x, py = w ? w.y : poi.y;
-      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : ['food', 'coin', 'coal'].includes(poi.type) ? 24 : poi.type === 'chest' || poi.type === 'seal' ? 32 : 34);
+      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : ['food', 'coin', 'coal'].includes(poi.type) ? 24 : ['chest', 'seal', 'cub'].includes(poi.type) ? 32 : 34);
       if (d < r + (w ? 70 : 24)) near = true;
       if (d > r || this.skip === poi.id || (poi.type === 'exit' && !this.wantExit)) continue;
       this.halt(); this.skip = poi.id;
@@ -196,11 +207,12 @@ export class Explore {
     const list = [{ me: true, y: this.y }];
     for (const w of this.wilds) if (A.active(this.g, w.poi)) list.push({ wild: w, y: w.y });
     for (const poi of this.pois()) {
-      if (poi.type === 'chest' || poi.type === 'seal') list.push({ chest: poi, y: poi.y });
+      if (poi.type === 'chest' || poi.type === 'seal' || poi.type === 'cub') list.push({ chest: poi, y: poi.y });
       else if (['food', 'coin', 'coal'].includes(poi.type)) list.push({ loot: poi, y: poi.y });
       else if (poi.type === 'npc') list.push({ npc: poi, y: poi.y });
     }
     for (const tree of zone.trees) list.push({ tree, y: tree[1] });
+    for (const r of this.runners) list.push({ runner: r, y: r.y });
     list.sort((p, q) => p.y - q.y);
     const drawn = [];                                    // lo ya pintado, por si un árbol de delante tiene que taparlo
     for (const it of list) {
@@ -209,12 +221,14 @@ export class Explore {
       else if (it.wild) {
         const w = it.wild, boss = w.poi.type === 'boss';
         drawn.push(this.beast(this.art.wild(w.poi), w.x, w.y, boss ? BOSS : WILD, w.dir, w.hop ? Math.abs(Math.sin(w.hop * (w.chasing ? 14 : 9))) * 6 : 0));
-      } else if (it.npc && this.race?.poi === it.npc) { const v = this.race.rival; drawn.push(this.beast(this.art.wild(it.npc), v.x, v.y, NPC, v.dir, Math.abs(Math.sin(v.hop * 14)) * 7)); }
+      } else if (it.runner) drawn.push(this.beast(it.runner.img, it.runner.x, it.runner.y, CUB, it.runner.dir, Math.abs(Math.sin(it.runner.hop * 16)) * 6));
+      else if (it.npc && this.race?.poi === it.npc) { const v = this.race.rival; drawn.push(this.beast(this.art.wild(it.npc), v.x, v.y, NPC, v.dir, Math.abs(Math.sin(v.hop * 14)) * 7)); }
       else if (it.npc) drawn.push(this.beast(this.art.wild(it.npc), it.npc.x, it.npc.y, NPC, this.x < it.npc.x ? -1 : 1, Math.sin(this.t * 2.1 + it.npc.x) * 1.2));   // los personajes te miran
-      else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.type === 'coal' ? 'roca' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
+      else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.type === 'coal' ? it.loot.icon || 'roca' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
       else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) {
-        const seal = it.chest.type === 'seal';
-        drawn.push(this.beast(seal ? this.art.icon(this.token?.icon || 'escudo') : this.art.chest, it.chest.x, it.chest.y + 6, seal ? 34 : 44, 1, 0, false));
+        const seal = it.chest.type === 'seal', cub = it.chest.type === 'cub';
+        if (cub) drawn.push(this.beast(this.art.wild(it.chest), it.chest.x, it.chest.y, CUB, this.x < it.chest.x ? -1 : 1, Math.abs(Math.sin(this.t * 6 + it.chest.x)) * 3));
+        else drawn.push(this.beast(seal ? this.art.icon(this.token?.icon || 'escudo') : this.art.chest, it.chest.x, it.chest.y + 6, seal ? 34 : 44, 1, 0, false));
       }
     }
 
@@ -243,7 +257,7 @@ export class Explore {
       if (poi.type === 'rest') this.marker(this.art.icon('corazon'), poi.x, poi.y - 34 + Math.sin(this.t * 2.2) * 3, 26);
       else if (poi.type === 'event') this.marker(this.art.icon('estrella'), poi.x, poi.y - 30 + Math.sin(this.t * 2.2 + 1) * 3, 26);
       else if (poi.type === 'exit' && d > 80) this.marker(this.art.icon('casa'), poi.x, poi.y - 46 + Math.sin(this.t * 2.2) * 3, 28);
-      else if ((poi.type === 'chest' || (poi.type === 'seal' && clue)) && poi.hidden && d > REVEAL && d < HINT && this.art.glint) {   // el sello solo destella si ya leíste la pista
+      else if ((poi.type === 'chest' || poi.type === 'cub' || (poi.type === 'seal' && clue)) && poi.hidden && d > REVEAL && d < HINT && this.art.glint) {   // el sello solo destella si ya leíste la pista
         const pulse = 0.5 + 0.5 * Math.sin(this.t * 3.2 + poi.x), close = 1 - (d - REVEAL) / (HINT - REVEAL);   // más fuerte cuanto más cerca
         ctx.globalAlpha = 0.35 + 0.65 * pulse;
         this.marker(this.art.glint, poi.x, poi.y - 14, 22 + pulse * 16 + close * 18);
@@ -278,6 +292,12 @@ export class Explore {
       ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(fx, fy, radius, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Una cría encontrada sale corriendo hasta su casa (el personaje que la busca) y desaparece al llegar.
+  runHome(poi, home) {
+    const path = A.pathTo(this.zone, poi.x, poi.y, home.x, home.y);
+    if (path.length) this.runners.push({ img: this.art.wild(poi), x: poi.x, y: poi.y, dir: home.x > poi.x ? 1 : -1, hop: 0, path });
   }
 
   // Los puntos de la carrera: el siguiente, grande y con su número; los demás, apagados.
