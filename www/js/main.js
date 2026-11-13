@@ -856,7 +856,7 @@ function endBattle(win) {
     : adv.reward ? `<p><b>${advZone.win}</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}`
     : adv.boss ? `<p><b>${advZone.win}</b></p>${adv.coins ? `<p>Recompensa: +${adv.coins} monedas</p>` : ''}`
     : adv.over ? '<p>La expedición termina aquí.</p>'
-    : `${adv.seal ? `<p><b>¡El sello es tuyo!</b></p><p><b>Sellos ${A.seals(game, advZone.id).found} de ${A.seals(game, advZone.id).total}</b></p>` : ''}<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
+    : `${adv.seal ? `<p><b>${A.tokenOf(advZone.id).got}</b></p>${advTokens(advZone.id)}` : ''}<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
   const home = () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;
@@ -911,7 +911,7 @@ function renderAdventure() {
   $('adv-chests').textContent = `Cofres ${box.found} de ${box.total}`;
   const seals = A.seals(game, game.adv.region), diary = A.objective(game);
   $('adv-seals-chip').hidden = !seals;
-  if (seals) $('adv-seals').textContent = `Sellos ${seals.found} de ${seals.total}`;
+  if (seals) { const token = A.tokenOf(game.adv.region); $('adv-seals').textContent = `${token.hud} ${seals.found} de ${seals.total}`; $('adv-seals-icon').className = `ic ic-${token.icon}`; }
   $('adv-quest').hidden = !diary.length;
   $('adv-quest-lines').innerHTML = diary.map(line => `<li>${esc(line)}</li>`).join('');
   $('adv-zoom').textContent = advNear ? 'Ver de lejos' : 'Ver de cerca';
@@ -938,7 +938,7 @@ function advMount() {
   const zone = A.zoneOf(game);
   explore = new Explore($('adv-canvas'), game,
     { map: advMaps[zone.img], near: advNear, player: petSprite(game.pet), wild: poi => spriteOf(poi.species, A.stageOf(poi)), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
-    { onReach: advReach, onMove: () => S.save(game) });
+    { onReach: advReach, onMove: () => S.save(game), onRace: advRaceEnd });
   renderAdventure();
   for (const poi of zone.pois) {                         // las zonas de al lado se van cargando, para cruzar sin esperas
     const next = poi.to?.zone && A.regionOf(game).zones[poi.to.zone];
@@ -999,7 +999,7 @@ function advReach(poi) {
   }
   if (poi.type === 'exit') return advLeaveAsk(free);
   const go = [{ label: 'Seguir', cls: 'primary', fn: free }];
-  const sealsLine = () => { const s = A.seals(game, game.adv.region); return `<p><b>Sellos ${s.found} de ${s.total}</b></p>`; };
+  const sealsLine = () => advTokens(game.adv.region);
   if (poi.type === 'coal') {
     const got = A.takeCoal(game, poi);
     S.save(game);
@@ -1011,19 +1011,36 @@ function advReach(poi) {
     A.takeSeal(game, poi);
     S.save(game);
     sfx.win();
-    return modal({ title: '¡El sello perdido!', body: `<p>Medio enterrado en la ceniza tibia hay un disco de piedra con una runa grabada.</p>${sealsLine()}`, actions: go });
+    return modal({ title: poi.found.title, body: `<p>${poi.found.text}</p>${sealsLine()}`, actions: go });
   }
   if (poi.type === 'clue') {
     A.readClue(game);
     S.save(game);
     return modal({ title: 'Unas palabras grabadas', body: `<p>${poi.text}</p>`, actions: go });
   }
+  if (poi.type === 'switch') {                         // una farola del acertijo
+    const lamp = A.press(game, poi);
+    S.save(game);
+    if (lamp.solved) {
+      sfx.win();
+      return modal({ title: 'El mapa de estrellas', body: '<p>Las cuatro farolas arden a la vez. Las líneas del mapa de estrellas se encienden una a una y, en el centro, algo de cristal asoma entre las losas.</p>', actions: go });
+    }
+    if (lamp.done) toast('La farola brilla tranquila.');
+    else if (lamp.ok) { sfx.coin(); toast(`La farola se enciende: ${lamp.lit} de ${lamp.total}`); }
+    else { sfx.tap(); toast(lamp.lit ? 'Ese no era el orden: las demás farolas se apagan.' : 'Ese no era el orden: las farolas se apagan.'); }
+    return free();
+  }
   if (poi.type === 'npc') {
     const said = A.talk(game, poi);
     S.save(game);
     if (said.seal) sfx.win();
+    if (said.race) {                                     // te reta a una carrera
+      return modal({ title: poi.name,
+        body: `<div class="sprites"><figure><canvas data-sprite="${poi.species}:${poi.stage}:0"></canvas></figure></div>${said.text.map(line => `<p>${line}</p>`).join('')}<p class="muted">Toca los trofeos en orden. Durante la carrera las bestias salvajes no te molestan.</p>`,
+        actions: [{ label: '¡A correr!', cls: 'primary', fn: () => { free(); explore?.startRace(poi); } }, { label: 'Ahora no', cls: 'ghost', fn: free }] });
+    }
     return modal({ title: poi.name,
-      body: `<div class="sprites"><figure><canvas data-sprite="${poi.species}:${poi.stage}:0"></canvas></figure></div>${said.text.map(line => `<p>${line}</p>`).join('')}${said.seal ? `<p><b>¡El sello es tuyo!</b></p>${sealsLine()}` : ''}`,
+      body: `<div class="sprites"><figure><canvas data-sprite="${poi.species}:${poi.stage}:0"></canvas></figure></div>${said.text.map(line => `<p>${line}</p>`).join('')}${said.seal ? `<p><b>${A.tokenOf(game.adv.region).got}</b></p>${sealsLine()}` : ''}`,
       actions: go });
   }
   if (poi.type === 'door') {
@@ -1069,6 +1086,17 @@ function advReach(poi) {
     actions: tired ? [{ label: 'Dar media vuelta', cls: 'primary', fn: retreat }]
       : [{ label: '¡A luchar!', cls: 'primary', fn: () => { rival = foe; advFight = poi; startBattle(maps.find(m => m.id === A.regionOf(game).map) || maps[0]); } }, { label: 'Dar media vuelta', cls: 'ghost', fn: retreat }],
   });
+}
+// «Sellos 2 de 3», «Lentes 1 de 3»: lo que llevas de la historia de una región.
+function advTokens(region) { const s = A.seals(game, region); return `<p><b>${A.tokenOf(region).hud} ${s.found} de ${s.total}</b></p>`; }
+// Acabó una carrera contra un personaje.
+function advRaceEnd(poi, won) {
+  const got = A.raceDone(game, poi, won);
+  S.save(game);
+  if (won) sfx.win(); else sfx.lose();
+  modal({ title: won ? '¡Has ganado la carrera!' : 'Carrera perdida',
+    body: `<div class="sprites"><figure><canvas data-sprite="${poi.species}:${poi.stage}:0"></canvas></figure></div>${(won ? poi.say.win : poi.say.lose).map(line => `<p>${line}</p>`).join('')}${got ? `<p><b>${A.tokenOf(game.adv.region).got}</b></p>${advTokens(game.adv.region)}` : ''}`,
+    actions: [{ label: 'Seguir', cls: 'primary', fn: () => { if (explore) { explore.busy = false; explore.skip = poi.id; } renderAdventure(); } }] });
 }
 $('btn-adv').onclick = () => { sfx.tap(); openAdventure(); };
 $('adv-regions').addEventListener('click', e => {

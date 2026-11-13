@@ -241,7 +241,7 @@ const FUNDICION = {
   pois: [
     { id: 'fu-sur', type: 'gate', x: 980, y: 846, r: 34, to: { zone: 'ceniza', x: 1018, y: 102 } },
     // Yunque, el herrero: da su sello a cambio de carbón para el horno.
-    { id: 'yunque', type: 'npc', role: 'smith', x: 660, y: 292, species: 'gravion', stage: 1, name: 'Yunque', say: {
+    { id: 'yunque', type: 'npc', role: 'smith', seal: true, x: 660, y: 292, species: 'gravion', stage: 1, name: 'Yunque', say: {
       first: ['Soy Yunque, el herrero. ¿El sello? Lo tengo yo, sí; lo uso de pisapapeles.',
         'Te lo cambio por un favor: el horno se me apaga. Tráeme tres trozos de carbón; andan tirados por la fundición.'],
       wait: ['Aún me falta carbón. Busca por los rincones de la fundición.'],
@@ -302,7 +302,7 @@ const LADERA = {
     { id: 'jefe', type: 'boss', x: 788, y: 152, species: 'draconoid', level: 15, stage: 2, still: true, locked: true, title: 'Señor de la Forja',
       intro: 'Llevaba años encerrado tras la puerta. Es mucho más fuerte que cualquier bestia del camino.' },
     { id: 'estatua', type: 'clue', x: 702, y: 562, text: 'En el pedestal de la estatua hay unas palabras medio borradas: «El tercer sello duerme donde la tierra respira, entre las púas del sur».' },
-    { id: 'sello', type: 'seal', x: 608, y: 770, hidden: true },   // junto al respiradero del sur; sin la pista no hay destello que lo delate
+    { id: 'sello', type: 'seal', x: 608, y: 770, hidden: true, found: { title: '¡El sello perdido!', text: 'Medio enterrado en la ceniza tibia hay un disco de piedra con una runa grabada.' } },   // junto al respiradero del sur; sin la pista no hay destello que lo delate
     { id: 'laf1', type: 'food', x: 170, y: 212, food: 'chile' }, { id: 'laf2', type: 'food', x: 500, y: 612, food: 'filete' }, { id: 'laf3', type: 'food', x: 1060, y: 800, food: 'pan' },
     { id: 'laf4', type: 'food', x: 460, y: 812, food: 'huevo' }, { id: 'laf5', type: 'food', x: 740, y: 552, food: 'chile' }, { id: 'laf6', type: 'food', x: 1400, y: 580, food: 'filete' },
     { id: 'lam1', type: 'coin', x: 200, y: 330, coins: 12 }, { id: 'lam2', type: 'coin', x: 1300, y: 335, coins: 13 }, { id: 'lam3', type: 'coin', x: 80, y: 610, coins: 14 }, { id: 'lam4', type: 'coin', x: 900, y: 800, coins: 12 },
@@ -335,6 +335,22 @@ const NEVADA = {
     { id: 't-este', type: 'gate', x: 1516, y: 313, r: 34, to: { zone: 'cristal', x: 138, y: 372 } },
     { id: 't-sur', type: 'gate', x: 972, y: 846, r: 34, to: { zone: 'observatorio', x: 985, y: 128 } },
     { id: 'ts1', type: 'wild', x: 950, y: 376, to: [1200, 372], species: 'frostine', level: 14 },
+    { id: 'farol', type: 'npc', role: 'guide', x: 800, y: 470, species: 'rokky', stage: 2, name: 'Farol', say: {
+      first: ['Bienvenida a la tundra. Soy Farol; enciendo las luces de esta isla desde que tengo memoria.',
+        'La Guardiana de la Aurora se encerró en el observatorio, al sur, y su puerta solo se abre con las tres lentes del telescopio. Una la tiene Ráfaga, que no la suelta si no le ganas una carrera. Otra la encontró Copo, en el bosque de cristal, al este. La tercera nunca salió del observatorio: dicen que el mapa de estrellas la esconde.',
+        'Reúne las tres y llama a la puerta. Y ve con la vida entera: ella no recibe visitas de buena gana.'],
+      more: ['Aún te faltan lentes. Mira tu diario: ahí está lo que sabemos de cada una.'],
+      ready: ['¡Las tres lentes! El observatorio está al sur. Descansa antes de llamar.'],
+      open: ['La puerta ya está abierta. La Guardiana de la Aurora te espera en el observatorio.'],
+      done: ['Venciste a la Guardiana de la Aurora. Esta noche la aurora brilla más que nunca.'] } },
+    // Ráfaga se juega su lente a una carrera: hay que tocar las dianas en orden antes de que ella complete el recorrido.
+    { id: 'rafaga', type: 'npc', role: 'racer', seal: true, x: 470, y: 440, species: 'zephyra', stage: 2, name: 'Ráfaga', speed: 136,
+      course: [[1230, 400], [940, 740], [300, 630], [560, 440]], say: {
+        first: ['¿La lente? ¡Es mi juguete favorito! Brilla un montón.', 'Pero me aburro. Te la juego a una carrera: tres trofeos por la isla y vuelta a la plaza del portal. Si llegas antes que yo, es tuya.'],
+        again: ['¿Otra carrera? Tres trofeos y vuelta a la plaza. ¡No me lo pongas fácil!'],
+        win: ['¡Uf! Hacía años que nadie me ganaba.', 'Un trato es un trato: la lente es tuya.'],
+        lose: ['¡Gané! Pero casi me pillas. Vuelve cuando quieras la revancha.'],
+        after: ['¿Echamos otra por gusto? No, mejor ve a por esa puerta.'] } },
     { id: 'ts2', type: 'wild', x: 330, y: 640, to: [430, 650], species: 'zephyra', level: 15 },
     { id: 'ts3', type: 'wild', x: 850, y: 200, to: [790, 100], species: 'aquarok', level: 16 },
     { id: 'tc1', type: 'chest', x: 1215, y: 715, coins: 110, hidden: true },         // detrás del árbol nevado del sureste
@@ -383,6 +399,12 @@ const CRISTAL = {
   pois: [
     { id: 'cr-oeste', type: 'gate', x: 14, y: 372, r: 34, to: { zone: 'nevada', x: 1420, y: 313 } },
     { id: 'crs1', type: 'wild', x: 330, y: 380, to: [520, 385], species: 'frostine', level: 16 },
+    // Copo cambia su lente por una sopa: hay que traerla de casa (se compra en la tienda).
+    { id: 'copo', type: 'npc', role: 'hungry', seal: true, wants: 'sopa', x: 770, y: 292, species: 'tropicat', stage: 1, name: 'Copo', say: {
+      first: ['Brrr… Soy Copo. Vine a buscar cristales y ahora no siento las patas.', '¿Esto? Lo encontré en la nieve; parece una lente. Te la cambio por una sopa bien caliente, de las que venden en la tienda de casa.'],
+      wait: ['¿Traes sopa? No… Pues aquí sigo, tiritando. La venden en la tienda de casa.'],
+      give: ['¡Sopa! ¡Y todavía humea!', 'Toma la lente. A mí me sirve más esto.'],
+      after: ['Ya noto las patas otra vez. ¡Gracias por la sopa!'] } },
     { id: 'crs2', type: 'wild', x: 760, y: 620, to: [860, 652], species: 'zephyra', level: 17 },
     { id: 'crs3', type: 'wild', x: 1250, y: 300, to: [1340, 320], species: 'voltix', level: 18 },
     { id: 'crc1', type: 'chest', x: 230, y: 95, coins: 120, hidden: true },          // detrás del cristal grande del noroeste
@@ -422,16 +444,21 @@ const OBSERVATORIO = {
   grass: [[430, 45, 530, 110], [760, 78, 880, 150], [745, 190, 862, 248], [510, 262, 628, 335], [85, 352, 212, 430], [245, 405, 345, 478], [515, 500, 670, 585], [300, 672, 430, 748], [880, 685, 990, 760], [1000, 272, 1075, 328], [1172, 198, 1292, 272], [1120, 432, 1195, 496], [1240, 482, 1365, 540]],
   pois: [
     { id: 'ob-norte', type: 'gate', x: 985, y: 14, r: 34, to: { zone: 'nevada', x: 972, y: 758 } },
-    { id: 'obs1', type: 'wild', x: 720, y: 380, to: [880, 420], species: 'aquarok', level: 18 },
-    { id: 'obs2', type: 'wild', x: 760, y: 620, to: [640, 622], species: 'frostine', level: 19 },
-    { id: 'obs3', type: 'wild', x: 330, y: 396, to: [420, 420], species: 'rokky', level: 20 },
+    { id: 'obs2', type: 'wild', x: 760, y: 620, to: [640, 622], species: 'aquarok', level: 19 },
+    { id: 'obs3', type: 'wild', x: 1285, y: 300, to: [1340, 330], species: 'voltix', level: 20 },
+    // El acertijo: cuatro farolas alrededor del mapa de estrellas, que hay que encender en el orden que dice el reloj de sol.
+    { id: 'fa-n', type: 'switch', key: 'n', x: 893, y: 190 }, { id: 'fa-o', type: 'switch', key: 'o', x: 600, y: 430 },
+    { id: 'fa-e', type: 'switch', key: 'e', x: 998, y: 430 }, { id: 'fa-s', type: 'switch', key: 's', x: 693, y: 732 },
+    { id: 'reloj', type: 'clue', x: 926, y: 528, text: 'En el reloj de sol hay una frase grabada: «La aurora nace en el norte, cruza al oeste, vuelve por el este y se apaga en el sur. Enciende las farolas como ella camina».' },
+    { id: 'lente', type: 'seal', after: 'puzzle', x: 800, y: 400, found: { title: '¡La lente de las estrellas!', text: 'En el centro del mapa, entre dos losas, hay una lente de cristal tan fría que quema.' } },
+    { id: 'puerta', type: 'door', x: 342, y: 322, r: 30, text: 'La puerta del observatorio tiene una mirilla con tres huecos para lentes. Por la rendija se escapa luz de estrellas.',
+      opens: 'Las tres lentes encajan en la mirilla. La luz de las estrellas se concentra, la puerta cede… y la Guardiana de la Aurora sale a tu encuentro.' },
+    { id: 'jefe', type: 'boss', x: 342, y: 346, species: 'frostine', level: 22, stage: 2, still: true, locked: true, title: 'Guardiana de la Aurora',
+      intro: 'Lleva años sola con sus estrellas y no quiere visitas. Es mucho más fuerte que cualquier bestia del camino.' },
     { id: 'obc1', type: 'chest', x: 250, y: 495, coins: 130, hidden: true },         // detrás del árbol nevado del oeste
     { id: 'obc2', type: 'chest', x: 1260, y: 120, item: 'pocion', hidden: true },    // detrás del árbol grande del noreste
     { id: 'obc3', type: 'chest', x: 915, y: 730, item: 'escudo', hidden: true },     // entre la hierba helada del sur
     { id: 'obd1', type: 'rest', x: 998, y: 600, r: 26 },                             // al pie del reloj de sol
-    { id: 'obe1', type: 'event', x: 342, y: 332, text: 'La puerta del observatorio está cerrada. Por una rendija se escapa luz de estrellas.',
-      choices: [{ label: 'Llamar a la puerta', result: 'Nadie contesta, pero en el escalón hay monedas: +35 monedas.', fx: { coins: 35 } },
-        { label: 'Sentarse en los escalones', result: 'La luz que sale por la rendija reconforta: recuperas un tercio de la vida.', fx: { hp: 0.33 } }] },
     { id: 'obe2', type: 'event', x: 1140, y: 348, text: 'Un telescopio apunta al cielo. La lente sigue limpia.',
       choices: [{ label: 'Mirar por él', result: 'Ves la aurora tan cerca que casi la tocas: recuperas todo el MP.', fx: { mp: 999 } },
         { label: 'Desmontar una pieza', result: 'Una rueda de latón siempre se vende bien: +40 monedas.', fx: { coins: 40 } }] },
@@ -452,6 +479,7 @@ export const REGIONS = {
     intro: 'Tres sellos cierran la puerta del volcán. Reúnelos, ábrela y vence al Señor de la Forja. La vida no se recupera entre combates.',
     win: '¡Has vencido al Señor de la Forja!', again: 'Ya venciste al Señor de la Forja. Puedes volver a por lo que dejaste.',
     quest: {
+      token: { hud: 'Sellos', got: '¡El sello es tuyo!', icon: 'escudo' },
       start: 'Habla con Brasa, junto al portal.',
       elite: 'Vence al guardián del sello, al otro lado del río de lava de la isla de ceniza.',
       ask: 'Pregunta por el sello al herrero de la fundición, al norte.',
@@ -463,7 +491,24 @@ export const REGIONS = {
       boss: 'Vence al Señor de la Forja.',
       done: 'Venciste al Señor de la Forja. Puedes seguir explorando a tu aire.',
     } },
-  tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA, cristal: CRISTAL, observatorio: OBSERVATORIO }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow' },
+  tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA, cristal: CRISTAL, observatorio: OBSERVATORIO }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow',
+    discover: true, reward: { coins: 400, item: 'elixir', again: 90 },
+    intro: 'El observatorio solo se abre con las tres lentes de su telescopio. Reúnelas y vence a la Guardiana de la Aurora. La vida no se recupera entre combates.',
+    win: '¡Has vencido a la Guardiana de la Aurora!', again: 'Ya venciste a la Guardiana de la Aurora. Puedes volver a por lo que dejaste.',
+    quest: {
+      token: { hud: 'Lentes', got: '¡La lente es tuya!', icon: 'diana' },
+      order: ['n', 'o', 'e', 's'],                       // en qué orden se encienden las farolas del observatorio
+      start: 'Habla con Farol, junto al portal.',
+      race: 'Gana la carrera a Ráfaga, en la isla nevada.',
+      hungry: 'Pregunta por la lente a Copo, en el bosque de cristal, al este.',
+      feed: 'Lleva una sopa caliente a Copo, al bosque de cristal. Se compra en la tienda de casa.',
+      seek: 'Busca cómo encender el mapa de estrellas del observatorio, al sur.',
+      clue: 'La aurora nace en el norte, cruza al oeste, vuelve por el este y se apaga en el sur. Enciende así las farolas del observatorio.',
+      pick: 'Recoge la lente del centro del mapa de estrellas.',
+      door: 'Lleva las tres lentes a la puerta del observatorio.',
+      boss: 'Vence a la Guardiana de la Aurora.',
+      done: 'Venciste a la Guardiana de la Aurora. Puedes seguir explorando a tu aire.',
+    } },
 };
 
 export const REST_HEAL = 0.5;
@@ -499,10 +544,10 @@ export function travel(g, poi) {
 export function active(g, poi) {
   if (!g.adv) return false;
   const q = questOf(g, g.adv.region);
-  if (['exit', 'gate', 'sign', 'npc', 'clue'].includes(poi.type)) return true;
+  if (['exit', 'gate', 'sign', 'npc', 'clue', 'switch'].includes(poi.type)) return true;
   if (poi.type === 'chest') return !(g.advChests || []).includes(`${g.adv.region}:${poi.id}`);
   if (poi.type === 'door') return !q.door;
-  if (poi.type === 'seal') return !q.seals.includes(poi.id);
+  if (poi.type === 'seal') return !q.seals.includes(poi.id) && (!poi.after || !!q[poi.after]);   // algunas piezas solo aparecen al resolver algo
   if (poi.type === 'coal') return !!q.smith && !q.coal.includes(poi.id);     // el carbón solo importa cuando el herrero lo pide
   if (poi.seal && q.seals.includes(poi.id)) return false;                    // la élite que ya te dio su sello
   if (poi.locked && !q.door) return false;                                   // el jefe, mientras la puerta siga cerrada
@@ -514,31 +559,34 @@ export function active(g, poi) {
 const EMPTY = { seals: [], coal: [] };
 export const questOf = (g, region) => g.advQuest?.[region] || EMPTY;
 const questW = (g, region) => ((g.advQuest ||= {})[region] ||= { seals: [], coal: [] });
-// Quién da cada sello en una región: la élite, el herrero y el que está escondido.
-function parts(region) {
-  const all = Object.values(REGIONS[region].zones).flatMap(z => z.pois);
-  return { elite: all.find(p => p.type === 'wild' && p.seal), smith: all.find(p => p.type === 'npc' && p.role === 'smith'), hidden: all.find(p => p.type === 'seal'), coal: all.filter(p => p.type === 'coal') };
-}
-// Cuántos sellos llevas y cuántos hay; null si la región no tiene historia.
+// Las piezas de una región (sellos, lentes…) las da quien lleve `seal`: una élite, un personaje o un punto del mapa.
+const allPois = region => Object.values(REGIONS[region].zones).flatMap(z => z.pois);
+const givers = region => allPois(region).filter(p => p.seal || p.type === 'seal');
+const coalOf = region => allPois(region).filter(p => p.type === 'coal');
+// Cuántas piezas llevas y cuántas hay; null si la región no tiene historia.
 export function seals(g, region) {
   if (!REGIONS[region].quest) return null;
-  const p = parts(region);
-  return { found: questOf(g, region).seals.length, total: [p.elite, p.smith, p.hidden].filter(Boolean).length };
+  return { found: questOf(g, region).seals.length, total: givers(region).length };
 }
+// Cómo se llaman las piezas de la región y con qué icono se pintan.
+export const tokenOf = region => REGIONS[region].quest?.token || null;
 // El diario: qué toca hacer ahora en la región de la expedición. Lista de frases (vacía si no hay historia).
 export function objective(g) {
   const r = regionOf(g), t = r?.quest;
   if (!t) return [];
-  const q = questOf(g, r.id), p = parts(r.id), s = seals(g, r.id), has = poi => poi && q.seals.includes(poi.id);
+  const q = questOf(g, r.id), s = seals(g, r.id), coal = coalOf(r.id);
   if (cleared(g, r.id)) return [t.done];
   if (q.door) return [t.boss];
   if (s.found >= s.total) return [t.door];
-  if (!q.started && !q.seals.length && !q.smith && !q.clue) return [t.start];
-  const out = [];
-  if (p.elite && !has(p.elite)) out.push(t.elite);
-  if (p.smith && !has(p.smith)) out.push(!q.smith ? t.ask : q.coal.length < p.coal.length ? `${t.fetch}: ${q.coal.length} de ${p.coal.length}` : t.bring);
-  if (p.hidden && !has(p.hidden)) out.push(q.clue ? t.clue : t.seek);
-  return out;
+  const begun = q.seals.length || Object.keys(q).some(k => k !== 'seals' && k !== 'coal' && q[k] && (!Array.isArray(q[k]) || q[k].length));
+  if (!begun) return [t.start];
+  return givers(r.id).filter(p => !q.seals.includes(p.id)).map(p => {
+    if (p.type === 'wild') return t.elite;
+    if (p.role === 'smith') return !q.smith ? t.ask : q.coal.length < coal.length ? `${t.fetch}: ${q.coal.length} de ${coal.length}` : t.bring;
+    if (p.role === 'racer') return t.race;
+    if (p.role === 'hungry') return (q.met || []).includes(p.id) ? t.feed : t.hungry;
+    return p.after && q[p.after] ? t.pick : q.clue ? t.clue : t.seek;      // una pieza escondida
+  });
 }
 // Hablar con un personaje. Devuelve { text: [frases], seal } y apunta lo que cambie.
 export function talk(g, poi) {
@@ -546,7 +594,21 @@ export function talk(g, poi) {
   if (poi.role === 'smith') {
     if (q.seals.includes(poi.id)) return { text: say.after };
     if (!q.smith) { q.smith = true; return { text: say.first }; }
-    if (q.coal.length < parts(r.id).coal.length) return { text: say.wait };
+    if (q.coal.length < coalOf(r.id).length) return { text: say.wait };
+    q.seals.push(poi.id);
+    return { text: say.give, seal: true };
+  }
+  if (poi.role === 'racer') {                          // reta a una carrera: la pieza se gana en raceDone
+    if (q.seals.includes(poi.id)) return { text: say.after };
+    const first = !q.raced;
+    q.raced = true;
+    return { text: first ? say.first : say.again, race: true };
+  }
+  if (poi.role === 'hungry') {                         // cambia su pieza por una comida de tu despensa
+    if (q.seals.includes(poi.id)) return { text: say.after };
+    if (!(q.met || []).includes(poi.id)) { (q.met ||= []).push(poi.id); return { text: say.first }; }
+    if (!(g.foods[poi.wants] > 0)) return { text: say.wait };
+    g.foods[poi.wants]--;
     q.seals.push(poi.id);
     return { text: say.give, seal: true };
   }
@@ -560,7 +622,7 @@ export function takeCoal(g, poi) {
   if (!active(g, poi)) return null;
   const q = questW(g, g.adv.region);
   q.coal.push(poi.id);
-  return { have: q.coal.length, need: parts(g.adv.region).coal.length };
+  return { have: q.coal.length, need: coalOf(g.adv.region).length };
 }
 export function takeSeal(g, poi) {
   if (!active(g, poi)) return false;
@@ -568,6 +630,29 @@ export function takeSeal(g, poi) {
   return true;
 }
 export function readClue(g) { questW(g, g.adv.region).clue = true; }
+// Fin de una carrera contra un personaje: si ganas, te da su pieza.
+export function raceDone(g, poi, win) {
+  const q = questW(g, g.adv.region);
+  if (!win || q.seals.includes(poi.id)) return false;
+  q.seals.push(poi.id);
+  return true;
+}
+// Las farolas del acertijo: hay que encenderlas en el orden de la región. Un fallo las apaga todas.
+export const lit = (g, poi) => !!g.adv && (!!questOf(g, g.adv.region).puzzle || (g.adv.seq || []).includes(poi.key));
+export function press(g, poi) {
+  const r = regionOf(g), q = questW(g, r.id), order = r.quest.order;
+  if (q.puzzle) return { done: true };
+  const seq = (g.adv.seq ||= []);
+  if (order[seq.length] !== poi.key) {
+    g.adv.seq = poi.key === order[0] ? [poi.key] : [];
+    return { ok: false, lit: g.adv.seq.length, total: order.length };
+  }
+  seq.push(poi.key);
+  if (seq.length < order.length) return { ok: true, lit: seq.length, total: order.length };
+  q.puzzle = true;
+  g.adv.seq = [];
+  return { ok: true, solved: true };
+}
 // Llamar a la puerta: se abre (para siempre) si llevas todos los sellos.
 export function openDoor(g) {
   const s = seals(g, g.adv.region);

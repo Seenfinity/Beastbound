@@ -34,13 +34,13 @@ function blend(img, height, tint) {
 
 export class Explore {
   // art: { map (imagen), player (lienzo), wild(poi) → lienzo, icon(nombre) → lienzo, chest (lienzo), glint (lienzo) }
-  // hooks: { onReach(poi), onMove() }
+  // hooks: { onReach(poi), onMove(), onRace(poi, ganó) }
   constructor(canvas, game, art, hooks) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.g = game; this.zone = A.zoneOf(game); this.art = art; this.hooks = hooks;
     const region = A.regionOf(game);
     this.tint = region.tint || 'rgba(26, 34, 118, .24)'; this.motes = region.motes || 'fireflies';   // la luz y el aire de la región
-    this.region = region; this.discover = !!region.discover;                   // con `discover`, las marcas solo salen de cerca
+    this.region = region; this.discover = !!region.discover; this.token = A.tokenOf(region.id); this.race = null;                   // con `discover`, las marcas solo salen de cerca
     this.x = game.adv.x; this.y = game.adv.y;
     if (!A.walkable(this.zone, this.x, this.y)) [this.x, this.y] = this.zone.start;
     this.dir = 1; this.t = 0; this.hop = 0; this.moving = false; this.busy = false;
@@ -95,6 +95,34 @@ export class Explore {
 
   pois() { return this.zone.pois.filter(p => A.active(this.g, p)); }
 
+  // Una carrera contra un personaje: hay que tocar sus puntos en orden antes de que él complete el recorrido.
+  startRace(poi) {
+    let from = [poi.x, poi.y];
+    const path = [];
+    for (const pt of poi.course) { path.push(...A.pathTo(this.zone, ...from, ...pt)); from = pt; }
+    this.race = { poi, next: 0, path, rival: { x: poi.x, y: poi.y, dir: 1, hop: 0 }, wait: 0.6 };   // un instante de ventaja para arrancar
+    this.halt(); this.skip = poi.id;
+  }
+  runRace(dt) {
+    const race = this.race, { rival, poi } = race;
+    if ((race.wait -= dt) < 0) {
+      let left = poi.speed * dt;
+      while (left > 0 && race.path.length) {
+        const [tx, ty] = race.path[0], d = Math.hypot(tx - rival.x, ty - rival.y);
+        if (d <= left) { rival.x = tx; rival.y = ty; left -= d; race.path.shift(); continue; }
+        if (Math.abs(tx - rival.x) > 1) rival.dir = tx > rival.x ? 1 : -1;
+        rival.x += ((tx - rival.x) / d) * left; rival.y += ((ty - rival.y) / d) * left; left = 0;
+      }
+      rival.hop += dt;
+    }
+    const [gx, gy] = poi.course[race.next];
+    if (Math.hypot(gx - this.x, gy - this.y) < 34) race.next++;
+    const won = race.next >= poi.course.length, lost = !won && !race.path.length;
+    if (!won && !lost) return;
+    this.race = null; this.halt(); this.busy = true;
+    this.hooks.onRace?.(poi, won);
+  }
+
   update(dt) {
     this.t += dt;
     if (this.busy) { this.moving = false; return; }
@@ -119,8 +147,8 @@ export class Explore {
       if ((this.saved += dt) > 4) { this.saved = 0; this.hooks.onMove?.(); }
     } else this.hop = 0;
 
-    this.roam(dt);
-    this.meet();
+    if (this.race) this.runRace(dt);                    // durante la carrera nadie más se mueve ni te corta el paso
+    else { this.roam(dt); this.meet(); }
     this.center();
   }
 
@@ -179,14 +207,24 @@ export class Explore {
       else if (it.wild) {
         const w = it.wild, boss = w.poi.type === 'boss';
         drawn.push(this.beast(this.art.wild(w.poi), w.x, w.y, boss ? BOSS : WILD, w.dir, w.hop ? Math.abs(Math.sin(w.hop * (w.chasing ? 14 : 9))) * 6 : 0));
-      } else if (it.npc) drawn.push(this.beast(this.art.wild(it.npc), it.npc.x, it.npc.y, NPC, this.x < it.npc.x ? -1 : 1, Math.sin(this.t * 2.1 + it.npc.x) * 1.2));   // los personajes te miran
+      } else if (it.npc && this.race?.poi === it.npc) { const v = this.race.rival; drawn.push(this.beast(this.art.wild(it.npc), v.x, v.y, NPC, v.dir, Math.abs(Math.sin(v.hop * 14)) * 7)); }
+      else if (it.npc) drawn.push(this.beast(this.art.wild(it.npc), it.npc.x, it.npc.y, NPC, this.x < it.npc.x ? -1 : 1, Math.sin(this.t * 2.1 + it.npc.x) * 1.2));   // los personajes te miran
       else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.type === 'coal' ? 'roca' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
       else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) {
         const seal = it.chest.type === 'seal';
-        drawn.push(this.beast(seal ? this.art.icon('escudo') : this.art.chest, it.chest.x, it.chest.y + 6, seal ? 34 : 44, 1, 0, false));
+        drawn.push(this.beast(seal ? this.art.icon(this.token?.icon || 'escudo') : this.art.chest, it.chest.x, it.chest.y + 6, seal ? 34 : 44, 1, 0, false));
       }
     }
 
+    // Las farolas del acertijo que ya están encendidas
+    ctx.globalCompositeOperation = 'lighter';
+    for (const poi of zone.pois) {
+      if (poi.type !== 'switch' || !A.lit(this.g, poi)) continue;
+      const pulse = 0.75 + 0.25 * Math.sin(this.t * 3 + poi.x), grad = ctx.createRadialGradient(poi.x, poi.y - 44, 0, poi.x, poi.y - 44, 64);
+      grad.addColorStop(0, `rgba(190, 255, 250, ${0.95 * pulse})`); grad.addColorStop(0.35, `rgba(90, 230, 255, ${0.5 * pulse})`); grad.addColorStop(1, 'rgba(60, 160, 255, 0)');
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(poi.x, poi.y - 44, 64, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
     this.air();
 
     // Por encima de todo: rótulos, marcas y el brillo que delata un cofre escondido cuando pasas cerca.
@@ -198,7 +236,7 @@ export class Explore {
     const clue = A.questOf(this.g, this.region.id).clue;
     for (const poi of this.pois()) {
       const d = Math.hypot(poi.x - this.x, poi.y - this.y);
-      if (poi.type === 'npc') { this.label(tr(poi.name), poi.x, poi.y - NPC - 8, '#9ff0c8'); continue; }
+      if (poi.type === 'npc') { const v = this.race?.poi === poi ? this.race.rival : poi; this.label(tr(poi.name), v.x, v.y - NPC - 8, '#9ff0c8'); continue; }
       if (this.discover && d > NEAR && (poi.type === 'rest' || poi.type === 'event')) continue;   // se descubre al acercarse
       if (poi.type === 'rest') this.marker(this.art.icon('corazon'), poi.x, poi.y - 34 + Math.sin(this.t * 2.2) * 3, 26);
       else if (poi.type === 'event') this.marker(this.art.icon('estrella'), poi.x, poi.y - 30 + Math.sin(this.t * 2.2 + 1) * 3, 26);
@@ -209,7 +247,7 @@ export class Explore {
         this.marker(this.art.glint, poi.x, poi.y - 14, 22 + pulse * 16 + close * 18);
         ctx.globalAlpha = 1;
       }
-    }
+    }    if (this.race) this.drawRace();
   }
 
   // El aire de la región: luciérnagas que rondan, ascuas que suben desde la lava o nieve que cae.
@@ -238,6 +276,18 @@ export class Explore {
       ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(fx, fy, radius, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Los puntos de la carrera: el siguiente, grande y con su número; los demás, apagados.
+  drawRace() {
+    const { ctx, race } = this, pts = race.poi.course;
+    for (let i = pts.length - 1; i >= race.next; i--) {
+      const [x, y] = pts[i], now = i === race.next;
+      ctx.globalAlpha = now ? 1 : 0.4;
+      this.marker(this.art.icon('trofeo'), x, y - 26 - (now ? Math.abs(Math.sin(this.t * 5)) * 8 : 0), now ? 44 : 28);
+      ctx.globalAlpha = 1;
+      if (now) this.label(`${i + 1} / ${pts.length}`, x, y - 62, '#ffd76a');
+    }
   }
 
   // Pinta una bestia (o un cofre) integrada en el mapa: sombra, grano de píxel y, en la hierba alta, los pies tapados.
