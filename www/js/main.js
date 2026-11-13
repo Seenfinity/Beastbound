@@ -275,10 +275,10 @@ function renderCare() {
   $('coins').textContent = game.coins;
   $('pet-name').textContent = p.name;
   $('pet-sub').textContent = `${sp.name} · ${sp.element} · ${STAGES[p.stage]}`;
-  const need = S.expNeeded(p.level);
+  const need = S.expNeeded(p.level), top = p.level >= S.MAX_LEVEL;
   $('pet-level').textContent = `Nivel ${p.level}`;
-  $('exp-fill').style.width = (p.exp / need) * 100 + '%';
-  $('exp-text').textContent = `${Math.floor(p.exp)} / ${need}`;
+  $('exp-fill').style.width = (top ? 100 : (p.exp / need) * 100) + '%';
+  $('exp-text').textContent = top ? 'Nivel máximo' : `${Math.floor(p.exp)} / ${need}`;
   setMeter('m-hunger', p.hunger); setMeter('m-energy', p.energy); setMeter('m-mood', p.mood); setMeter('m-bond', p.bond);
   const nap = S.sleepLeft(game);
   setHTML($('btn-sleep'), `<i class="ic ic-luna"></i> ${nap ? `Durmiendo… ${duration(nap)}` : p.asleep ? 'Despertar' : 'Acostar a dormir'}`);
@@ -363,7 +363,7 @@ function renderCare() {
   setHTML($('team'), game.pets.map((m, i) => `<button class="mate${i === game.active ? ' on' : ''}" data-pet="${i}"><i class="sp sp-${m.species}-${m.stage}"${hueStyle(m)}></i>${own(m.name)}</button>`).join(''));
   setHTML($('missions'), S.dailyMissions(game).map(m => `<div class="mission${m.done ? ' done' : ''}"><span>${m.text}</span>
       <small>${m.done ? 'Cumplida' : `${m.got} de ${m.goal}`} · ${m.coins}<i class="ic ic-moneda"></i></small></div>`).join('')
-    + `<p class="muted">${game.missionsBonus ? '¡Las tres cumplidas! Mañana habrá nuevas.' : `Cumple las tres y ganas ${S.MISSION_BONUS} monedas más.`}</p>`);
+    + `<p class="muted">${game.missionsBonus ? '¡Las tres cumplidas! Mañana habrá nuevas.' : `Cumple las tres y ganas ${S.MISSION_BONUS} monedas y ${S.MISSION_BONUS_EXP} EXP más.`}</p>`);
   renderEggs();
 
   $('tip').textContent = p.asleep ? `${p.name} está durmiendo. Se despierta sola cuando esté recuperada, o puedes despertarla tú.`
@@ -790,7 +790,7 @@ function endBattle(win) {
     ? `<p>Le ganaste a <b translate="no">${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
     : `<p><b translate="no">${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
-  const rest = `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p><p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
+  const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
   modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + rest, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;

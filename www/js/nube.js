@@ -10,7 +10,8 @@ import { account, accessToken } from './account.js';
 const params = new URLSearchParams(globalThis.location?.search || '');
 export const DEV = ['localhost', '127.0.0.1'].includes(globalThis.location?.hostname);
 export const guest = DEV && params.has('invitado') ? `dev:${(params.get('invitado') || 'invitado').replace(/[^\w-]/g, '') || 'invitado'}` : '';
-const base = DEV && params.has('nube') ? 'http://localhost:8787' : API_URL;
+// En desarrollo: ?nube usa el servidor local; un invitado sin ?nube juega sin nube (el servidor real no acepta invitados).
+const base = DEV && params.has('nube') ? 'http://localhost:8787' : guest ? '' : API_URL;
 
 // status: '' (nada que contar) · 'saving' · 'saved' · 'offline'
 export const cloud = { on: !!base, rev: 0, status: '' };

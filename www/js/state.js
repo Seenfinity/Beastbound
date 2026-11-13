@@ -175,11 +175,12 @@ export const MISSIONS = {
   under: { cat: 'fight', text: 'Gana a un rival con ventaja de elemento sobre ti', goal: 1, coins: 45, on: e => yes(e.type === 'battle' && e.win && e.disadvantage) },
 };
 export const MISSION_BONUS = 40;
+export const MISSION_EXP = 20, MISSION_BONUS_EXP = 40;   // las misiones también dan experiencia: es lo que más ayuda a quien juega poco
 
 // Requisitos para evolucionar: nivel y días de vida. [Baby→Mid, Mid→Final]
 export const EVOLVE = [{ level: 10, days: 3 }, { level: 30, days: 14 }];
 
-export const FIGHT_ENERGY = 20, TRAIN_ENERGY = 25, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
+export const FIGHT_ENERGY = 15, TRAIN_ENERGY = 15, PLAY_ENERGY = 6, TRAINS_PER_DAY = 3, MAX_EGGS = 3, MAX_PETS = 6;
 export const DEFEATS_FOR_EGG = 10;      // victorias contra una misma especie para ganar su huevo
 export const MIN_SLEEP = 5 * 60000;     // una vez dormida, no se la puede despertar antes de este tiempo
 export const MAX_SLEEP = 8 * 3600000;   // se cansa de dormir y se despierta sola pasado este tiempo
@@ -190,7 +191,9 @@ const today = () => new Date().toDateString();
 const argmax = (obj, keys) => keys.reduce((best, k) => (obj[k] > obj[best] ? k : best), keys[0]);
 const fill = (text, pet) => text.replaceAll('{n}', pet.name);
 
-export const expNeeded = level => 25 + level * 15;
+// Experiencia para subir de nivel. Hasta el 30 (forma Final) sube a buen ritmo; del 30 al tope, cada nivel cuesta bastante más.
+export const MAX_LEVEL = 50;
+export const expNeeded = level => (level < 30 ? 25 + level * 15 : 475 + (level - 30) * 60);
 export const ageDays = pet => (Date.now() - pet.born) / 864e5;
 
 // g.pet es siempre la bestia activa (no se guarda: se calcula).
@@ -390,9 +393,9 @@ export function track(g, e) {
     const def = MISSIONS[m.id];
     if (m.done || !def) continue;
     m.got = Math.min(def.goal, m.got + def.on(e));
-    if (m.got >= def.goal) { m.done = true; g.coins += def.coins; news(g, `Misión cumplida: ${def.text}. +${def.coins} monedas`); }
+    if (m.got >= def.goal) { m.done = true; g.coins += def.coins; news(g, `Misión cumplida: ${def.text}. +${def.coins} monedas y +${MISSION_EXP} EXP`); addExp(g, MISSION_EXP); }
   }
-  if (!g.missionsBonus && g.missions.every(m => m.done)) { g.missionsBonus = true; g.coins += MISSION_BONUS; news(g, `¡Las tres misiones de hoy! +${MISSION_BONUS} monedas extra`); }
+  if (!g.missionsBonus && g.missions.every(m => m.done)) { g.missionsBonus = true; g.coins += MISSION_BONUS; news(g, `¡Las tres misiones de hoy! +${MISSION_BONUS} monedas y +${MISSION_BONUS_EXP} EXP extra`); addExp(g, MISSION_BONUS_EXP); }
 }
 
 // --- Objetos ---
@@ -515,7 +518,8 @@ export function addExp(g, amount) {
   const gains = [];
   let levels = 0;
   p.exp += Math.round(amount * (p.quirk === 'listo' ? 1.1 : 1) * (has(g, 'libros') ? 1.05 : 1));
-  while (p.exp >= expNeeded(p.level)) {
+  if (p.level >= MAX_LEVEL) p.exp = 0;                  // en el tope ya no acumula
+  while (p.level < MAX_LEVEL && p.exp >= expNeeded(p.level)) {
     p.exp -= expNeeded(p.level);
     p.level++; levels++;
     const diet = Object.fromEntries(STATS.map(k => [k, p.diet[k] || 0]));
@@ -526,6 +530,7 @@ export function addExp(g, amount) {
     gains.push(byDiet, byKind);
     p.diet = { pot: 0, agu: 0, pun: 0, agi: 0 };
     log(g, `Subió al nivel ${p.level}.`);
+    if (p.level >= MAX_LEVEL) p.exp = 0;
   }
   return { levels, gains };
 }
@@ -718,7 +723,7 @@ export function profile(pet) {
   };
 }
 
-// Tras un combate hay que recuperarse: más cuanto más herida acabe, y mucho más si pierde.
+// Tras perder un combate hay que recuperarse (más cuanto más herida acabe). Ganando solo si acaba casi sin vida.
 export const restLeft = pet => Math.max(0, (pet.restUntil || 0) - Date.now());
 export const healCost = (g, pet = g.pet) => 5 + (g.testMode ? 0 : Math.ceil(restLeft(pet) / 60000));
 export function heal(g) {
@@ -756,7 +761,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   if (!g.seen.includes(rival.species)) g.seen.push(rival.species);
   if (win) {
     exp = 24 + rival.level * 5;
-    coins = Math.round((8 + rival.level * 2) * (has(g, 'trofeo') ? 1.1 : 1));
+    coins = Math.round((10 + rival.level) * (has(g, 'trofeo') ? 1.1 : 1));
     g.coins += coins; g.wins++;
     p.mood = clamp(p.mood + 10); p.bond = clamp(p.bond + 2);
     g.defeats[rival.species] = (g.defeats[rival.species] || 0) + 1;
@@ -773,7 +778,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
     log(g, `Perdió contra ${rival.name}.`);
   }
   const hurt = 1 - Math.max(0, Math.min(1, hpLeft));
-  const minutes = win ? hurt * 10 : 15 + hurt * 20;
+  const minutes = win ? (hurt > 0.75 ? 3 : 0) : 10 + hurt * 10;   // ganar no obliga a esperar, salvo acabar casi sin vida
   const rest = minutes * (g.testMode ? 1000 : 60000) * (p.quirk === 'duro' ? 0.75 : 1);   // en modo prueba, segundos en vez de minutos
   p.restUntil = Date.now() + rest;
   p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
