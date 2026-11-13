@@ -130,12 +130,13 @@ export function tr(s) {
 
 const ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
 const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT']);
+const OURS_ONLY = '[translate="no"], [id^="privy-"], [id^="headlessui-"]';   // nombres propios y la ventana de Privy: no se tocan
 const put = new WeakMap();                            // nodo de texto → lo último que escribimos en él
 
 function textNode(node, checked = false) {
   const data = node.data;
   if (put.get(node) === data) return;
-  if (!checked) { const p = node.parentElement; if (!p || SKIP.has(p.tagName) || p.closest('[translate="no"]')) return; }
+  if (!checked) { const p = node.parentElement; if (!p || SKIP.has(p.tagName) || p.closest(OURS_ONLY)) return; }
   const flat = data.replace(/\s+/g, ' '), out = tr(flat);
   if (out !== flat) { put.set(node, out); node.data = out; }
 }
@@ -149,9 +150,9 @@ function attrs(el) {
 }
 function walk(root) {
   if (root.nodeType === 3) return textNode(root);
-  if (root.nodeType !== 1 || SKIP.has(root.tagName) || root.closest('[translate="no"]')) return;
+  if (root.nodeType !== 1 || SKIP.has(root.tagName) || root.closest(OURS_ONLY)) return;
   attrs(root);
-  const it = document.createTreeWalker(root, 5, { acceptNode: n => (n.nodeType === 1 && (SKIP.has(n.tagName) || n.getAttribute('translate') === 'no') ? 2 : 1) });
+  const it = document.createTreeWalker(root, 5, { acceptNode: n => (n.nodeType === 1 && (SKIP.has(n.tagName) || n.matches(OURS_ONLY)) ? 2 : 1) });
   for (let n = it.nextNode(); n; n = it.nextNode()) { if (n.nodeType === 3) textNode(n, true); else attrs(n); }
 }
 
@@ -171,7 +172,7 @@ export function watch() {
       for (const m of list) {
         if (m.type === 'childList') m.addedNodes.forEach(walk);
         else if (m.type === 'characterData') textNode(m.target);
-        else if (m.target.nodeType === 1 && !m.target.closest('[translate="no"]')) attrs(m.target);
+        else if (m.target.nodeType === 1 && !m.target.closest(OURS_ONLY)) attrs(m.target);
       }
     }).observe(html, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   }

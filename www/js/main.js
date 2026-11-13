@@ -11,6 +11,7 @@ import { music } from './music.js';
 import * as RK from './ranking.js';
 import { playEvolution } from './evolution.js';
 import { watch, locale } from './i18n.js';
+import { account, onAccount, startAccount, login, logout, shortWallet } from './account.js';
 
 watch();                                             // traduce la página si el idioma no es español
 
@@ -863,6 +864,23 @@ function renderDex() {
   }).join(''));
 }
 
+// Cuenta: entrar o salir con Privy. La fila solo aparece si las cuentas están configuradas.
+function renderAccount() {
+  const row = $('account-row'), u = account.user, btn = $('btn-account');
+  row.hidden = account.state === 'off';
+  if (row.hidden) return;
+  const who = u && (u.email || shortWallet(u.wallet));
+  $('account-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
+    : account.state === 'failed' ? 'No se pudo conectar con el servicio de cuentas. Recarga la página para reintentar.'
+    : !u ? 'Entra con tu correo o tu wallet de Solana. Pronto servirá para llevar tu partida a cualquier dispositivo.'
+    : u.wallet && u.email ? `Has entrado como ${who}. Wallet de Solana: ${shortWallet(u.wallet)}` : `Has entrado como ${who}.`;
+  btn.hidden = account.state === 'failed';
+  btn.disabled = account.state !== 'ready';
+  btn.textContent = u ? 'Salir' : 'Entrar';
+}
+$('btn-account').onclick = () => { sfx.tap(); if (account.user) logout(); else login(); };
+onAccount(renderAccount);
+
 $('btn-test').onclick = () => { game.testMode = !game.testMode; S.save(game); renderAll(); };
 $('btn-sound').onclick = () => { setMuted(!isMuted()); renderAll(); sfx.coin(); };
 $('btn-music').onclick = () => { music.setOn(!music.isOn()); renderAll(); sfx.tap(); };
@@ -939,6 +957,7 @@ try {
   window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, vfx }; // para depurar desde la consola
   game = S.load();
   if (game?.pet) { S.tick(game); enterGame(); } else showStart();
+  startAccount();                                     // las cuentas se cargan después, sin retrasar el juego
   requestAnimationFrame(frame);
 } catch (err) {
   console.error(err);

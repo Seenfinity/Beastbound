@@ -1,0 +1,22 @@
+{
+  "name": "beast-bound-cuenta",
+  "private": true,
+  "type": "module",
+  "description": "Pieza de inicio de sesión (Privy) de Beast Bound. Se compila a www/js/cuenta/.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "^3.51.4",
+    "@solana-program/memo": "latest",
+    "@solana-program/system": "latest",
+    "@solana-program/token": "latest",
+    "@solana/kit": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "vite-plugin-node-polyfills": "latest"
+  }
+}

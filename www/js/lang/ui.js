@@ -355,6 +355,18 @@ export default [
   ['El usuario debe tener de 3 a 16 letras, números o guion bajo, sin espacios.', 'The username must be 3 to 16 letters, numbers or underscores, with no spaces.', '用户名须为 3 到 16 个字母、数字或下划线，不能有空格。'],
   ['Ficha guardada: {!0} {!1}', 'Profile saved: {0} {1}', '档案已保存：{0} {1}'],
 
+  // ---------- Cuenta ----------
+  ['Cuenta', 'Account', '账号'],
+  ['Entrar', 'Log in', '登录'],
+  ['Salir', 'Log out', '退出登录'],
+  ['Conectando con el servicio de cuentas…', 'Connecting to the account service…', '正在连接账号服务…'],
+  ['No se pudo conectar con el servicio de cuentas. Recarga la página para reintentar.', "Couldn't connect to the account service. Reload the page to try again.", '无法连接账号服务。请刷新页面重试。'],
+  ['Entra con tu correo o tu wallet de Solana. Pronto servirá para llevar tu partida a cualquier dispositivo.', 'Log in with your email or your Solana wallet. Soon it will let you take your game to any device.', '使用邮箱或 Solana 钱包登录。之后可以用它把存档带到任何设备。'],
+  ['Has entrado como {!0}.', 'Logged in as {0}.', '已登录：{0}。'],
+  ['Has entrado como {!0}. Wallet de Solana: {!1}', 'Logged in as {0}. Solana wallet: {1}', '已登录：{0}。Solana 钱包：{1}'],
+  ['Entra en Beast Bound', 'Log in to Beast Bound', '登录 Beast Bound'],
+  ['Con tu correo o tu wallet de Solana.', 'With your email or your Solana wallet.', '使用邮箱或 Solana 钱包。'],
+
   // ---------- Ajustes ----------
   ['Idioma', 'Language', '语言'],
   ['Se elige solo según tu dispositivo. Aquí puedes cambiarlo.', 'Picked automatically from your device. You can change it here.', '默认跟随你的设备语言，也可以在这里切换。'],
