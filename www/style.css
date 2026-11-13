@@ -498,6 +498,8 @@ canvas { display: block; }
 .adv-regions button.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 200, 61, .3); }
 .adv-regions button.on small { color: var(--gold); }
 .adv-regions button:disabled { opacity: .45; cursor: default; }
+.adv-regions button.locked { cursor: default; border-style: dashed; }
+.adv-regions button.locked b { color: var(--muted); }
 @media (max-width: 560px) { .adv-regions { grid-template-columns: 1fr; } }
 .adventure { display: grid; gap: 10px; }
 .adv-hud { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

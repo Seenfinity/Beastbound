@@ -640,6 +640,7 @@ const OBSERVATORIO = {
 };
 
 // Cada región lleva la luz con que se tiñen las bestias (tint) y lo que flota en el aire (motes).
+// Van en orden: `after` dice a qué jefe hay que vencer antes para que se abra.
 export const REGIONS = {
   islas: { id: 'islas', name: 'Islas del Castillo', map: 'castillo', first: 'portal', zones: { portal: PORTAL, jardin: JARDIN, ruinas: RUINAS, bosque: BOSQUE, torre: TORRE, castillo: CASTILLO }, boss: 'solaris', reward: { coins: 150, item: 'pocion', again: 40 }, discover: true,
     intro: 'El portón del castillo se abre con tres rayos de sol. Reúnelos y vence al Guardián del Castillo. La vida no se recupera entre combates.',
@@ -656,6 +657,7 @@ export const REGIONS = {
   forja: { id: 'forja', name: 'Forja Volcánica', map: 'volcan', first: 'ceniza', zones: { ceniza: CENIZA, fundicion: FUNDICION, ladera: LADERA }, tint: 'rgba(120, 28, 6, .2)', motes: 'embers',
     // La historia de la región: tres sellos abren la puerta del jefe. `discover` esconde las marcas de lo que hay hasta que te acercas.
     discover: true, reward: { coins: 250, item: 'pocion', again: 60 },
+    after: 'islas', lock: 'Se abre al vencer al Guardián del Castillo', opened: 'Se ha abierto una región nueva: la Forja Volcánica.',
     intro: 'Tres sellos cierran la puerta del volcán. Reúnelos, ábrela y vence al Señor de la Forja. La vida no se recupera entre combates.',
     win: '¡Has vencido al Señor de la Forja!', again: 'Ya venciste al Señor de la Forja. Puedes volver a por lo que dejaste.',
     quest: {
@@ -670,6 +672,7 @@ export const REGIONS = {
     } },
   tundra: { id: 'tundra', name: 'Tundra de la Aurora', map: 'aurora', first: 'nevada', zones: { nevada: NEVADA, cristal: CRISTAL, observatorio: OBSERVATORIO }, tint: 'rgba(30, 70, 170, .2)', motes: 'snow',
     discover: true, reward: { coins: 400, item: 'elixir', again: 90 },
+    after: 'forja', lock: 'Se abre al vencer al Señor de la Forja', opened: 'Se ha abierto una región nueva: la Tundra de la Aurora.',
     intro: 'El observatorio solo se abre con las tres lentes de su telescopio. Reúnelas y vence a la Guardiana de la Aurora. La vida no se recupera entre combates.',
     win: '¡Has vencido a la Guardiana de la Aurora!', again: 'Ya venciste a la Guardiana de la Aurora. Puedes volver a por lo que dejaste.',
     quest: {
@@ -693,6 +696,15 @@ export const REST_HEAL = 0.5;
 export const regionOf = g => (g.adv ? REGIONS[g.adv.region] : null);
 export const zoneOf = g => (g.adv ? REGIONS[g.adv.region].zones[g.adv.zone] : null);
 export const cleared = (g, region) => (g.advCleared || {})[region] || 0;
+// ¿Dejó huella la jugadora en esta región? (una expedición a medias, un cofre, algo de su historia o el jefe vencido)
+const touched = (g, region) => g.adv?.region === region || cleared(g, region) > 0 || !!g.advQuest?.[region] || (g.advChests || []).some(id => id.startsWith(region + ':'));
+// ¿Se puede entrar ya? Una región se abre al vencer al jefe de la anterior. Quien ya había estado en ella
+// (o en una posterior) antes de que hubiera orden la conserva abierta.
+export function open(g, region) {
+  const r = REGIONS[region], order = Object.keys(REGIONS);
+  if (!r.after || cleared(g, r.after)) return true;
+  return order.slice(order.indexOf(region)).some(id => touched(g, id));
+}
 // De qué nivel a qué nivel son las bestias salvajes de una región.
 export function levels(region) {
   const all = Object.values(REGIONS[region].zones).flatMap(z => z.pois.filter(p => p.type === 'wild' || p.type === 'boss').map(p => p.level));
@@ -903,7 +915,7 @@ export function makeWild(poi) {
 }
 
 // Tras un combate de la expedición. hp (0–1) y mp son con lo que acabó tu bestia.
-// Devuelve { over } si la expedición termina, y { reward } la primera vez que cae el jefe.
+// Devuelve { over } si la expedición termina, y { reward } la primera vez que cae el jefe ({ opened }: la región que se abre).
 export function afterBattle(g, poi, win, hp, mp) {
   if (!g.adv) return { over: true };
   if (!win) { g.adv = null; return { over: true }; }
@@ -916,13 +928,15 @@ export function afterBattle(g, poi, win, hp, mp) {
     return { over: false, seal: true };
   }
   const region = REGIONS[g.adv.region], first = !cleared(g, region.id);
+  const next = Object.values(REGIONS).find(r => r.after === region.id);       // la región que se abre al vencer a este jefe
+  const opened = next && !open(g, next.id) ? next.id : null;
   (g.advCleared ||= {})[region.id] = cleared(g, region.id) + 1;
   g.adv = null;
   if (!first) { const coins = region.reward?.again || 0; g.coins += coins; return { over: true, boss: true, coins }; }   // repetir da solo unas monedas
   const reward = { ...region.reward, egg: grantEgg(g, poi.species) };
   g.coins += reward.coins;
   if (reward.item) g.items[reward.item] = (g.items[reward.item] || 0) + 1;
-  return { over: true, boss: true, reward };
+  return { over: true, boss: true, reward, opened };
 }
 
 export const itemName = id => ITEMS[id]?.name || id;

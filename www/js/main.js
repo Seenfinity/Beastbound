@@ -853,7 +853,7 @@ function endBattle(win) {
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
   const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
   const trip = !adv ? ''
-    : adv.reward ? `<p><b>${advZone.win}</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}`
+    : adv.reward ? `<p><b>${advZone.win}</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}${adv.opened ? `<p><b>${A.REGIONS[adv.opened].opened}</b></p>` : ''}`
     : adv.boss ? `<p><b>${advZone.win}</b></p>${adv.coins ? `<p>Recompensa: +${adv.coins} monedas</p>` : ''}`
     : adv.over ? '<p>La expedición termina aquí.</p>'
     : `${adv.seal ? `<p><b>${A.tokenOf(advZone.id).got}</b></p>${advTokens(advZone.id)}` : ''}<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
@@ -887,11 +887,13 @@ const ADV_THUMB = { castillo: 'assets/landing/castillo.webp', volcan: 'assets/la
 function dropAdventure() { explore = null; advFight = null; $('adventure').hidden = true; }
 
 function renderAdvCard() {
+  if (!A.open(game, advRegion)) advRegion = Object.keys(A.REGIONS).filter(id => A.open(game, id)).pop();   // la elegida sigue cerrada: la última abierta
   const on = !!game.adv, shown = A.REGIONS[game.adv?.region] || A.REGIONS[advRegion], box = A.chests(game, shown.id);
   // Con una expedición a medias se sigue en su región; para cambiar hay que volver antes a casa.
+  // Las regiones van en orden: la que aún no se ha abierto dice a qué jefe hay que vencer antes.
   $('adv-regions').innerHTML = Object.values(A.REGIONS).map(r => {
-    const [lo, hi] = A.levels(r.id);
-    return `<button data-region="${r.id}" class="${r === shown ? 'on' : ''}"${on && r !== shown ? ' disabled' : ''}><b>${r.name}</b><small>Bestias de nivel ${lo} a ${hi}</small></button>`;
+    const [lo, hi] = A.levels(r.id), locked = !A.open(game, r.id);
+    return `<button data-region="${r.id}" class="${r === shown ? 'on' : ''}${locked ? ' locked' : ''}"${locked ? ' aria-disabled="true"' : ''}${on && r !== shown ? ' disabled' : ''}><b>${r.name}</b><small>${locked ? r.lock : `Bestias de nivel ${lo} a ${hi}`}</small></button>`;
   }).join('');
   $('adv-thumb-img').src = ADV_THUMB[shown.map];
   $('adv-thumb-name').textContent = shown.name;
@@ -923,6 +925,7 @@ async function openAdventure() {
   if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
   if (!game.adv && S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   const region = A.REGIONS[game.adv?.region] || A.REGIONS[advRegion];
+  if (!game.adv && !A.open(game, region.id)) return toast(region.lock);
   A.start(game, region.id);
   const zone = A.zoneOf(game);
   $('btn-adv').disabled = true;
@@ -1103,6 +1106,7 @@ $('btn-adv').onclick = () => { sfx.tap(); openAdventure(); };
 $('adv-regions').addEventListener('click', e => {
   const id = e.target.closest('button[data-region]')?.dataset.region;
   if (!id || !A.REGIONS[id] || game.adv) return;
+  if (!A.open(game, id)) return toast(A.REGIONS[id].lock);
   advRegion = id;
   try { localStorage.setItem('petbound-adv-region', id); } catch { /* sin almacenamiento */ }
   sfx.tap();
