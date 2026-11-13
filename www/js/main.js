@@ -797,14 +797,13 @@ function startBattle(map) {
   // Lo que tapan los botones de abajo: el suelo del campo se levanta para quedar por encima.
   const box = $('field').getBoundingClientRect(), tops = [$('b-powers'), $('b-items')].map(el => el.getBoundingClientRect()).filter(r => r.height).map(r => r.top);
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
-  battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
+  // El campo y las bestias miden lo mismo en todas las pantallas; en las estrechas la vista cercana se acerca más.
+  battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, 1, { vfx, icon: name => powerIcons[name] }, pad, {
+    near: w < 520 ? 1.4 : 1,
+    ...(advFight ? { hp: game.adv.hp, ...(game.adv.mp != null ? { mp: game.adv.mp } : {}) } : {}),   // en la expedición se entra con la vida y el MP que te queden
+    tutor: S.guideStep(game) === 'battle',             // primer combate: se ve la trayectoria entera
+  });
   battle.setView(viewFar, true);
-  if (advFight) {                                      // en la expedición se entra con la vida y el MP que te queden
-    const me = battle.player;
-    me.hp = Math.max(1, Math.round(me.maxHp * game.adv.hp));
-    if (game.adv.mp != null) me.mp = Math.min(me.maxMp, game.adv.mp);
-  }
-  if (S.guideStep(game) === 'battle') { battle.tutor = true; battle.player.sight = true; }   // primer combate: se ve la trayectoria entera
   music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
   renderGuide();
@@ -1402,7 +1401,7 @@ function frame(now) {
       if ($('tray').hidden !== (hideTray || !trayOpen)) $('tray').hidden = hideTray || !trayOpen;
       if ($('plate').hidden !== busy) { $('plate').hidden = busy; if (busy) { $('btn-evolve').hidden = true; room.editing = false; } }
     }
-    else if (tab === 'battle' && battle) { battle.update(dt); battle.draw(); renderBattle(); }
+    else if (tab === 'battle' && battle) { battle.update(dt); if (battle) { battle.draw(); renderBattle(); } }   // al acabar, el combate puede cerrarse dentro de update
     else if (tab === 'battle' && explore && !$('adventure').hidden) { explore.update(dt); explore.draw(); }
   }
   requestAnimationFrame(frame);

@@ -2,23 +2,18 @@
 // poderes con MP, ventajas entre elementos y efectos propios de cada mapa.
 
 import { fit, scaled } from './sprites.js';
-import { ELEMENT_COLOR, matchup, MOOD } from './roster.js';
+import { ELEMENT_COLOR, MOOD } from './roster.js';
 import { CHARS } from './state.js';
 import { sfx } from './sfx.js';
 import { tr } from './i18n.js';
+import { Combat, WORLD, FLOOR, STEP, STEP_LEN, TURN_TIME } from './combate.js';
 
+export { WORLD, TURN_TIME };
 export const W = 640;                   // ancho de lo que cabe en pantalla, en unidades de juego (el alto depende de la pantalla)
-export const WORLD = 1200;              // ancho del campo entero: la cámara lo recorre
-const STEP_LEN = 16;                    // lo que avanza un paso corto
-const SKY = 240;                        // cielo por encima de lo que cabe en pantalla, para ver los tiros altos
-const GRAVITY = 300, WIND_K = 5, STEP = 1 / 120;
-export const TURN_TIME = 30;            // segundos para apuntar y disparar; si se acaban, se pierde el turno
-const SIZE = [{ h: 48, r: 15 }, { h: 60, r: 19 }, { h: 74, r: 23 }]; // alto y radio de golpe por etapa
 
 const rad = d => (d * Math.PI) / 180;
-const rand = (a, b) => a + Math.random() * (b - a);
+const rand = (a, b) => a + Math.random() * (b - a);   // el azar de los adornos: no cuenta para el combate
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const speedOf = power => 120 + power * 5;          // a tope, un tiro cruza todo el campo
 
 // Aspecto de cada elemento: colores de la explosión y partículas del impacto.
 const FX = {
@@ -48,90 +43,42 @@ function zigzag(x, y, a, len) {
   return pts;
 }
 
-// Terreno: ondulación suave, una meseta alta o una hondonada donde aparece cada bando
-// y dos o tres obstáculos (picos o fosos) entre ambos.
-function makeTerrain(H) {                              // H: la altura a la que acaba lo que se ve del suelo
-  const t = new Float32Array(WORLD);
-  const base = H - rand(96, 124), a1 = rand(10, 22), f1 = rand(0.004, 0.009), p1 = rand(0, 6.28);
-  const a2 = rand(4, 8), f2 = rand(0.02, 0.035), p2 = rand(0, 6.28);
-  const feats = [];
-  const spawn = left => {
-    const high = Math.random() < 0.5, x = left ? rand(110, 300) : rand(WORLD - 300, WORLD - 110);
-    feats.push({ x, w: rand(70, 105), h: high ? rand(110, 200) : -rand(8, 36), flat: true });
-    return { x, high };
-  };
-  const spawns = [spawn(true), spawn(false)];
-  const n = 1 + Math.floor(rand(0, 2));               // uno o dos obstáculos entre ambos
-  for (let i = 0; i < n; i++) {
-    const x = 430 + ((WORLD - 860) * (i + rand(0.2, 0.8))) / n;
-    feats.push(Math.random() < 0.65 ? { x, w: rand(40, 76), h: rand(60, 150) } : { x, w: rand(50, 90), h: -rand(30, 60) });
-  }
-  for (let x = 0; x < WORLD; x++) {
-    let y = base + Math.sin(x * f1 + p1) * a1 + Math.sin(x * f2 + p2) * a2;
-    for (const f of feats) { const d = Math.abs(x - f.x) / f.w; y -= f.h * Math.exp(f.flat ? -(d ** 4) : -(d * d) / 2); }
-    t[x] = clamp(y, H - 340, H - 26);
-  }
-  return { t, spawns };
-}
-
-export class Battle {
+// La pantalla del combate: dibuja lo que calcula el motor (combate.js), le pone sonido y efectos, mueve la cámara
+// y convierte los gestos del jugador en disparos y pasos. Aquí no se decide nada del combate.
+export class Battle extends Combat {
   // Cada bando: { pet, prof, species, sprite, powers }. hooks: { onEnd(win) }
-  // H es el alto del campo; scale agranda a las bestias en pantallas estrechas.
+  // H es el alto de lo que se ve; scale agranda a las bestias (solo en la demostración de la portada).
   // art: { vfx: {nombre: lienzo}, icon(nombreDePoder) → lienzo } para los efectos e iconos.
   // pad: franja de abajo que tapan los botones; el suelo se levanta para que no quede debajo.
-  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}, pad = 0) {
-    this.canvas = canvas; this.map = map; this.hooks = hooks; this.scale = scale; this.art = art;
+  // opts: { seed, hp, mp, tutor } para el motor y near (cuánto acerca la vista cercana; en pantallas estrechas, más).
+  constructor(canvas, player, rival, map, hooks, H = 420, scale = 1, art = {}, pad = 0, opts = {}) {
+    super(player, rival, map, opts.seed ?? Math.floor(Math.random() * 2 ** 32), { ...opts, scale });
+    this.canvas = canvas; this.hooks = hooks; this.art = art;
+    this.near = opts.near || 1;
     this.VH = H;                                     // alto de lo que se ve
     this.pad = pad = clamp(pad, 0, H * 0.5);
-    this.H = H = Math.max(H + 120, 360 + SKY);        // alto del campo entero
-    this.clock = TURN_TIME; this.beep = 6;
-    this.stats = { dianas: 0, powerHits: 0 };       // lo que hizo el jugador: cuenta para las misiones
-    this.itemUsed = false;
-    const land = makeTerrain(H - pad);
-    this.terrain = land.t; this.spawns = land.spawns;
+    this.H = FLOOR + pad;                            // alto del campo entero: el suelo acaba justo encima de los botones
+    this.beep = 6;
     this.ground = document.createElement('canvas');
-    this.ground.width = WORLD * 2; this.ground.height = H * 2;
+    this.ground.width = WORLD * 2; this.ground.height = this.H * 2;
     this.dirty = true;
-    this.player = this.makeFighter(player, land.spawns[0].x, 1, true);
-    this.rival = this.makeFighter(rival, land.spawns[1].x, -1, false);
-    this.shots = []; this.fx = []; this.texts = []; this.gusts = []; this.parts = [];
+    for (const f of [this.player, this.rival]) f.color = ELEMENT_COLOR[f.species.element] || '#fff6d8';
+    this.fx = []; this.texts = []; this.gusts = []; this.parts = [];
     this.rings = []; this.pillars = []; this.casts = [];   // adornos de los poderes
     // Cámara: empieza enseñando al rival y luego viaja hasta quien tenga el turno.
-    this.cam = { x: clamp(this.rival.x - W / 2, 0, WORLD - W), y: clamp(this.rival.y - (this.VH - pad) * 0.62, 0, H - this.VH) };
+    this.cam = { x: clamp(this.rival.x - W / 2, 0, WORLD - W), y: clamp(this.rival.y - (this.VH - pad) * 0.62, 0, this.H - this.VH) };
     this.look = null; this.pan = false; this.intro = 1.3;
-    this.t = 0; this.acc = 0; this.shake = 0; this.flash = 0; this.wind = 0; this.round = 0;
+    this.acc = 0; this.shake = 0; this.flash = 0;
     this.lastAim = null; this.lastPath = [];         // tu tiro anterior: para repetirlo o corregirlo
-    this.pull = null; this.armed = -1; this.volley = null;
-    this.stepLeft = 0; this.stepDir = 1; this.hold = false;   // pasos cortos del jugador
-    this.far = false; this.zoom = 1;                 // vista lejana (todo el campo) o cercana
-    this.banner = null; this.ended = false;
-    this.setupHazards(map.hazards || {});
+    this.pull = null; this.armed = -1;
+    this.far = false; this.zoom = this.near;         // vista lejana (todo el campo) o cercana
+    this.banner = null;
+    this.snow = map.hazards?.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(18, 46) })) : [];
     this.setupAmbient();
-    this.startTurn(this.player);
+    this.start();
   }
 
-  makeFighter(side, x, dir, isPlayer) {
-    const z = SIZE[side.pet.stage];
-    return {
-      ...side, isPlayer, x, y: this.groundAt(x), dir, r: z.r * this.scale, h: z.h * this.scale,
-      hp: side.prof.maxHp, maxHp: side.prof.maxHp, mp: side.prof.maxMp, maxMp: side.prof.maxMp,
-      cds: side.powers.map(() => 0), turns: 0, angle: dir > 0 ? 55 : 125, power: 60, fuel: 0,
-      shield: 0, shieldLook: 'burbuja', counter: 0, exposed: 0, poison: null, burn: null,
-      frozen: false, frozenNext: false, blind: false, blindNext: false, rooted: false, rootNext: false,
-      clutchUsed: false, hurt: 0, fall: 0, lunge: 0, hitDir: 0, color: ELEMENT_COLOR[side.species.element] || '#fff6d8',
-    };
-  }
 
-  // --- Efectos del mapa ---
-  setupHazards(h) {
-    // Todo se reparte por la zona central, entre los dos bandos.
-    const spread = (n, make) => Array.from({ length: n }, (_, i) => make(rand(340 + ((WORLD - 680) * i) / n, 340 + ((WORLD - 680) * (i + 0.9)) / n)));
-    this.rocks = spread(h.rocks ? h.rocks + 1 : 0, x => ({ x, y: Math.max(40, this.groundAt(x) - rand(80, 210)), rx: rand(26, 40), ry: rand(13, 18) }));
-    this.thermals = spread(h.thermals ? h.thermals + 1 : 0, x => ({ x, w: rand(34, 48) }));
-    this.birds = Array.from({ length: h.birds || 0 }, (_, i) => this.newBird(i, true));
-    this.gusty = !!h.gusty;
-    this.snow = h.snow ? Array.from({ length: 46 }, () => ({ x: rand(0, W), y: rand(0, this.VH), v: rand(18, 46) })) : [];
-  }
   // Ambiente propio de cada mapa: no afecta al juego, solo le da vida.
   setupAmbient() {
     const id = this.map.id;
@@ -186,66 +133,95 @@ export class Battle {
     ctx.globalAlpha = 1;
   }
 
-  newBird(i, anywhere = false) {
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    return { x: anywhere ? rand(0, WORLD) : dir > 0 ? -20 : WORLD + 20, y: rand(this.H - this.VH + 30, this.H - this.pad - 210), dir, v: rand(36, 60), phase: i * 2.1, away: 0 };
-  }
-  rockAt(x, y) { return this.rocks.find(r => ((x - r.x) / r.rx) ** 2 + ((y - r.y) / r.ry) ** 2 < 1); }
-  lift(x) { return this.thermals.some(t => Math.abs(x - t.x) < t.w / 2) ? 560 : 0; } // empuje hacia arriba
-  windNow() { return this.wind + (this.gusty ? Math.sin(this.t * 1.9) * 2.5 : 0); }
 
-  groundAt(x) { return this.terrain[clamp(Math.round(x), 0, WORLD - 1)]; }
-  other(f) { return f === this.player ? this.rival : this.player; }
   say(text, time = 1.6) { this.banner = { text, t: time }; }
   note(f, text, color = '#fff6d8', size = 15) { this.texts.push({ x: f.x, y: f.y - f.h - 12 - this.texts.filter(e => e.t < 0.3).length * 16, text, t: 0, color, size }); }
-  canAct() { return this.phase === 'aim' && this.turn === this.player; }
-  canUse(f, i) { const p = f.powers[i]; return !!p && this.phase === 'aim' && this.turn === f && f.cds[i] === 0 && f.mp >= p.mp; }
 
-  startTurn(f) {
-    this.turn = f;
-    for (const [key, tag] of [['burn', 'Quemadura'], ['poison', 'Veneno']]) {
-      if (!f[key]) continue;
-      this.hurt(f, f[key].dmg, null, tag);
-      if (--f[key].turns <= 0) f[key] = null;
-      if (f.hp <= 0) return this.finish();
+  // --- Lo que avisa el motor: aquí se convierte en imagen y sonido ---
+  emit(type, a, b, c) {
+    if (type === 'shot') this.trail(a, b);
+    else if (type === 'turn') { this.beep = 6; this.look = null; if (a.isPlayer) sfx.turn(); }
+    else if (type === 'input') { this.look = null; this.intro = 0; this.pull = null; }
+    else if (type === 'fire') {                       // a: quien dispara · b: el poder que suma (o null) · c: cómo se ve
+      if (a.isPlayer) { this.armed = -1; this.lastAim = { angle: a.angle, power: a.power }; this.lastPath = []; }
+      if (b) this.cast(a, b, c);
+      this.look = null; this.intro = 0;
+      if (b) sfx.special(); else sfx.shoot();
     }
-    if (f.prof.regen && f.hp < f.maxHp) this.heal(f, Math.round(f.maxHp * f.prof.regen));
-    f.frozen = f.frozenNext; f.blind = f.blindNext || f.frozen; f.rooted = f.rootNext || f.frozen;
-    f.frozenNext = f.blindNext = f.rootNext = false;
-    f.fuel = f.rooted ? 0 : f.prof.fuel;
-    f.cds = f.cds.map(c => Math.max(0, c - 1));
-    if (f.turns++ > 0) f.mp = Math.min(f.maxMp, f.mp + f.prof.mpRegen);
-    // El viento dura toda la ronda (tu turno y el del rival) y cambia poco: lo aprendido en un tiro sirve para el siguiente.
-    if (f.isPlayer) this.wind = this.round++ ? clamp(this.wind + Math.round(rand(-3, 3)), -8, 8) : Math.round(rand(-6, 6));
-    this.phase = 'aim';
-    this.clock = TURN_TIME; this.beep = 6;
-    this.itemUsed = false; f.sight = !!(this.tutor && f.isPlayer);   // tutor: en el primer combate se ve la trayectoria entera
-    this.look = null;
-    if (f.isPlayer) sfx.turn();
-    this.say(f.frozen ? `${f.pet.name} está congelado` : f.blind ? `${f.pet.name} está cegado: apunta peor` : f.rooted ? `${f.pet.name} no puede moverse` : f.isPlayer ? '¡Tu turno!' : `Turno de ${f.pet.name}`);
-    if (!f.isPlayer) { this.aiTimer = 1.5; this.aiReady = false; }
-  }
-
-  muzzle(f, angle) {
-    const a = rad(angle), d = f.r + 6;
-    return [f.x + Math.cos(a) * d, f.y - f.r - Math.sin(a) * d];
-  }
-
-  // Simula un disparo normal (con rocas y aire caliente): es la guía de tiro y como apunta la máquina.
-  trace(x, y, angle, power, limit = 0) {
-    const v = speedOf(power);
-    let vx = Math.cos(rad(angle)) * v, vy = -Math.sin(rad(angle)) * v;
-    const pts = [];
-    for (let i = 0; i < 1800; i++) {
-      vx += this.wind * WIND_K * STEP; vy += (GRAVITY - this.lift(x)) * STEP;
-      x += vx * STEP; y += vy * STEP;
-      if (limit && i % 3 === 0) { pts.push([x, y]); if (pts.length >= limit) return { pts, end: null }; }
-      if (x < -80 || x > WORLD + 80 || y > this.H + 30) return { pts, end: null };
-      if (this.rockAt(x, y)) return { pts, end: null };
-      if (x >= 0 && x < WORLD && y >= this.groundAt(x)) return { pts, end: [x, y] };
+    else if (type === 'terrain') this.dirty = true;
+    else if (type === 'explode') this.boom(a);
+    else if (type === 'diana') {                      // a: el disparo · b: quien lo lanzó
+      if (b.isPlayer) sfx.good();
+      for (let i = 0; i < 10; i++) { const ang = rand(0, 6.283), v = rand(40, 130); this.parts.push({ k: 'star', x: a.x, y: a.y, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v, g: 0, life: 0, max: rand(0.4, 0.8), c: '#ffd76a', s: rand(4, 7), a: ang }); }
     }
-    return { pts, end: null };
+    else if (type === 'rock') { this.fx.push({ x: a.x, y: a.y, r: 16, t: 0.15, color: '#cfd3e6' }); sfx.bounce(); }
+    else if (type === 'bird') {
+      this.fx.push({ x: a.x, y: a.y, r: 12, t: 0.2, color: '#ffffff' });
+      this.texts.push({ x: a.x, y: a.y - 10, text: '¡Un pájaro!', t: 0, color: '#fff6d8', size: 12 });
+    }
+    else if (type === 'bounce') this.fx.push({ x: a.x, y: a.y, r: 10, t: 0.2, color: '#ffffff' });
+    else if (type === 'timeout') { this.pull = null; this.armed = -1; sfx.bad(); }
+    else if (type === 'item') sfx.coin();
+    else if (type === 'end') this.hooks.onEnd(a);
   }
+  // Una explosión: fogonazo, partículas de su elemento, temblor y, si fallaste, por cuánto.
+  boom(s) {
+    const me = s.owner, look = fxOf(me.species.element);
+    this.fx.push({ x: s.x, y: s.y, r: s.blast, t: 0, colors: look.c });
+    this.spray(s.x, s.y, me.species.element, s.blast);
+    this.shake = Math.min(9, s.blast / 5);
+    this.flash = look.flash || 0.14;
+    if (look.flash) this.puff('destello', s.x, s.y, s.blast * 3.2, 0.45);
+    if (s.style) this.impact(s);
+    sfx.boom();
+    if (me.isPlayer && s.rec !== false) {               // si no le das, te dice por cuánto: corto o largo
+      const foe = this.rival, miss = Math.hypot(foe.x - s.x, foe.y - foe.r - s.y) >= s.blast + foe.r;
+      if (miss && s.rec) {
+        const over = (s.x - foe.x) * Math.sign(foe.x - me.x) > 0, by = Math.round(Math.abs(s.x - foe.x));
+        this.texts.push({ x: s.x, y: s.y - 26, text: `${over ? 'Largo' : 'Corto'} por ${by}`, t: -0.6, color: '#fff6d8', size: 14 });
+      }
+    }
+  }
+  // La estela de un disparo en vuelo.
+  trail(s, dt) {
+    const n = Math.round(s.age / dt);
+    if (n % 3 === 0) { s.trail.push([s.x, s.y]); if (s.trail.length > 10) s.trail.shift(); }
+    if (s.rec && n % 5 === 0) this.lastPath.push([s.x, s.y]);   // el camino de tu tiro se queda dibujado
+    if (n % (s.style ? 2 : 6) === 0) {                 // estela con el aspecto de su elemento (más densa en los poderes)
+      const look = fxOf(s.owner.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
+      this.parts.push({ k: kind, x: s.x, y: s.y, vx: rand(-12, 12), vy: rand(-12, 12), g: kind === 'drop' || kind === 'rock' ? 160 : kind === 'ember' || kind === 'flame' ? -40 : 0, life: 0, max: rand(0.25, 0.5), c: look.c[Math.floor(rand(0, 3))], s: s.style ? rand(3, 5.5) : rand(1.5, 3), a: rand(0, 6) });
+    }
+  }
+
+  // --- Bucle ---
+  update(dt) {
+    this.acc += dt;
+    while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
+  }
+  // Un paso: primero lo que solo se ve (temblor, textos, partículas, cámara) y luego el paso del motor.
+  step(dt) {
+    this.shake *= 0.94;
+    this.flash = Math.max(0, this.flash - dt);
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    this.fx = this.fx.filter(e => (e.t += dt) < 0.45);
+    for (const list of ['rings', 'pillars', 'casts']) this[list] = this[list].filter(e => (e.t += dt) < e.max);
+    this.zoom += ((this.far ? W / WORLD : this.near) - this.zoom) * (1 - Math.exp(-9 * dt));
+    this.updateCam(dt);
+    this.texts = this.texts.filter(e => (e.t += dt) < 1.2);
+    for (const q of this.parts) { q.life += dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
+    this.parts = this.parts.filter(q => q.life < q.max);
+    if (this.canAct()) {
+      const f = this.player;
+      if (this.clock <= 5 && Math.ceil(this.clock) < this.beep) { this.beep = Math.ceil(this.clock); sfx.tap(); }
+      if (this.armed >= 0 && Math.random() < dt * 30) this.charge(f);
+      if (!(this.stepLeft > 0 || this.hold) && this.pull?.aiming) f.dir = Math.cos(rad(f.angle)) >= 0 ? 1 : -1;
+    }
+    super.step(dt);
+  }
+
+
+
+
 
   // Minimapa: arriba, en el centro. Tocarlo o arrastrarlo mueve la cámara para mirar el campo.
   mini() {
@@ -260,19 +236,9 @@ export class Battle {
   setView(far, instant = false) {
     this.far = far; this.look = null;
     if (far) this.intro = 0;
-    if (instant) { this.zoom = far ? W / WORLD : 1; this.updateCam(1); }
+    if (instant) { this.zoom = far ? W / WORLD : this.near; this.updateCam(1); }
   }
 
-  // Pasos cortos: cada toque avanza un poco; si se mantiene pulsado, sigue andando.
-  nudge(dir, hold = false) {
-    if (!this.canAct()) return;
-    const f = this.player;
-    this.look = null; this.intro = 0; this.pull = null;
-    if (f.fuel <= 0) { if (!this.hold) this.note(f, f.rooted ? 'No puede moverse' : 'Sin pasos este turno', '#9aa0c8', 12); return; }
-    this.stepDir = dir; this.stepLeft = STEP_LEN; this.hold = hold;
-  }
-  release() { this.hold = false; }
-  stepsLeft(f = this.player) { return Math.ceil(f.fuel / STEP_LEN - 0.05); }
 
   // Tirachinas: se arrastra hacia atrás desde cualquier punto y se suelta para disparar.
   // Un toque sin arrastrar da un paso corto hacia ese lado.
@@ -312,19 +278,6 @@ export class Battle {
     if (p.aiming) { if (this.player.power > 8) this.fire(this.armed); }
     else if (!p.aimed && Math.abs(p.wx - this.player.x) > 6) this.nudge(p.wx > this.player.x ? 1 : -1);   // un toque; volver al inicio solo cancela
   }
-  // Usa un objeto de la mochila: uno por turno y sin gastar el turno. Devuelve si se pudo usar.
-  useItem(id) {
-    if (!this.canAct() || this.itemUsed) return false;
-    const f = this.player;
-    if (id === 'pocion') { if (f.hp >= f.maxHp) return false; this.heal(f, Math.round(f.maxHp * 0.3)); }
-    else if (id === 'elixir') { if (f.mp >= f.maxMp) return false; const got = Math.min(15, f.maxMp - f.mp); f.mp += got; this.note(f, `+${got} MP`, '#7fe9ff'); this.puff('mana', f.x, f.y - f.h * 0.7, f.h * 0.8, 0.8, -30); }
-    else if (id === 'escudo') { if (f.shield >= 0.5) return false; f.shield = 0.5; f.shieldLook = 'burbuja'; this.note(f, 'Escudo', '#4db8ff'); }
-    else if (id === 'mira') { if (f.sight) return false; f.sight = true; this.note(f, 'Mira', '#ffd76a'); }
-    else return false;
-    this.itemUsed = true;
-    sfx.coin();
-    return true;
-  }
 
   // Prepara (o quita) un poder para sumarlo al próximo disparo.
   arm(i) {
@@ -332,53 +285,6 @@ export class Battle {
     else if (this.canUse(this.player, i)) this.armed = i;
   }
 
-  fire(index = -1) {
-    if (this.phase !== 'aim') return;
-    const f = this.turn, foe = this.other(f);
-    if (index >= 0 && !this.canUse(f, index)) index = -1;
-    const pw = index >= 0 ? f.powers[index] : null, sp = pw || {};
-    const m = pw ? f.prof.mastery : '';
-    if (f.isPlayer) { this.armed = -1; this.lastAim = { angle: f.angle, power: f.power }; this.lastPath = []; }
-    let angle = f.angle;
-    if (f.isPlayer && Math.random() < f.prof.disobey) {
-      angle += (Math.random() < 0.5 ? -1 : 1) * rand(5, 9);
-      this.say(`¡${f.pet.name} no te hizo caso!`);
-    } else if (pw) {
-      this.say(`${f.pet.name}: ¡${pw.name}!`);
-    }
-    let dmg = f.prof.dmg * (sp.dmg ?? 1) * (m === 'pot' ? 1.25 : 1);
-    if (f.pet.char === 'feroz' && f.hp < f.maxHp / 2) dmg *= 1.2;
-    const blast = (sp.blast ?? 36) * (m === 'pun' ? 1.3 : 1);
-    if (pw) {
-      f.mp -= pw.mp;
-      f.cds[index] = Math.max(1, pw.cd - (m === 'agi' ? 1 : 0)) + 1; // +1 porque baja al empezar su próximo turno
-      if (sp.shield) f.shield = sp.shield;
-      if (m === 'agu') f.shield = Math.max(f.shield, 0.3);
-      f.shieldLook = ['Metal', 'Tierra', 'Eléctrico/Tierra'].includes(f.species.element) ? 'hexagono' : 'burbuja';
-      if (sp.counter) f.counter = sp.counter;
-      if (sp.heal) this.heal(f, Math.round(f.maxHp * sp.heal));
-      if (sp.gust) this.wind = (foe.x > f.x ? 1 : -1) * 8;
-    }
-    this.volley = pw ? { f, index, name: pw.name, hit: false } : null;
-    // Cómo se ve el proyectil de un poder: onda (rugidos), cometa (golpes gordos), rayo (rápidos) u orbe.
-    const style = !pw ? '' : sp.expose ? 'wave' : (sp.dmg ?? 1) >= 1.3 || blast >= 40 ? 'comet' : sp.fast || sp.noWind || sp.pierce ? 'beam' : 'orb';
-    if (pw) this.cast(f, pw, style);
-    this.look = null; this.intro = 0;
-    const n = sp.count ?? 1;
-    for (let i = 0; i < n; i++) {
-      const a = angle + (i - (n - 1) / 2) * (sp.spread ?? 0);
-      const [x, y] = this.muzzle(f, a);
-      const v = speedOf(f.power) * (sp.fast ?? 1);
-      this.shots.push({
-        x, y, vx: Math.cos(rad(a)) * v, vy: -Math.sin(rad(a)) * v, dmg, blast, owner: f, sp,
-        age: 0, bounces: 0, pierceLeft: sp.pierce || 0, trail: [], big: blast > 40, style, rec: f.isPlayer && i === Math.floor((n - 1) / 2),
-      });
-    }
-    this.stepLeft = 0; this.hold = false;
-    f.lunge = 1;                                      // se abalanza al disparar
-    this.phase = 'flying';
-    if (pw) sfx.special(); else sfx.shoot();
-  }
 
   // Al lanzar un poder: ondas, partículas de su elemento y su emblema sobre la bestia.
   cast(f, pw, style) {
@@ -410,112 +316,12 @@ export class Battle {
     if (mark) this.puff(mark, s.x, s.y - b * 0.4, b * 3, 0.85, -16);
   }
 
-  surrender() {
-    if (this.phase === 'over') return;
-    this.player.hp = 0;
-    this.finish(0.3);
-  }
 
   // --- Efectos ---
 
-  heal(f, amount) {
-    const real = Math.min(amount, f.maxHp - f.hp);
-    if (real <= 0) return;
-    f.hp += real;
-    this.note(f, `+${real}`, '#7dff9b');
-    this.puff('curar', f.x, f.y - f.h * 0.6, f.h * 1.1, 0.9, -26);
-  }
 
-  hurt(f, amount, from, tag = '') {
-    let dmg = Math.max(1, Math.round(amount));
-    if (f.shield > 0 && from) { dmg = Math.max(1, Math.round(dmg * (1 - f.shield))); f.shield = 0; this.note(f, 'Escudo', '#4db8ff', 12); }
-    if (f.counter > 0 && from && from !== f) {
-      const back = Math.max(1, Math.round(dmg * f.counter));
-      f.counter = 0;
-      from.hp = Math.max(0, from.hp - back); from.hurt = 0.35;
-      this.note(from, `-${back} devuelto`, '#ffd23f');
-    }
-    if (f.hp - dmg <= 0 && f.prof.clutch && !f.clutchUsed) {
-      f.clutchUsed = true;
-      dmg = f.hp - 1;
-      this.say(f.isPlayer ? `¡${f.pet.name} aguanta por ti!` : `¡${f.pet.name} se niega a caer!`, 1.8);
-    }
-    f.hp = Math.max(0, f.hp - dmg);
-    f.hurt = 0.35;
-    const strong = tag === '¡Eficaz!', weak = tag === 'Poco eficaz';
-    this.note(f, `-${dmg}${tag ? ' ' + tag : ''}`, strong ? '#ff8a3d' : weak ? '#9aa0c8' : tag === 'Veneno' ? '#9be33c' : tag === 'Quemadura' ? '#ff9d2e' : '#ffd76a', strong ? 19 : weak ? 13 : 15);
-    return dmg;
-  }
 
-  carve(cx, cy, r) {
-    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD - 1, Math.ceil(cx + r)); x++) {
-      const dy = Math.sqrt(Math.max(0, r * r - (x - cx) ** 2)), g = this.terrain[x];
-      if (g >= cy + dy) continue;                       // el suelo queda por debajo del hueco
-      this.terrain[x] = Math.min(this.H - this.pad - 10, g >= cy - dy ? cy + dy : g + 2 * dy);
-    }
-    this.dirty = true;
-  }
-  mound(cx, r) {
-    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WORLD - 1, Math.ceil(cx + r)); x++) {
-      const up = Math.sqrt(Math.max(0, r * r - (x - cx) ** 2)) * 1.25;
-      this.terrain[x] = Math.max(this.H - this.pad - 360, this.terrain[x] - up);
-    }
-    this.dirty = true;
-  }
 
-  explode(s) {
-    s.dead = true;
-    const sp = s.sp, me = s.owner;
-    if (sp.mound) this.mound(s.x, sp.mound); else this.carve(s.x, s.y, s.blast * 0.75);
-    const look = fxOf(me.species.element);
-    this.fx.push({ x: s.x, y: s.y, r: s.blast, t: 0, colors: look.c });
-    this.spray(s.x, s.y, me.species.element, s.blast);
-    this.shake = Math.min(9, s.blast / 5);
-    this.flash = look.flash || 0.14;
-    if (look.flash) this.puff('destello', s.x, s.y, s.blast * 3.2, 0.45);
-    if (s.style) this.impact(s);
-    sfx.boom();
-    if (me.isPlayer && s.rec !== false) {               // si no le das, te dice por cuánto: corto o largo
-      const foe = this.rival, miss = Math.hypot(foe.x - s.x, foe.y - foe.r - s.y) >= s.blast + foe.r;
-      if (miss && s.rec) {
-        const over = (s.x - foe.x) * Math.sign(foe.x - me.x) > 0, by = Math.round(Math.abs(s.x - foe.x));
-        this.texts.push({ x: s.x, y: s.y - 26, text: `${over ? 'Largo' : 'Corto'} por ${by}`, t: -0.6, color: '#fff6d8', size: 14 });
-      }
-    }
-    for (const f of [this.player, this.rival]) {
-      const d = Math.hypot(f.x - s.x, f.y - f.r - s.y);
-      if (d >= s.blast + f.r) continue;
-      const k = clamp(1 - (d - f.r) / s.blast, 0, 1), foe = f !== me;
-      f.hitDir = Math.sign(f.x - s.x) || (foe ? Math.sign(f.x - me.x) : 0);   // hacia dónde lo empuja el golpe
-      let dmg = s.dmg * (0.3 + 0.7 * k), tag = '';
-      if (foe) {                                        // ventaja o desventaja de elemento
-        const mult = matchup(me.species.element, f.species.element);
-        dmg *= mult;
-        tag = mult > 1 ? '¡Eficaz!' : mult < 1 ? 'Poco eficaz' : '';
-        if (f.exposed > 0) { dmg *= 1.25; f.exposed--; }
-      }
-      if (foe && k >= 0.9) {                            // impacto directo: premio a la puntería
-        dmg *= 1.2;
-        this.note(f, '¡Diana!', '#ffd76a', 14);
-        if (me.isPlayer) { this.stats.dianas++; sfx.good(); }
-        for (let i = 0; i < 10; i++) { const a = rand(0, 6.283), v = rand(40, 130); this.parts.push({ k: 'star', x: s.x, y: s.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: 0, max: rand(0.4, 0.8), c: '#ffd76a', s: rand(4, 7), a }); }
-      }
-      if (sp.crit && k > 0.45 && Math.random() < sp.crit) { dmg *= 2; this.note(f, '¡Crítico!', '#ffffff', 13); }
-      const done = this.hurt(f, dmg, me, tag);
-      if (!foe) continue;
-      if (this.volley && !this.volley.hit) { this.volley.hit = true; if (me.isPlayer) this.stats.powerHits++; }
-      const dot = turns => ({ turns, dmg: Math.max(2, Math.round(me.prof.dmg * 0.32)) });
-      if (sp.drain) this.heal(me, Math.round(done * sp.drain));
-      if (sp.poison) { f.poison = dot(sp.poison); this.note(f, '¡Envenenado!', '#9be33c', 13); }
-      if (sp.burn) { f.burn = dot(sp.burn); this.note(f, '¡Quemado!', '#ff9d2e', 13); }
-      if (sp.freeze) { f.frozenNext = true; this.note(f, '¡Congelado!', '#c9f1ff', 13); }
-      if (sp.blind) { f.blindNext = true; this.note(f, '¡Cegado!', '#c9a8ff', 13); }
-      if (sp.root) { f.rootNext = true; this.note(f, '¡Inmóvil!', '#d9b06a', 13); }
-      if (sp.expose) { f.exposed = sp.expose; this.note(f, '¡Debilitado!', '#ff7a7a', 13); }
-      if (sp.shock) { const lost = Math.min(f.mp, sp.shock); f.mp -= lost; if (lost) { this.note(f, `-${lost} MP`, '#7fe9ff', 12); this.puff('mana', f.x, f.y - f.h * 0.7, f.h * 0.7, 0.8, -34); } }
-      if (sp.push) f.x = clamp(f.x + (f.x >= me.x ? 1 : -1) * sp.push, 14, WORLD - 14);
-    }
-  }
 
   // Un efecto dibujado (de la hoja de efectos) que aparece, crece un poco y se desvanece.
   puff(name, x, y, size, time = 0.6, rise = 0) {
@@ -564,181 +370,13 @@ export class Battle {
     }
   }
 
-  // Una roca flotante para el disparo y se va rompiendo.
-  hitRock(rock, s) {
-    s.dead = true;
-    this.fx.push({ x: s.x, y: s.y, r: 16, t: 0.15, color: '#cfd3e6' });
-    rock.rx *= 0.62; rock.ry *= 0.72;
-    if (rock.rx < 15) this.rocks = this.rocks.filter(r => r !== rock);
-    sfx.bounce();
-  }
 
-  tryMove(f, dir, dt) {
-    if (f.fuel <= 0) return;
-    const dx = dir * 42 * dt, nx = clamp(f.x + dx, 14, WORLD - 14);
-    if (f.y - this.groundAt(nx + dir * 2) > 5) return; // cuesta demasiado empinada
-    f.x = nx;
-    f.fuel = Math.max(0, f.fuel - Math.abs(dx));
-    f.dir = dir;
-  }
 
-  planAI() {
-    const f = this.rival, tgt = this.player, left = tgt.x < f.x;
-    let best = null;
-    const tryShot = (angle, power) => {
-      const [x, y] = this.muzzle(f, angle);
-      const end = this.trace(x, y, angle, power).end;
-      if (!end) return;
-      const d = Math.abs(end[0] - tgt.x) + Math.abs(end[1] - tgt.y) * 0.3;
-      if (!best || d < best.d) best = { d, angle, power };
-    };
-    for (let i = 0; i < 160; i++) tryShot(left ? rand(98, 172) : rand(8, 82), rand(25, 100));
-    for (let i = 0; best && i < 60; i++) tryShot(clamp(best.angle + rand(-5, 5), 0, 180), clamp(best.power + rand(-7, 7), 10, 100));
-    best = best || { angle: left ? 135 : 45, power: 70 };
-    // Como un jugador: el primer tiro es a ojo y va corrigiendo mientras el objetivo no se mueva.
-    if (f.aimedAt === undefined || Math.abs(tgt.x - f.aimedAt) > 30) f.tries = 0;
-    f.aimedAt = tgt.x;
-    const learn = Math.max(0.5, 1 - 0.12 * f.tries++);
-    const err = clamp(11 - f.pet.level * 0.25, 3.5, 11) * learn * (f.blind ? 2.2 : 1);
-    f.angle = clamp(best.angle + rand(-err, err), 0, 180);
-    f.power = clamp(best.power + rand(-err, err) * 1.2, 10, 100);
-  }
-  // La máquina usa a veces el poder más caro que pueda pagar.
-  pickPower(f) {
-    const ready = f.powers.map((p, i) => i).filter(i => this.canUse(f, i));
-    return ready.length && Math.random() < 0.6 ? ready.reduce((a, b) => (f.powers[b].mp > f.powers[a].mp ? b : a)) : -1;
-  }
 
-  finish(delay = 1.3) {
-    this.phase = 'over';
-    this.overTimer = delay;
-    const win = this.rival.hp <= 0 && this.player.hp > 0;
-    this.say(win ? '¡Victoria!' : 'Derrota…', 9);
-  }
 
   // --- Bucle ---
 
-  update(dt) {
-    this.t += dt;
-    this.acc += dt;
-    while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-  }
 
-  step(dt) {
-    this.shake *= 0.94;
-    this.flash = Math.max(0, this.flash - dt);
-    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
-    for (const f of [this.player, this.rival]) {
-      f.hurt = Math.max(0, f.hurt - dt);
-      f.lunge = Math.max(0, f.lunge - dt * 3.2);
-      if (f.hp <= 0) f.fall = Math.min(1, f.fall + dt * 2.2); // se desploma
-      const g = this.groundAt(f.x);
-      f.y = f.y < g ? Math.min(g, f.y + 220 * dt) : g;
-    }
-    this.fx = this.fx.filter(e => (e.t += dt) < 0.45);
-    for (const list of ['rings', 'pillars', 'casts']) this[list] = this[list].filter(e => (e.t += dt) < e.max);
-    this.zoom += ((this.far ? W / WORLD : 1) - this.zoom) * (1 - Math.exp(-9 * dt));
-    this.updateCam(dt);
-    this.texts = this.texts.filter(e => (e.t += dt) < 1.2);
-    for (const q of this.parts) { q.life += dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
-    this.parts = this.parts.filter(q => q.life < q.max);
-    this.birds.forEach((b, i) => {
-      if (b.away > 0) { if ((b.away -= dt) <= 0) Object.assign(b, this.newBird(i)); return; }
-      b.x += b.v * b.dir * dt;
-      if (b.x < -30 || b.x > WORLD + 30) Object.assign(b, this.newBird(i));
-    });
-
-    if (this.phase === 'aim') {
-      const f = this.turn;
-      if (f.isPlayer) {
-        if (this.intro <= 0) this.clock -= dt;         // el reloj espera a que la cámara llegue
-        if (this.clock <= 5 && Math.ceil(this.clock) < this.beep) { this.beep = Math.ceil(this.clock); sfx.tap(); }
-        if (this.clock <= 0) {                         // se acabó el tiempo: pierde el turno
-          this.clock = 0; this.pull = null; this.armed = -1; this.stepLeft = 0; this.hold = false;
-          this.say('¡Se acabó el tiempo!', 1.6); sfx.bad();
-          this.phase = 'resolve'; this.timer = 1.2;
-          return;
-        }
-        if (this.armed >= 0 && Math.random() < dt * 30) this.charge(f);
-        if (this.stepLeft > 0 || this.hold) {         // da pasos cortos
-          const before = f.x;
-          this.tryMove(f, this.stepDir, dt);
-          const moved = Math.abs(f.x - before);
-          this.stepLeft = Math.max(0, this.stepLeft - moved);
-          if (!moved) {                               // sin pasos, o la cuesta es demasiado empinada
-            if (f.fuel > 0) this.note(f, 'Muy empinado', '#9aa0c8', 12);
-            this.stepLeft = 0; this.hold = false;
-          }
-        } else if (this.pull?.aiming) f.dir = Math.cos(rad(f.angle)) >= 0 ? 1 : -1;
-      } else {
-        this.aiTimer -= dt;
-        if (!this.aiReady && this.aiTimer <= 0.6) { this.planAI(); this.aiReady = true; f.dir = Math.cos(rad(f.angle)) >= 0 ? 1 : -1; }
-        if (this.aiTimer <= 0) this.fire(this.pickPower(f));
-      }
-    }
-
-    for (const s of this.shots) {
-      s.age += dt;
-      if (!s.sp.noWind) s.vx += this.windNow() * WIND_K * dt;
-      s.vy += (GRAVITY - this.lift(s.x)) * dt;
-      s.x += s.vx * dt; s.y += s.vy * dt;
-      if (Math.round(s.age / dt) % 3 === 0) { s.trail.push([s.x, s.y]); if (s.trail.length > 10) s.trail.shift(); }
-      if (s.rec && Math.round(s.age / dt) % 5 === 0) this.lastPath.push([s.x, s.y]);   // el camino de tu tiro se queda dibujado
-      if (Math.round(s.age / dt) % (s.style ? 2 : 6) === 0) {   // estela con el aspecto de su elemento (más densa en los poderes)
-        const look = fxOf(s.owner.species.element), kind = ['bolt', 'ray', 'swirl', 'wisp'].includes(look.kind) ? 'star' : look.kind;
-        this.parts.push({ k: kind, x: s.x, y: s.y, vx: rand(-12, 12), vy: rand(-12, 12), g: kind === 'drop' || kind === 'rock' ? 160 : kind === 'ember' || kind === 'flame' ? -40 : 0, life: 0, max: rand(0.25, 0.5), c: look.c[Math.floor(rand(0, 3))], s: s.style ? rand(3, 5.5) : rand(1.5, 3), a: rand(0, 6) });
-      }
-      if (s.x < -80 || s.x > WORLD + 80 || s.y > this.H + 30) { s.dead = true; continue; }
-      const rock = this.rockAt(s.x, s.y);
-      if (rock) { this.hitRock(rock, s); continue; }
-      const bird = this.birds.find(b => b.away <= 0 && Math.hypot(b.x - s.x, b.y - s.y) < 9);
-      if (bird) {                                    // un pájaro se cruza y se lleva el disparo
-        bird.away = 5; s.dead = true;
-        this.fx.push({ x: s.x, y: s.y, r: 12, t: 0.2, color: '#ffffff' });
-        this.texts.push({ x: s.x, y: s.y - 10, text: '¡Un pájaro!', t: 0, color: '#fff6d8', size: 12 });
-        continue;
-      }
-      for (const f of [this.player, this.rival]) {
-        if (f === s.owner && s.age < 0.3) continue;
-        if (Math.hypot(f.x - s.x, f.y - f.r - s.y) < f.r + 3) { this.explode(s); break; }
-      }
-      if (s.dead || s.x < 0 || s.x >= WORLD || s.y < this.groundAt(s.x)) continue;
-      if (s.pierceLeft > 0) {                       // perfora el terreno
-        this.carve(s.x, s.y, 7);
-        s.pierceLeft -= Math.hypot(s.vx, s.vy) * dt;
-        if (s.pierceLeft <= 0) this.explode(s);
-      } else if (s.bounces < (s.sp.bounce || 0)) {  // rebota contra la pendiente
-        let nx = this.groundAt(s.x + 3) - this.groundAt(s.x - 3), ny = -6;
-        const len = Math.hypot(nx, ny); nx /= len; ny /= len;
-        const dot = s.vx * nx + s.vy * ny;
-        s.vx = (s.vx - 2 * dot * nx) * 0.72; s.vy = (s.vy - 2 * dot * ny) * 0.72;
-        s.y = this.groundAt(s.x) - 2;
-        s.bounces++; s.dmg *= 1.25;
-        this.fx.push({ x: s.x, y: s.y, r: 10, t: 0.2, color: '#ffffff' });
-      } else {
-        this.explode(s);
-      }
-    }
-    this.shots = this.shots.filter(s => !s.dead);
-
-    if (this.phase === 'flying' && !this.shots.length) {
-      const v = this.volley;
-      if (v && !v.hit) {                             // falló el poder: tarda más en volver
-        v.f.cds[v.index] += 1;
-        if (v.f.isPlayer) this.say(`${v.name} falló: tardará más en volver`, 1.8);
-      }
-      this.volley = null;
-      this.phase = 'resolve'; this.timer = 0.9;
-    }
-    if (this.phase === 'resolve' && (this.timer -= dt) <= 0) {
-      if (this.player.hp <= 0 || this.rival.hp <= 0) this.finish();
-      else this.startTurn(this.other(this.turn));
-    }
-    if (this.phase === 'over' && !this.ended && (this.overTimer -= dt) <= 0) {
-      this.ended = true;
-      this.hooks.onEnd(this.rival.hp <= 0 && this.player.hp > 0);
-    }
-  }
 
   // La cámara sigue al disparo; si no hay, a quien le toca (un poco adelantada hacia su rival)
   // o a donde el jugador esté mirando con el minimapa. Tras un impacto se queda mirándolo.
