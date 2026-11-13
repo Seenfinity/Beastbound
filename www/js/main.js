@@ -873,7 +873,7 @@ function renderAccount() {
   const who = u && (u.email || shortWallet(u.wallet));
   $('account-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
     : account.state === 'failed' ? 'No se pudo conectar con el servicio de cuentas. Recarga la página para reintentar.'
-    : !u ? 'Entra con tu correo o tu wallet de Solana.'
+    : !u ? 'Entra con Google, con tu correo o con tu wallet de Solana.'
     : u.wallet && u.email ? `Has entrado como ${who}. Wallet de Solana: ${shortWallet(u.wallet)}` : `Has entrado como ${who}.`;
   btn.hidden = account.state === 'failed';
   btn.disabled = account.state !== 'ready';
@@ -896,7 +896,7 @@ function gate() {
     const failed = account.state === 'failed';
     $('login-text').textContent = account.state === 'loading' ? 'Conectando con el servicio de cuentas…'
       : failed ? 'No se pudo conectar con el servicio de cuentas.'
-      : 'Entra con tu correo o tu wallet de Solana para empezar. Si entras con correo, te creamos una wallet.';
+      : 'Entra con Google, con tu correo o con tu wallet de Solana para empezar. Si no tienes wallet, te creamos una.';
     $('btn-login').textContent = failed ? 'Reintentar' : 'Entrar';
     $('btn-login').disabled = account.state === 'loading';
     return;

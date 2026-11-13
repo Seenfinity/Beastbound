@@ -1,4 +1,4 @@
-// Cuenta del jugador: entrar con correo o wallet de Solana a través de Privy.
+// Cuenta del jugador: entrar con Google, correo o wallet de Solana a través de Privy.
 // La parte de Privy (React) está compilada en cuenta/ y solo se descarga si hay un App ID configurado,
 // y después de que el juego haya cargado, para no retrasarlo.
 // Para jugar hay que entrar. De momento la cuenta solo identifica al jugador: la partida sigue guardándose en el dispositivo.
@@ -23,7 +23,7 @@ export async function startAccount() {
     const { mount } = await import('./cuenta/cuenta.js');
     api = mount({
       appId: PRIVY_APP_ID, clientId: PRIVY_CLIENT_ID,
-      header: tr('Entra en Beast Bound'), message: tr('Con tu correo o tu wallet de Solana.'),
+      header: tr('Entra en Beast Bound'), message: tr('Con Google, tu correo o tu wallet de Solana.'),
       onState: ({ ready, user }) => {
         if (!ready) return;
         clearTimeout(giveUp);

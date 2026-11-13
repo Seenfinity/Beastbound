@@ -1,4 +1,4 @@
-// Inicio de sesión con Privy (correo o wallet de Solana). Privy solo se ofrece para React, así que esta pieza
+// Inicio de sesión con Privy (Google, correo o wallet de Solana; los métodos se activan en el panel de Privy). Privy solo se ofrece para React, así que esta pieza
 // es una isla de React sin interfaz propia: monta el proveedor y pasa al juego el estado de la cuenta.
 // El juego (JavaScript normal) la usa a través de lo que devuelve mount().
 import { createElement as h, useEffect } from 'react';
@@ -10,7 +10,7 @@ import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana';
 function summary(user) {
   const wallets = (user.linkedAccounts || []).filter(a => a.type === 'wallet' && a.chainType === 'solana');
   const wallet = wallets.find(w => w.walletClientType !== 'privy') || wallets[0];   // primero la suya; si no, la que le crea Privy
-  return { id: user.id, email: user.email?.address || '', wallet: wallet?.address || '', embedded: !!wallet && wallet.walletClientType === 'privy' };
+  return { id: user.id, email: user.email?.address || user.google?.email || '', wallet: wallet?.address || '', embedded: !!wallet && wallet.walletClientType === 'privy' };
 }
 
 function Bridge({ api, onState }) {
