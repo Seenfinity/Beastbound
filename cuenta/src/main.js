@@ -32,7 +32,8 @@ export function mount({ appId, clientId, header, message, accent = '#ffc83d', on
   document.body.append(box);
   document.body.style.setProperty('--privy-color-accent', accent);
   const config = {
-    appearance: { theme: 'dark', logo: '', landingHeader: header, loginMessage: message, walletChainType: 'solana-only', showWalletLoginFirst: false },
+    appearance: { theme: 'dark', logo: '', landingHeader: header, loginMessage: message, walletChainType: 'solana-only', showWalletLoginFirst: false,
+      walletList: ['detected_solana_wallets', 'phantom', 'solflare', 'backpack', 'wallet_connect_qr_solana'] },   // las instaladas, las conocidas de Solana y otra por QR
     embeddedWallets: { solana: { createOnLogin: 'users-without-wallets' } },
     externalWallets: { solana: { connectors: toSolanaWalletConnectors({ shouldAutoConnect: false }) } },
   };
