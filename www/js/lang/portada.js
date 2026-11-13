@@ -63,13 +63,13 @@ export default [
   ['Crianza completa: comida, entrenamiento, sueño, deseos y carácter.', 'Full raising: food, training, sleep, wishes and nature.', '完整的养成：喂食、训练、睡眠、愿望和性格。'],
   ['Incubación de huevos con categorías.', 'Egg incubation with grades.', '带品级的孵蛋系统。'],
   ['Duelos contra rivales del juego en tres mapas, cada uno con su música.', 'Duels against game-controlled rivals on three maps, each with its own music.', '在三张地图上与电脑对手对决，每张地图都有专属音乐。'],
-  ['La partida se guarda en tu dispositivo.', 'Your game is saved on your device.', '存档保存在你的设备上。'],
+  ['Cuentas con Google, correo o wallet de Solana: tu partida te sigue a cualquier dispositivo.', 'Accounts with Google, email or a Solana wallet: your game follows you to any device.', '支持 Google、邮箱或 Solana 钱包登录：存档跟着你走，换设备也能继续。'],
+  ['Ranking mundial por nivel, oro y victorias.', 'World ranking by level, gold and wins.', '按等级、金币和胜场排名的世界排行榜。'],
   ['En camino', 'On the way', '开发中'],
-  ['Cuentas, para llevar tu partida a cualquier dispositivo.', 'Accounts, to take your game to any device.', '账号系统，让存档跟着你换设备。'],
-  ['Duelos contra otros jugadores y ranking mundial.', 'Duels against other players and a world ranking.', '与其他玩家对决，以及世界排行榜。'],
+  ['Duelos contra otros jugadores.', 'Duels against other players.', '与其他玩家对决。'],
   ['Un modo de aventura contra bestias salvajes.', 'An adventure mode against wild beasts.', '对抗野生幻兽的冒险模式。'],
   ['Versión para Android.', 'Android version.', 'Android 版本。'],
-  ['Es una versión de prueba: viene activado un modo que acelera los tiempos para poder verlo todo rápido. Se apaga en Ajustes.', 'This is a test version: a mode that speeds up timings is on by default so you can see everything quickly. You can turn it off in Settings.', '这是测试版：默认开启了加速模式，方便快速体验全部内容。可以在「设置」里关闭。'],
+  ['Es una versión beta: seguimos añadiendo cosas y algunas pueden cambiar.', "This is a beta version: we're still adding things and some may change.", '这是测试版：我们还在不断添加内容，部分内容可能会调整。'],
   ['Tu huevo ya está en la incubadora.', 'Your egg is already in the incubator.', '你的蛋已经在孵化器里了。'],
 
   // ---------- Galería de arte ----------
