@@ -6,7 +6,7 @@
 import * as A from './aventura.js';
 import { tr } from './i18n.js';
 
-const SPEED = 165, WILD_SLOW = 42, WILD_FAST = 92, NOTICE = 150, LEASH = 250, TOUCH = 40, REVEAL = 64, HINT = 190;   // en píxeles del mapa
+const SPEED = 165, WILD_SLOW = 42, WILD_FAST = 92, NOTICE = 150, LEASH = 250, TOUCH = 40, REVEAL = 105, HINT = 330;   // en píxeles del mapa
 const ME = 66, WILD = 62, BOSS = 120, CELL = 2;        // alturas de las bestias y tamaño del «píxel» del mapa
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -44,7 +44,9 @@ export class Explore {
     this.skip = 'salida'; this.safe = [this.x, this.y]; this.saved = 0;
     // Las bestias salvajes de la zona, con su patrulla.
     this.wilds = this.zone.pois.filter(p => p.type === 'wild' || p.type === 'boss').map(poi => ({ poi, x: poi.x, y: poi.y, way: 1, dir: -1, wait: 0, hop: 0 }));
-    this.cam = { x: 0, y: 0 }; this.zoom = 1;
+    this.cam = { x: 0, y: 0 }; this.zoom = 1; this.near = !!art.near;
+    // Luciérnagas: puntos de luz que flotan por la zona.
+    this.flies = Array.from({ length: 26 }, (_, i) => ({ x: (i * 397 + 120) % this.zone.w, y: (i * 251 + 90) % (this.zone.h - 160), p: i * 1.7, r: 26 + (i % 5) * 9 }));
     this.resize();
     this.center(true);
   }
@@ -55,7 +57,8 @@ export class Explore {
     this.vw = Math.max(1, box.width); this.vh = Math.max(1, box.height);
     this.canvas.width = Math.round(this.vw * dpr); this.canvas.height = Math.round(this.vh * dpr);
     this.dpr = dpr;
-    this.zoom = Math.max(this.vw / Math.min(this.zone.w, 820), this.vh / this.zone.h);
+    // De lejos se ve casi toda la zona a lo ancho; de cerca, algo más de la mitad.
+    this.zoom = Math.max(this.vw / Math.min(this.zone.w, this.near ? 840 : 1240), this.vh / this.zone.h, this.vw / this.zone.w);
   }
   center(now = false) {
     const w = this.vw / this.zoom, h = this.vh / this.zoom;
@@ -63,14 +66,17 @@ export class Explore {
     const k = now ? 1 : 0.14;
     this.cam.x += (tx - this.cam.x) * k; this.cam.y += (ty - this.cam.y) * k;
   }
+  setNear(near) { this.near = near; this.resize(); this.center(true); }
   toMap(x, y) { return [this.cam.x + x / this.zoom, this.cam.y + y / this.zoom]; }   // de un toque en el lienzo (píxeles CSS) al mapa
 
   // Entradas: dirección del teclado (−1, 0, 1 en cada eje) o un punto tocado al que ir.
-  setKeys(x, y) { this.keys.x = x; this.keys.y = y; if (x || y) { this.goal = null; this.path = []; } }
+  setKeys(x, y) { this.keys.x = x; this.keys.y = y; if (x || y) { this.goal = null; this.path = []; this.wantExit = false; } }
   goTo(x, y) {
     if (this.busy) return;
     const [tx, ty] = this.toMap(x, y);
     this.path = A.pathTo(this.zone, this.x, this.y, tx, ty);   // rodea rocas, árboles y agua
+    const exit = this.zone.pois.find(p => p.type === 'exit');
+    this.wantExit = !!exit && Math.hypot(tx - exit.x, ty - exit.y) < 46;   // el portal solo pregunta si lo tocas a propósito
     this.goal = this.path.length ? this.path.at(-1) : null;
     this.stuck = 0;
   }
@@ -137,9 +143,9 @@ export class Explore {
     let near = false;
     for (const poi of this.pois()) {
       const w = this.wilds.find(v => v.poi === poi), px = w ? w.x : poi.x, py = w ? w.y : poi.y;
-      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : poi.type === 'chest' ? 30 : 34);
+      const d = Math.hypot(px - this.x, py - this.y), r = poi.r || (w ? TOUCH : poi.type === 'food' || poi.type === 'coin' ? 24 : poi.type === 'chest' ? 32 : 34);
       if (d < r + (w ? 70 : 24)) near = true;
-      if (d > r || this.skip === poi.id) continue;
+      if (d > r || this.skip === poi.id || (poi.type === 'exit' && !this.wantExit)) continue;
       this.halt(); this.skip = poi.id;
       return this.hooks.onReach(poi);
     }
@@ -155,7 +161,7 @@ export class Explore {
     // Todo lo que tiene altura se pinta de atrás hacia delante: bestias, cofres y los árboles que tapan.
     const list = [{ me: true, y: this.y }];
     for (const w of this.wilds) if (A.active(this.g, w.poi)) list.push({ wild: w, y: w.y });
-    for (const poi of this.pois()) if (poi.type === 'chest') list.push({ chest: poi, y: poi.y });
+    for (const poi of this.pois()) if (poi.type === 'chest') list.push({ chest: poi, y: poi.y }); else if (poi.type === 'food' || poi.type === 'coin') list.push({ loot: poi, y: poi.y });
     for (const tree of zone.trees) list.push({ tree, y: tree[1] });
     list.sort((p, q) => p.y - q.y);
     const drawn = [];                                    // lo ya pintado, por si un árbol de delante tiene que taparlo
@@ -165,8 +171,19 @@ export class Explore {
       else if (it.wild) {
         const w = it.wild, boss = w.poi.type === 'boss';
         drawn.push(this.beast(this.art.wild(w.poi), w.x, w.y, boss ? BOSS : WILD, w.dir, w.hop ? Math.abs(Math.sin(w.hop * (w.chasing ? 14 : 9))) * 6 : 0));
-      } else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) drawn.push(this.beast(this.art.chest, it.chest.x, it.chest.y + 6, 40, 1, 0, false));
+      } else if (it.loot) drawn.push(this.beast(this.art.icon(it.loot.type === 'coin' ? 'moneda' : it.loot.food), it.loot.x, it.loot.y + 4 - Math.abs(Math.sin(this.t * 2 + it.loot.x)) * 2, 26, 1, 0, false));
+      else if (Math.hypot(it.chest.x - this.x, it.chest.y - this.y) < REVEAL || !it.chest.hidden) drawn.push(this.beast(this.art.chest, it.chest.x, it.chest.y + 6, 44, 1, 0, false));
     }
+
+    // Luciérnagas
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of this.flies) {
+      const fx = f.x + Math.sin(this.t * 0.5 + f.p) * f.r, fy = f.y + Math.cos(this.t * 0.37 + f.p * 1.3) * f.r * 0.6, glow = 0.35 + 0.65 * Math.abs(Math.sin(this.t * 1.3 + f.p));
+      const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 7);
+      grad.addColorStop(0, `rgba(255, 244, 170, ${0.85 * glow})`); grad.addColorStop(1, 'rgba(255, 220, 120, 0)');
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(fx, fy, 7, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
 
     // Por encima de todo: rótulos, marcas y el brillo que delata un cofre escondido cuando pasas cerca.
     for (const w of this.wilds) {
@@ -177,11 +194,12 @@ export class Explore {
     for (const poi of this.pois()) {
       const d = Math.hypot(poi.x - this.x, poi.y - this.y);
       if (poi.type === 'rest') this.marker(this.art.icon('corazon'), poi.x, poi.y - 34 + Math.sin(this.t * 2.2) * 3, 26);
+      else if (poi.type === 'event') this.marker(this.art.icon('estrella'), poi.x, poi.y - 30 + Math.sin(this.t * 2.2 + 1) * 3, 26);
       else if (poi.type === 'exit' && d > 80) this.marker(this.art.icon('casa'), poi.x, poi.y - 46 + Math.sin(this.t * 2.2) * 3, 28);
       else if (poi.type === 'chest' && poi.hidden && d > REVEAL && d < HINT && this.art.glint) {
-        const pulse = Math.max(0, Math.sin(this.t * 2.6 + poi.x));
-        ctx.globalAlpha = pulse * 0.9;
-        this.marker(this.art.glint, poi.x, poi.y - 10, 16 + pulse * 14);
+        const pulse = 0.5 + 0.5 * Math.sin(this.t * 3.2 + poi.x), close = 1 - (d - REVEAL) / (HINT - REVEAL);   // más fuerte cuanto más cerca
+        ctx.globalAlpha = 0.35 + 0.65 * pulse;
+        this.marker(this.art.glint, poi.x, poi.y - 14, 22 + pulse * 16 + close * 18);
         ctx.globalAlpha = 1;
       }
     }

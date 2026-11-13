@@ -877,7 +877,8 @@ function endBattle(win) {
 // ---------- Aventura (PvE) ----------
 // Expediciones por el mapa de una región. Las reglas están en aventura.js y el paseo por el mapa en explorar.js.
 
-let explore = null, advFight = null;
+let explore = null, advFight = null, advNear = false;
+try { advNear = localStorage.getItem('petbound-adv-view') === 'near'; } catch { /* sin almacenamiento */ }
 const advMaps = {};                                    // imágenes de los mapas, cargadas la primera vez que se entra
 const ADV_REGION = 'islas';
 function dropAdventure() { explore = null; advFight = null; $('adventure').hidden = true; }
@@ -895,7 +896,10 @@ function renderAdventure() {
   $('adv-hp').textContent = `Vida ${Math.round(game.adv.hp * 100)} %`;
   $('adv-mp').textContent = `MP ${game.adv.mp ?? S.profile(game.pet).maxMp}`;
   $('adv-energy').textContent = `Energía ${Math.round(game.pet.energy)}`;
-  $('adv-hint').textContent = 'Muévete con las flechas o tocando el mapa. Las bestias salvajes van a por ti si te acercas.';
+  const box = A.chests(game, game.adv.region);
+  $('adv-chests').textContent = `Cofres ${box.found} de ${box.total}`;
+  $('adv-zoom').textContent = advNear ? 'Ver de lejos' : 'Ver de cerca';
+  $('adv-hint').textContent = box.found < box.total ? 'Muévete con las flechas o tocando el mapa. Hay cofres escondidos: búscalos donde veas un destello.' : 'Muévete con las flechas o tocando el mapa. Las bestias salvajes van a por ti si te acercas.';
 }
 async function openAdventure() {
   S.tick(game);
@@ -912,7 +916,7 @@ async function openAdventure() {
   S.save(game);
   $('lobby').hidden = true; $('arena').hidden = true; $('adventure').hidden = false;
   explore = new Explore($('adv-canvas'), game,
-    { map: advMaps[zone.img], player: petSprite(p), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
+    { map: advMaps[zone.img], near: advNear, player: petSprite(p), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
     { onReach: advReach, onMove: () => S.save(game) });
   renderAdventure();
 }
@@ -938,6 +942,14 @@ function advReach(poi) {
     sfx.coin();
     $('coins').textContent = game.coins;
     toast(got.item ? `Cofre: ${A.itemName(got.item)}` : `Cofre: +${got.coins} monedas`);
+    return free();
+  }
+  if (poi.type === 'food' || poi.type === 'coin') {
+    const got = A.pick(game, poi);
+    S.save(game);
+    sfx.coin();
+    $('coins').textContent = game.coins;
+    if (got) toast(got.coins ? `Encontraste ${got.coins} monedas` : `Encontraste: ${S.FOODS[got.food].name}`);
     return free();
   }
   if (poi.type === 'exit') return advLeaveAsk(free);
@@ -979,6 +991,13 @@ function advReach(poi) {
   });
 }
 $('btn-adv').onclick = () => { sfx.tap(); openAdventure(); };
+$('adv-zoom').onclick = () => {
+  advNear = !advNear;
+  try { localStorage.setItem('petbound-adv-view', advNear ? 'near' : 'far'); } catch { /* sin almacenamiento */ }
+  sfx.tap();
+  explore?.setNear(advNear);
+  renderAdventure();
+};
 $('adv-leave').onclick = () => { if (explore && !explore.busy) { explore.busy = true; advLeaveAsk(() => { if (explore) explore.busy = false; }); } };
 // Moverse: tocar (o mantener pulsado y arrastrar) hacia dónde ir, o las flechas / WASD.
 const advOn = () => explore && !battle && tab === 'battle' && !$('adventure').hidden && $('modal').hidden;

@@ -42,10 +42,22 @@ const PORTAL = {
     { id: 'salida', type: 'exit', x: 590, y: 345, r: 38 },
     { id: 's1', type: 'wild', x: 1010, y: 362, to: [1240, 358], species: 'zephyra', level: 2 },
     { id: 's2', type: 'wild', x: 545, y: 688, to: [735, 716], species: 'tropicat', level: 3 },
+    { id: 's3', type: 'wild', x: 1120, y: 204, to: [1300, 206], species: 'bounzy', level: 4 },
     { id: 'c1', type: 'chest', x: 1215, y: 138, coins: 40, hidden: true },
     { id: 'c2', type: 'chest', x: 655, y: 668, item: 'escudo', hidden: true },
     { id: 'c3', type: 'chest', x: 168, y: 104, item: 'elixir', hidden: true },
-    { id: 'd1', type: 'rest', x: 486, y: 258 },
+    { id: 'd1', type: 'rest', x: 338, y: 298, r: 26 },              // en la orilla del estanque, fuera de los caminos
+    // Encuentros: una situación con dos respuestas.
+    { id: 'e1', type: 'event', x: 292, y: 598, text: 'Un arco antiguo zumba con una energía extraña.',
+      choices: [{ label: 'Cruzarlo', result: 'Sientes un cosquilleo: recuperas todo el MP.', fx: { mp: 999 } },
+        { label: 'Rodearlo', result: 'Mejor no tentar a la suerte. Entre las ruinas encuentras 15 monedas.', fx: { coins: 15 } }] },
+    { id: 'e2', type: 'event', x: 790, y: 252, text: 'Entre la hierba alta hay flores que brillan en la oscuridad.',
+      choices: [{ label: 'Oler las flores', result: 'El aroma reconforta: recuperas un cuarto de la vida.', fx: { hp: 0.25 } },
+        { label: 'Recoger pétalos', result: 'Los pétalos valen algo: +25 monedas.', fx: { coins: 25 } }] },
+    // Cosas por el suelo: comida para la despensa y monedas sueltas. Vuelven en cada expedición.
+    { id: 'f1', type: 'food', x: 150, y: 300, food: 'bayas' }, { id: 'f2', type: 'food', x: 1180, y: 110, food: 'seta' }, { id: 'f3', type: 'food', x: 1000, y: 620, food: 'manzana' },
+    { id: 'f4', type: 'food', x: 640, y: 640, food: 'semillas' }, { id: 'f5', type: 'food', x: 1270, y: 650, food: 'miel' }, { id: 'f6', type: 'food', x: 440, y: 120, food: 'bayas' },
+    { id: 'm1', type: 'coin', x: 1060, y: 130, coins: 6 }, { id: 'm2', type: 'coin', x: 250, y: 420, coins: 5 }, { id: 'm3', type: 'coin', x: 1420, y: 620, coins: 8 }, { id: 'm4', type: 'coin', x: 900, y: 720, coins: 6 },
     { id: 'cartel', type: 'sign', x: 828, y: 448, text: 'El cartel señala dos caminos: al norte, el jardín; al este, las ruinas. Los dos puentes siguen cerrados.' },
     { id: 'norte', type: 'gate', x: 590, y: 14, r: 40, text: 'El puente del norte lleva al jardín. Todavía está cerrado.' },
     { id: 'este', type: 'gate', x: 1512, y: 347, r: 40, text: 'El puente del este lleva a las ruinas. Todavía está cerrado.' },
@@ -86,6 +98,21 @@ export function openChest(g, poi) {
   if (poi.coins) g.coins += poi.coins;
   if (poi.item) g.items[poi.item] = (g.items[poi.item] || 0) + 1;
   return { coins: poi.coins || 0, item: poi.item || '' };
+}
+
+// Recoge algo del suelo: comida para la despensa o unas monedas.
+export function pick(g, poi) {
+  if (!active(g, poi)) return null;
+  g.adv.done.push(poi.id);
+  if (poi.type === 'coin') { g.coins += poi.coins; return { coins: poi.coins }; }
+  g.foods[poi.food] = (g.foods[poi.food] || 0) + 1;
+  return { food: poi.food };
+}
+
+// Cuántos cofres de la región has abierto ya, y cuántos hay.
+export function chests(g, region) {
+  const all = Object.values(REGIONS[region].zones).flatMap(z => z.pois.filter(p => p.type === 'chest'));
+  return { found: all.filter(p => (g.advChests || []).includes(`${region}:${p.id}`)).length, total: all.length };
 }
 
 export function rest(g, poi) {
