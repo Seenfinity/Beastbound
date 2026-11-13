@@ -12,6 +12,8 @@ import * as RK from './ranking.js';
 import { playEvolution } from './evolution.js';
 import { watch, locale } from './i18n.js';
 import { account, onAccount, startAccount, login, logout, shortWallet } from './account.js';
+import * as A from './aventura.js';
+import { Explore } from './explorar.js';
 import { cloud, guest, DEV, me as myId, pull, touch, flush, forget, wipe, saveProfile, fetchRanking, watchCloud } from './nube.js';
 
 watch();                                             // traduce la página si el idioma no es español
@@ -686,6 +688,8 @@ function advantage(mine, theirs) {
 
 function renderLobby() {
   if (battle) return;
+  renderAdvCard();
+  if (explore) renderAdventure();
   const p = game.pet, sp = speciesOf(p.species), prof = S.profile(p), rest = S.restLeft(p);
   setHTML($('lobby-info'), `<i class="sp sp-${p.species}-${p.stage}"${hueStyle(p)}></i><div><b translate="no">${esc(p.name)}</b> · ${sp.name} ${STAGES[p.stage]} · Nivel ${p.level}<br>
     Vida <b>${prof.maxHp}</b> · MP <b>${prof.maxMp}</b> · Daño <b>${Math.round(prof.dmg)}</b><br>
@@ -703,6 +707,13 @@ function renderLobby() {
   }).join(''));
 }
 
+// Qué tal se llevan los dos elementos, en frases (para la ventana de antes del combate).
+function matchLines(sp, rsp) {
+  const out = matchup(sp.element, rsp.element), back = matchup(rsp.element, sp.element);
+  return (out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : '')
+    + (back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : '');
+}
+
 function challenge(species = '') {
   S.tick(game);
   const p = game.pet, sp = speciesOf(p.species);
@@ -711,13 +722,11 @@ function challenge(species = '') {
   if (p.energy < S.FIGHT_ENERGY) return toast(`${p.name} está agotado. Déjalo descansar.`);
   rival = S.makeRival(p, species);
   const rsp = speciesOf(rival.species), map = pick(maps);
-  const out = matchup(sp.element, rsp.element), back = matchup(rsp.element, sp.element);
   modal({
     title: map.name,
     body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${own(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}:${rival.hue || 0}"></canvas>${own(rival.name)} · Nv ${rival.level}</figure></div>
       <p>Te enfrentas a <b translate="no">${esc(rival.name)}</b>, un ${esc(rsp.name)} de ${esc(rsp.element)}${rival.char ? ` con carácter ${S.CHARS[rival.char].name.toLowerCase()}` : ''}.</p>
-      ${out > 1 ? `<p class="adv up">▲ Tu ${sp.element} es eficaz contra ${rsp.element}: le harás más daño.</p>` : out < 1 ? `<p class="adv down">▽ Tu ${sp.element} es poco eficaz contra ${rsp.element}: le harás menos daño.</p>` : ''}
-      ${back > 1 ? `<p class="adv down">▼ Su ${rsp.element} es eficaz contra ${sp.element}: te hará más daño.</p>` : back < 1 ? `<p class="adv up">△ Su ${rsp.element} es poco eficaz contra ti.</p>` : ''}
+      ${matchLines(sp, rsp)}
       ${S.guideStep(game) === 'battle' ? '<p class="how">Cómo se combate: arrastra hacia atrás desde tu bestia y suelta para disparar. Cuanto más estiras, más fuerza, y el viento desvía el tiro. En este primer combate verás la trayectoria completa.</p>' : ''}
       <p class="muted">${map.effect}</p>`,
     actions: [{ label: '¡A luchar!', cls: 'primary', fn: () => startBattle(map) }, closeBtn('Mejor no')],
@@ -740,6 +749,7 @@ function startBattle(map) {
   p.energy -= S.FIGHT_ENERGY;
   S.save(game);
   $('lobby').hidden = true;
+  $('adventure').hidden = true;
   $('arena').hidden = false;
   // El campo ocupa lo que quepa: más alto en vertical, panorámico en horizontal.
   const wrap = document.querySelector('.field-wrap');
@@ -763,6 +773,11 @@ function startBattle(map) {
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
   battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, w < 520 ? 1.4 : 1, { vfx, icon: name => powerIcons[name] }, pad);
   battle.setView(viewFar, true);
+  if (advFight) {                                      // en la expedición se entra con la vida y el MP que te queden
+    const me = battle.player;
+    me.hp = Math.max(1, Math.round(me.maxHp * game.adv.hp));
+    if (game.adv.mp != null) me.mp = Math.min(me.maxMp, game.adv.mp);
+  }
   if (S.guideStep(game) === 'battle') { battle.tutor = true; battle.player.sight = true; }   // primer combate: se ve la trayectoria entera
   music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
@@ -820,6 +835,12 @@ function endBattle(win) {
   const p = game.pet, rsp = speciesOf(rival.species);
   const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
   S.guideAdvance(game, 'battle');                      // el primer combate cierra la guía, se gane o se pierda
+  let adv = null;                                      // si era un combate de la expedición: cómo sigue
+  if (advFight) {
+    adv = A.afterBattle(game, advFight, win, battle.player.hp / battle.player.maxHp, battle.player.mp);
+    if (win) { p.restUntil = 0; r.rest = 0; }          // ganar malherida no te para: la vida ya se arrastra
+    advFight = null;
+  }
   S.save(game);
   music.stop();
   if (win) sfx.win(); else sfx.lose();
@@ -830,13 +851,154 @@ function endBattle(win) {
     : `<p><b translate="no">${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
   const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
-  modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + rest, actions: [{ label: 'Volver a casa', cls: 'primary', fn: () => {
+  const trip = !adv ? ''
+    : adv.reward ? `<p><b>¡Has vencido al Guardián del Castillo!</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}`
+    : adv.boss ? '<p><b>¡Has vencido al Guardián del Castillo!</b></p>'
+    : adv.over ? '<p>La expedición termina aquí.</p>'
+    : `<p>Sigues con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>`;
+  const home = () => {
     battle = null;
     $('arena').hidden = true; $('lobby').hidden = false;
+    dropAdventure();
     switchTab('care');
     if (win) room.cheer();
-  } }] });
+  };
+  const onward = () => {                               // de vuelta al mapa de la expedición
+    battle = null;
+    $('arena').hidden = true; $('adventure').hidden = false;
+    explore.busy = false; explore.skip = '';
+    explore.resize();
+    renderAdventure();
+  };
+  modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + trip + rest,
+    actions: [adv && !adv.over && explore ? { label: 'Seguir explorando', cls: 'primary', fn: onward } : { label: 'Volver a casa', cls: 'primary', fn: home }] });
 }
+
+// ---------- Aventura (PvE) ----------
+// Expediciones por el mapa de una región. Las reglas están en aventura.js y el paseo por el mapa en explorar.js.
+
+let explore = null, advFight = null;
+const advMaps = {};                                    // imágenes de los mapas, cargadas la primera vez que se entra
+const ADV_REGION = 'islas';
+function dropAdventure() { explore = null; advFight = null; $('adventure').hidden = true; }
+
+function renderAdvCard() {
+  const on = !!game.adv;
+  $('adv-info').textContent = on ? 'Tienes una expedición a medias.'
+    : A.cleared(game, ADV_REGION) ? 'Ya venciste al Guardián del Castillo. Puedes volver a por lo que dejaste.'
+    : 'Zona de prueba: recorre la isla del portal a tu aire, enfréntate a las bestias salvajes y busca los cofres escondidos. La vida no se recupera entre combates.';
+  $('btn-adv').textContent = on ? 'Seguir la expedición' : 'Salir de expedición';
+}
+function renderAdventure() {
+  if (!game.adv) return;
+  $('adv-name').textContent = A.regionOf(game).name;
+  $('adv-hp').textContent = `Vida ${Math.round(game.adv.hp * 100)} %`;
+  $('adv-mp').textContent = `MP ${game.adv.mp ?? S.profile(game.pet).maxMp}`;
+  $('adv-energy').textContent = `Energía ${Math.round(game.pet.energy)}`;
+  $('adv-hint').textContent = 'Muévete con las flechas o tocando el mapa. Las bestias salvajes van a por ti si te acercas.';
+}
+async function openAdventure() {
+  S.tick(game);
+  const p = game.pet;
+  if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
+  if (!game.adv && S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
+  const region = A.REGIONS[game.adv?.region || ADV_REGION];
+  A.start(game, region.id);
+  const zone = A.zoneOf(game);
+  $('btn-adv').disabled = true;
+  try { advMaps[zone.img] ||= await loadImage(zone.img); } catch { $('btn-adv').disabled = false; A.leave(game); return toast('No se pudo cargar el mapa. Inténtalo de nuevo.'); }
+  $('btn-adv').disabled = false;
+  if (tab !== 'battle' || battle) return;
+  S.save(game);
+  $('lobby').hidden = true; $('arena').hidden = true; $('adventure').hidden = false;
+  explore = new Explore($('adv-canvas'), game,
+    { map: advMaps[zone.img], player: petSprite(p), wild: poi => spriteOf(poi.species, poi.stage ?? 0), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
+    { onReach: advReach, onMove: () => S.save(game) });
+  renderAdventure();
+}
+function advEnd() {
+  A.leave(game);
+  S.save(game);
+  dropAdventure();
+  $('lobby').hidden = false;
+  switchTab('care');
+}
+const advLeaveAsk = free => modal({
+  title: '¿Volver a casa?',
+  body: '<p>La expedición termina aquí. Las bestias salvajes volverán a estar la próxima vez; los cofres abiertos, no.</p>',
+  actions: [{ label: 'Volver a casa', cls: 'primary', fn: advEnd }, { label: 'Seguir explorando', cls: 'ghost', fn: free }],
+});
+// La bestia ha llegado a algo del camino.
+function advReach(poi) {
+  explore.busy = true;
+  const free = () => { if (explore) explore.busy = false; renderAdventure(); };
+  if (poi.type === 'chest') {
+    const got = A.openChest(game, poi);
+    S.save(game);
+    sfx.coin();
+    $('coins').textContent = game.coins;
+    toast(got.item ? `Cofre: ${A.itemName(got.item)}` : `Cofre: +${got.coins} monedas`);
+    return free();
+  }
+  if (poi.type === 'exit') return advLeaveAsk(free);
+  if (poi.type === 'gate' || poi.type === 'sign') { toast(poi.text); return free(); }
+  if (poi.type === 'rest') {
+    return modal({
+      title: 'Un lugar tranquilo',
+      body: '<p>Aquí se puede descansar un rato: recuperas la mitad de la vida. Solo una vez por expedición.</p>',
+      actions: [{ label: 'Descansar', cls: 'primary', fn: () => { A.rest(game, poi); S.save(game); sfx.heart(); toast('Vida recuperada.'); free(); } }, { label: 'Ahora no', cls: 'ghost', fn: free }],
+    });
+  }
+  if (poi.type === 'event') {
+    return modal({
+      title: 'En el camino',
+      body: `<p>${poi.text}</p>`,
+      actions: poi.choices.map((c, i) => ({ label: c.label, cls: i ? '' : 'primary', fn: () => {
+        const text = A.resolve(game, poi, i, S.profile(game.pet).maxMp);
+        S.save(game);
+        $('coins').textContent = game.coins;
+        if (text) toast(text);
+        free();
+      } })),
+    });
+  }
+  // Una bestia salvaje o el jefe: luchar o dar media vuelta.
+  S.tick(game);
+  const p = game.pet, sp = speciesOf(p.species), boss = poi.type === 'boss';
+  const foe = A.makeWild(poi), rsp = speciesOf(foe.species), tired = p.energy < S.FIGHT_ENERGY;
+  const retreat = () => { explore?.back(poi); free(); };
+  modal({
+    title: boss ? poi.title : `¡${rsp.name} salvaje!`,
+    body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${own(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${foe.species}:${foe.stage}:0"></canvas>${own(rsp.name)} · Nv ${foe.level}</figure></div>
+      <p>${boss ? 'El guardián no deja pasar a nadie. Es mucho más fuerte que las bestias del camino.' : 'Te corta el paso. Puedes luchar o dar media vuelta.'}</p>
+      <p>Entras con el ${Math.round(game.adv.hp * 100)} % de la vida.</p>
+      ${matchLines(sp, rsp)}
+      ${tired ? `<p class="adv down">${esc(p.name)} no tiene energía para luchar. Vuelve a casa y deja que descanse.</p>` : ''}`,
+    actions: tired ? [{ label: 'Dar media vuelta', cls: 'primary', fn: retreat }]
+      : [{ label: '¡A luchar!', cls: 'primary', fn: () => { rival = foe; advFight = poi; startBattle(maps.find(m => m.id === A.regionOf(game).map) || maps[0]); } }, { label: 'Dar media vuelta', cls: 'ghost', fn: retreat }],
+  });
+}
+$('btn-adv').onclick = () => { sfx.tap(); openAdventure(); };
+$('adv-leave').onclick = () => { if (explore && !explore.busy) { explore.busy = true; advLeaveAsk(() => { if (explore) explore.busy = false; }); } };
+// Moverse: tocar (o mantener pulsado y arrastrar) hacia dónde ir, o las flechas / WASD.
+const advOn = () => explore && !battle && tab === 'battle' && !$('adventure').hidden && $('modal').hidden;
+let advHold = false;
+const advPoint = e => { const box = $('adv-canvas').getBoundingClientRect(); explore.goTo(e.clientX - box.left, e.clientY - box.top); };
+$('adv-canvas').addEventListener('pointerdown', e => { if (advOn()) { advHold = true; e.currentTarget.setPointerCapture(e.pointerId); advPoint(e); } });
+let advAimed = 0;
+$('adv-canvas').addEventListener('pointermove', e => { if (advHold && advOn() && performance.now() - advAimed > 160) { advAimed = performance.now(); advPoint(e); } });   // al arrastrar, recalcula el camino unas pocas veces por segundo
+for (const ev of ['pointerup', 'pointercancel']) $('adv-canvas').addEventListener(ev, () => { advHold = false; });
+const advKeys = new Set(), ADV_KEYS = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'u', w: 'u', W: 'u', ArrowDown: 'd', s: 'd', S: 'd' };
+const advSteer = () => explore?.setKeys((advKeys.has('r') ? 1 : 0) - (advKeys.has('l') ? 1 : 0), (advKeys.has('d') ? 1 : 0) - (advKeys.has('u') ? 1 : 0));
+window.addEventListener('keydown', e => {
+  const k = ADV_KEYS[e.key];
+  if (!k || !advOn() || e.target.closest?.('input, textarea, select')) return;
+  e.preventDefault();
+  advKeys.add(k); advSteer();
+});
+window.addEventListener('keyup', e => { const k = ADV_KEYS[e.key]; if (k) { advKeys.delete(k); advSteer(); } });
+window.addEventListener('blur', () => { advKeys.clear(); advSteer(); });
+window.addEventListener('resize', () => { if (explore && !$('adventure').hidden) explore.resize(); });
 
 const field = $('field');
 const toWorld = e => {
@@ -960,7 +1122,7 @@ function gate() {
   const locked = account.state !== 'off' && !account.user && !guest;
   $('screen-login').hidden = !(locked || pullFailed);
   if (locked) {
-    if (entered) { entered = false; battle = null; music.stop(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true; $('toast').hidden = true; }
+    if (entered) { entered = false; battle = null; music.stop(); dropAdventure(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true; $('toast').hidden = true; }
     forget(); pullFailed = false;
     $('screen-loading').hidden = true; $('screen-start').hidden = true; $('game').hidden = true;
     const failed = account.state === 'failed';
@@ -1012,7 +1174,7 @@ watchCloud({
     const theirs = S.adopt(save);
     if (!theirs?.pet || !entered) return;
     game = theirs;
-    battle = null; music.stop(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true;
+    battle = null; music.stop(); dropAdventure(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true;
     S.save(game);
     room.setPet(game.pet);
     switchTab('care');
@@ -1028,7 +1190,7 @@ document.addEventListener('visibilitychange', () => music.pause(document.hidden)
 $('btn-reset').onclick = () => modal({
   title: '¿Empezar de cero?',
   body: '<p>Perderás todas tus bestias, huevos y monedas. No se puede deshacer.</p>',
-  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); if (cloud.on) wipe(); music.stop(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
+  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); if (cloud.on) wipe(); music.stop(); dropAdventure(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
 });
 
 // ---------- Bucle y arranque ----------
@@ -1047,6 +1209,7 @@ function frame(now) {
       if ($('plate').hidden !== busy) { $('plate').hidden = busy; if (busy) { $('btn-evolve').hidden = true; room.editing = false; } }
     }
     else if (tab === 'battle' && battle) { battle.update(dt); battle.draw(); renderBattle(); }
+    else if (tab === 'battle' && explore && !$('adventure').hidden) { explore.update(dt); explore.draw(); }
   }
   requestAnimationFrame(frame);
 }
@@ -1094,7 +1257,7 @@ try {
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);
   buildTray();
-  window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, vfx }; // para depurar desde la consola
+  window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, get explore() { return explore; }, vfx }; // para depurar desde la consola
   artReady = true;
   onAccount(gate);                                    // entra al juego si hay cuenta; si no, pantalla de entrada
   requestAnimationFrame(frame);

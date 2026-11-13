@@ -484,6 +484,12 @@ export function cleanEgg(g, index, amount) {
 }
 export const owns = (g, species) => g.pets.some(p => p.species === species) || g.eggs.some(e => e.species === species);
 const hasRoom = g => g.eggs.length < MAX_EGGS && g.pets.length + g.eggs.length < MAX_PETS;
+// Regala el huevo de una especie si no la tienes y te cabe (lo usa el modo aventura). Devuelve si lo dio.
+export function grantEgg(g, species) {
+  if (owns(g, species) || !hasRoom(g)) return false;
+  g.eggs.push(newEgg(species));
+  return true;
+}
 export const eggPrice = g => 100 * (g.pets.length + g.eggs.length);
 
 // Huevo misterioso: una especie al azar que aún no tengas.
