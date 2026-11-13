@@ -8,6 +8,28 @@ const slot = new URLSearchParams(globalThis.location?.search || '').get('slot');
 const KEY = 'petbound-save-v3' + (slot ? '-' + slot.replace(/[^a-z0-9]/gi, '') : '');
 const STATS = ['pot', 'agu', 'pun', 'agi'];
 
+// El reloj y el azar de las reglas. Con la partida en la nube manda el servidor: cada acción lleva su hora (clock.now)
+// y la hora del dispositivo se corrige con la suya (clock.offset), así que adelantar el reloj del móvil no sirve de nada.
+// El azar sale de una semilla que va en la partida (g.rng), con una cuenta aparte para cada cosa, de modo que el juego
+// y el servidor sacan lo mismo. Lo que tiene valor (qué huevo toca, cómo nace una bestia) lo sortea solo el servidor (clock.random).
+export const clock = { now: null, offset: 0, random: null };
+export const at = () => clock.now ?? Date.now() + clock.offset;
+function mix(a) {
+  a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const newSeed = () => ({ s: Math.floor((clock.random || Math.random)() * 2 ** 31), n: {} });
+function rnd(g, purpose) {
+  if (clock.random) return clock.random();
+  const r = (g.rng ||= newSeed());
+  let h = r.s | 0;
+  for (let i = 0; i < purpose.length; i++) h = (Math.imul(h, 31) + purpose.charCodeAt(i)) | 0;
+  const n = (r.n[purpose] = (r.n[purpose] || 0) + 1);
+  return mix(h ^ Math.imul(n, 0x9e3779b1));
+}
+
 export const STAT_NAMES = { pot: 'Potencia', agu: 'Aguante', pun: 'Puntería', agi: 'Agilidad' };
 export const STAT_HELP = { pot: 'más daño', agu: 'más vida', pun: 'guía de tiro más larga', agi: 'se mueve más por turno' };
 
@@ -127,7 +149,7 @@ export function moveDecor(g, id, x, y) {
 // La bestia usa un mueble por su cuenta: le sube un poco el ánimo (hasta 8 veces al día).
 export function useDecor(g, id) {
   const p = g.pet;
-  rollDay(p);
+  rollDay(g, p);
   if (!has(g, id) || (p.usesToday || 0) >= 8) return false;
   p.usesToday = (p.usesToday || 0) + 1;
   p.mood = clamp(p.mood + 2);
@@ -190,15 +212,20 @@ export const MIN_SLEEP = 5 * 60000;     // una vez dormida, no se la puede despe
 export const MAX_SLEEP = 8 * 3600000;   // se cansa de dormir y se despierta sola pasado este tiempo
 
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
-const pick = list => list[Math.floor(Math.random() * list.length)];
-const today = () => new Date().toDateString();
+const pick = (g, purpose, list) => list[Math.floor(rnd(g, purpose) * list.length)];
+// El día de juego es la fecha local de la jugadora (g.tz: minutos respecto a la hora universal), con el formato de siempre («Fri Nov 13 2026»).
+const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dayKey = ms => { const d = new Date(ms); return `${WEEK[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')} ${d.getUTCFullYear()}`; };
+export const deviceTz = () => -new Date().getTimezoneOffset();
+const zone = g => (g.tz ?? deviceTz()) * 60000;
+const today = g => dayKey(at() + zone(g));
 const argmax = (obj, keys) => keys.reduce((best, k) => (obj[k] > obj[best] ? k : best), keys[0]);
 const fill = (text, pet) => text.replaceAll('{n}', pet.name);
 
 // Experiencia para subir de nivel. Hasta el 30 (forma Final) sube a buen ritmo; del 30 al tope, cada nivel cuesta bastante más.
 export const MAX_LEVEL = 50;
 export const expNeeded = level => (level < 30 ? 25 + level * 15 : 475 + (level - 30) * 60);
-export const ageDays = pet => (Date.now() - pet.born) / 864e5;
+export const ageDays = pet => (at() - pet.born) / 864e5;
 
 // g.pet es siempre la bestia activa (no se guarda: se calcula).
 function attach(g) {
@@ -207,38 +234,38 @@ function attach(g) {
 }
 
 // Color propio: casi siempre una variación suave; una de cada diez veces, un color raro.
-export const rollHue = () => (Math.random() < 0.1 ? pick([120, 180, -120]) : Math.round(Math.random() * 56 - 28));
+export const rollHue = (g, purpose) => (rnd(g, purpose) < 0.1 ? pick(g, purpose, [120, 180, -120]) : Math.round(rnd(g, purpose) * 56 - 28));
 export const isRare = pet => Math.abs(pet.hue || 0) > 60;
 
-function makePet(species, name, grade = '') {
-  const now = Date.now(), sp = speciesOf(species), foods = Object.keys(FOODS), fav = pick(foods);
-  const g = GRADES.find(x => x.id === grade), best = [0, 1, 2, 3].sort((a, b) => sp.base[b] - sp.base[a]);
-  const extra = i => (g ? g.all + (best.indexOf(i) < g.top ? 1 : 0) : 0);     // lo que suma su categoría a cada estadística
-  const pet = makeBase(species, name, now, sp, fav, foods);
+function makePet(g, species, name, grade = '') {
+  const now = at(), sp = speciesOf(species), foods = Object.keys(FOODS), fav = pick(g, 'pet', foods);
+  const gr = GRADES.find(x => x.id === grade), best = [0, 1, 2, 3].sort((a, b) => sp.base[b] - sp.base[a]);
+  const extra = i => (gr ? gr.all + (best.indexOf(i) < gr.top ? 1 : 0) : 0);     // lo que suma su categoría a cada estadística
+  const pet = makeBase(g, species, name, now, sp, fav, foods);
   STATS.forEach((k, i) => { pet.stats[k] += extra(i); });
-  if (g) { pet.grade = g.id; if (g.rare && !isRare(pet)) pet.hue = (Math.random() < 0.5 ? -1 : 1) * (80 + Math.floor(Math.random() * 80)); }
+  if (gr) { pet.grade = gr.id; if (gr.rare && !isRare(pet)) pet.hue = (rnd(g, 'pet') < 0.5 ? -1 : 1) * (80 + Math.floor(rnd(g, 'pet') * 80)); }
   return pet;
 }
-function makeBase(species, name, now, sp, fav, foods) {
+function makeBase(g, species, name, now, sp, fav, foods) {
   return {
     species, name, born: now, level: 1, exp: 0, stage: 0,
     stats: { pot: sp.base[0], agu: sp.base[1], pun: sp.base[2], agi: sp.base[3] },
     hunger: 70, energy: 100, mood: 75, bond: 20,
-    char: '', mastery: '', fav, hate: pick(foods.filter(f => f !== fav)), favKnown: false, hateKnown: false,
+    char: '', mastery: '', fav, hate: pick(g, 'pet', foods.filter(f => f !== fav)), favKnown: false, hateKnown: false,
     axes: { carino: 0, disciplina: 0, bravura: 0, descuido: 0 },
     diet: { pot: 0, agu: 0, pun: 0, agi: 0 }, trained: { pot: 0, agu: 0, pun: 0, agi: 0 },
-    quirk: pick(Object.keys(QUIRKS)), hue: rollHue(), wish: null, nextWish: 0,
-    day: today(), trainsToday: 0, playsToday: 0, strokesToday: 0,
+    quirk: pick(g, 'pet', Object.keys(QUIRKS)), hue: rollHue(g, 'pet'), wish: null, nextWish: 0,
+    day: today(g), trainsToday: 0, playsToday: 0, strokesToday: 0,
     diary: [{ t: now, text: `${name} salió del huevo.` }],
   };
 }
 
 // Partida nueva: tres huevos misteriosos (solo se ve el elemento). Te quedas con uno.
 export function newGame() {
-  const pool = [...ROSTER], now = Date.now();
-  const offer = [0, 1, 2].map(() => pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
+  const pool = [...ROSTER], now = at(), roll = clock.random || Math.random;
+  const offer = [0, 1, 2].map(() => pool.splice(Math.floor(roll() * pool.length), 1)[0].id);
   return attach({
-    v: 3, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
+    v: 3, rng: newSeed(), tz: deviceTz(), clock: now, coins: 30, foods: { filete: 2, bayas: 2, semillas: 2 }, pets: [], eggs: [], offer, active: 0, seen: [], defeats: {},
     wins: 0, losses: 0, streak: 0, lastDaily: '', lastTick: now, lastEvent: now, lastEventId: '', pendingEvent: '',
     lastTrain: null, testMode: true, items: { pocion: 0, elixir: 0, escudo: 0, mira: 1 }, news: [], decor: [], decorPos: {}, rooms: ['sala'], room: 'sala', profile: { name: '', country: '' }, guide: 0,
   });
@@ -246,7 +273,7 @@ export function newGame() {
 
 // Abre el huevo elegido. Los otros dos no te los quedas: los huevos nuevos hay que ganárselos.
 export function startWith(g, index, name) {
-  g.pets.push(makePet(g.offer[index], name));
+  g.pets.push(makePet(g, g.offer[index], name));
   g.seen.push(g.offer[index]);
   g.offer = [];
   g.active = 0;
@@ -262,7 +289,9 @@ export function adopt(g) {
     g.decor ||= []; g.decorPos ||= {}; g.rooms ||= ['sala']; g.room ||= 'sala';
     g.profile ||= { name: '', country: '' };
     if (typeof g.guide !== 'number') g.guide = GUIDE.length;   // quien ya jugaba no necesita la guía
-    for (const p of g.pets) { p.quirk ||= pick(Object.keys(QUIRKS)); p.hue ||= 0; }
+    g.rng ||= newSeed();
+    const quirks = Object.keys(QUIRKS);
+    for (const p of g.pets) { p.quirk ||= quirks[Math.floor(Math.random() * quirks.length)]; p.hue ||= 0; }
     return attach(g);
   } catch {
     return null;
@@ -282,16 +311,16 @@ export function reset() {
 }
 
 function log(g, text) {
-  g.pet.diary.unshift({ t: Date.now(), text });
+  g.pet.diary.unshift({ t: at(), text });
   g.pet.diary.length = Math.min(g.pet.diary.length, 40);
 }
-function rollDay(p) {
-  if (p.day !== today()) { p.day = today(); p.trainsToday = 0; p.playsToday = 0; p.strokesToday = 0; p.usesToday = 0; }
+function rollDay(g, p) {
+  if (p.day !== today(g)) { p.day = today(g); p.trainsToday = 0; p.playsToday = 0; p.strokesToday = 0; p.usesToday = 0; }
 }
 
 // El tiempo pasa para todas tus bestias, aunque el juego esté cerrado.
 // Dormida: recobra energía más rápido, se recupera del combate al doble de velocidad y gasta menos.
-export function tick(g, now = Date.now()) {
+export function tick(g, now = at()) {
   tickEggs(g, now);
   const elapsed = now - g.lastTick, h = elapsed / 3600000;
   if (h <= 0) return;
@@ -311,7 +340,7 @@ export function tick(g, now = Date.now()) {
         p.diary.unshift({ t: now, text: 'Se despertó descansada.' });
       }
     }
-    rollDay(p);
+    rollDay(g, p);
   }
   g.lastTick = now;
   updateWish(g, now);
@@ -321,21 +350,21 @@ export function tick(g, now = Date.now()) {
 // y hay que dejarla dormir un mínimo antes de poder despertarla.
 const minSleep = g => (g.testMode ? 60000 : MIN_SLEEP);       // en modo prueba: 60 segundos
 const maxSleep = g => (g.testMode ? 180000 : MAX_SLEEP);     // en modo prueba: 3 minutos
-export const sleepLeft = (g, pet = g.pet) => (pet.asleep ? Math.max(0, pet.sleptAt + minSleep(g) - Date.now()) : 0);
+export const sleepLeft = (g, pet = g.pet) => (pet.asleep ? Math.max(0, pet.sleptAt + minSleep(g) - at()) : 0);
 export function toggleSleep(g) {
   const p = g.pet, want = !p.asleep;   // se decide antes de avanzar el tiempo: al avanzar puede despertarse sola
   if (p.asleep && sleepLeft(g) > 0) return { error: `${p.name} acaba de dormirse. Déjala descansar un poco.`, asleep: true };
   tick(g);
   p.asleep = want;
-  if (p.asleep) { p.sleptAt = Date.now(); grant(g, 'sleep'); }
+  if (p.asleep) { p.sleptAt = at(); grant(g, 'sleep'); }
   return { asleep: p.asleep };
 }
 
 export function claimDaily(g) {
-  if (g.lastDaily === today()) return null;
-  const yesterday = new Date(Date.now() - 864e5).toDateString();
+  if (g.lastDaily === today(g)) return null;
+  const yesterday = dayKey(at() + zone(g) - 864e5);
   g.streak = g.lastDaily === yesterday ? g.streak + 1 : 1;
-  g.lastDaily = today();
+  g.lastDaily = today(g);
   const coins = 10 + Math.min(g.streak, 7) * 2 + (has(g, 'cofre') ? 5 : 0);
   g.coins += coins;
   g.pet.bond = clamp(g.pet.bond + 3);
@@ -344,20 +373,20 @@ export function claimDaily(g) {
 
 // --- Deseos ---
 
-const wishGap = test => (test ? 40e3 + Math.random() * 30e3 : (40 + Math.random() * 50) * 60e3);
+const wishGap = g => (g.testMode ? 40e3 + rnd(g, 'wish') * 30e3 : (40 + rnd(g, 'wish') * 50) * 60e3);
 // Se llama al avanzar el tiempo: caduca el deseo si no se cumplió y, cuando toca, le da uno nuevo que tenga sentido ahora.
 function updateWish(g, now) {
   const p = g.pet;
   if (!p) return;
-  if (p.wish && now > p.wish.until) { p.wish = null; p.mood = clamp(p.mood - 4); p.nextWish = now + wishGap(g.testMode); }
-  if (!p.nextWish) p.nextWish = now + wishGap(g.testMode);
+  if (p.wish && now > p.wish.until) { p.wish = null; p.mood = clamp(p.mood - 4); p.nextWish = now + wishGap(g); }
+  if (!p.nextWish) p.nextWish = now + wishGap(g);
   if (p.wish || p.asleep || now < p.nextWish) return;
   const options = ['pet', 'play'];
   if (p.hunger < 85) options.push('food');
   if (restLeft(p) > 0 || p.energy < 50) options.push('sleep');
   if (trainsLeft(g) > 0 && p.energy >= TRAIN_ENERGY) options.push('train');
   if (!restLeft(p) && p.energy >= FIGHT_ENERGY) options.push('fight');
-  p.wish = { type: pick(options), until: now + (g.testMode ? 70e3 : 15 * 60e3), got: 0 };
+  p.wish = { type: pick(g, 'wish', options), until: now + (g.testMode ? 70e3 : 15 * 60e3), got: 0 };
 }
 // Cumple el deseo si lo que acaba de pasar es lo que pedía (los mimos piden 5 caricias).
 function grant(g, type) {
@@ -365,7 +394,7 @@ function grant(g, type) {
   if (!w || w.type !== type) return false;
   if (type === 'pet' && ++w.got < 5) return false;
   p.wish = null;
-  p.nextWish = Date.now() + wishGap(g.testMode);
+  p.nextWish = at() + wishGap(g);
   p.bond = clamp(p.bond + 3 + (has(g, 'peluche') ? 1 : 0)); p.mood = clamp(p.mood + 8); p.axes.carino += 1;
   log(g, `Cumpliste su deseo: ${WISHES[type].text.toLowerCase()}.`);
   news(g, `¡Deseo cumplido! Sube el vínculo con ${p.name}.`);
@@ -378,22 +407,23 @@ function grant(g, type) {
 // Avisos para enseñar en pantalla (misión cumplida, deseo cumplido…). main.js los va sacando.
 function news(g, text) { (g.news ||= []).push(text); }
 
-// Las tres misiones de hoy, con su texto y recompensa. Se eligen al empezar el día según la bestia activa.
-export function dailyMissions(g) {
-  if (g.missionsDay !== today() || !g.missions) {
-    const p = g.pet;
-    g.missionsDay = today(); g.missionsBonus = false;
-    g.missions = ['care', 'train', 'fight'].map(cat => {
-      const pool = Object.keys(MISSIONS).filter(id => MISSIONS[id].cat === cat && (!MISSIONS[id].ok || MISSIONS[id].ok(p)));
-      return { id: pick(pool), got: 0, done: false };
-    });
-  }
-  return g.missions.map(m => ({ ...m, ...MISSIONS[m.id] }));
+// Las tres misiones de hoy se eligen al empezar el día según la bestia activa. Devuelve si las acaba de elegir.
+export function rollMissions(g) {
+  if (!g.pet || (g.missionsDay === today(g) && g.missions)) return false;
+  const p = g.pet;
+  g.missionsDay = today(g); g.missionsBonus = false;
+  g.missions = ['care', 'train', 'fight'].map(cat => {
+    const pool = Object.keys(MISSIONS).filter(id => MISSIONS[id].cat === cat && (!MISSIONS[id].ok || MISSIONS[id].ok(p)));
+    return { id: pick(g, 'mission', pool), got: 0, done: false };
+  });
+  return true;
 }
+// Las misiones de hoy, con su texto y recompensa: para la pantalla (no elige nada).
+export const dailyMissions = g => (g.missions || []).filter(m => MISSIONS[m.id]).map(m => ({ ...m, ...MISSIONS[m.id] }));
 // Algo ha pasado: avanza las misiones que correspondan y paga las que se completen.
 export function track(g, e) {
   if (!g.pet) return;
-  dailyMissions(g);
+  rollMissions(g);
   for (const m of g.missions) {
     const def = MISSIONS[m.id];
     if (m.done || !def) continue;
@@ -434,17 +464,17 @@ export const GRADES = [                                            // de peor a 
 ];
 export const gradeOf = care => [...GRADES].reverse().find(x => care >= x.min);
 export const eggDay = g => (g.testMode ? 60e3 : 24 * 3600e3);      // en modo prueba un «día» dura un minuto
-const newDrift = () => (Math.random() < 0.5 ? -1 : 1) * (1.8 + Math.random() * 0.8);   // °C por día
-const newEgg = species => ({ species, laidAt: Date.now(), last: Date.now(), temp: EGG_TEMP.ideal, drift: newDrift(), dirt: 0, good: 0 });
+const newDrift = g => (rnd(g, 'drift') < 0.5 ? -1 : 1) * (1.8 + rnd(g, 'drift') * 0.8);   // °C por día
+const newEgg = (g, species) => ({ species, laidAt: at(), last: at(), temp: EGG_TEMP.ideal, drift: newDrift(g), dirt: 0, good: 0 });
 
 export const eggReadyAt = (g, egg) => egg.laidAt + EGG_DAYS * eggDay(g);
-export const eggReady = (g, egg) => Date.now() >= eggReadyAt(g, egg);
+export const eggReady = (g, egg) => at() >= eggReadyAt(g, egg);
 
 // Pasa el tiempo en la incubadora: la temperatura se desvía, se ensucia y se cuenta cuánto estuvo bien.
-export function tickEggs(g, now = Date.now()) {
+export function tickEggs(g, now = at()) {
   const day = eggDay(g);
   for (const e of g.eggs) {
-    if (e.temp === undefined) Object.assign(e, { temp: EGG_TEMP.ideal, drift: newDrift(), dirt: 0, last: now, good: Math.max(0, Math.min(now, eggReadyAt(g, e)) - e.laidAt) });  // huevo de antes: lo pasado cuenta como bien cuidado
+    if (e.temp === undefined) Object.assign(e, { temp: EGG_TEMP.ideal, drift: newDrift(g), dirt: 0, last: now, good: Math.max(0, Math.min(now, eggReadyAt(g, e)) - e.laidAt) });  // huevo de antes: lo pasado cuenta como bien cuidado
     const until = Math.min(now, eggReadyAt(g, e)), dt = until - e.last;
     if (dt <= 0) continue;
     const d = dt / day;                                             // días transcurridos
@@ -460,10 +490,10 @@ export function tickEggs(g, now = Date.now()) {
 }
 // Cómo va un huevo: para la pantalla.
 export function eggStatus(g, egg) {
-  const total = EGG_DAYS * eggDay(g), elapsed = Math.max(1, Math.min(Date.now(), eggReadyAt(g, egg)) - egg.laidAt);
+  const total = EGG_DAYS * eggDay(g), elapsed = Math.max(1, Math.min(at(), eggReadyAt(g, egg)) - egg.laidAt);
   const cold = egg.temp < EGG_TEMP.ideal - EGG_TEMP.ok, hot = egg.temp > EGG_TEMP.ideal + EGG_TEMP.ok, dirty = egg.dirt >= EGG_DIRTY;
   const care = clamp((egg.good || 0) / elapsed, 0, 1), ready = eggReady(g, egg);
-  return { ready, left: Math.max(0, eggReadyAt(g, egg) - Date.now()), day: Math.min(EGG_DAYS, Math.floor(elapsed / eggDay(g)) + 1), progress: elapsed / total,
+  return { ready, left: Math.max(0, eggReadyAt(g, egg) - at()), day: Math.min(EGG_DAYS, Math.floor(elapsed / eggDay(g)) + 1), progress: elapsed / total,
     cold, hot, dirty, ok: !cold && !hot && !dirty, care, grade: gradeOf(ready ? (egg.good || 0) / total : care) };
 }
 // Subir o bajar la temperatura. Cada ajuste cambia hacia dónde se irá desviando después.
@@ -472,7 +502,7 @@ export function warmEgg(g, index, delta) {
   if (!e || eggReady(g, e)) return false;
   tickEggs(g);
   e.temp = clamp(Math.round((e.temp + delta) * 10) / 10, EGG_TEMP.min, EGG_TEMP.max);
-  e.drift = newDrift();
+  e.drift = newDrift(g);
   return true;
 }
 export function cleanEgg(g, index, amount) {
@@ -487,7 +517,7 @@ const hasRoom = g => g.eggs.length < MAX_EGGS && g.pets.length + g.eggs.length <
 // Regala el huevo de una especie si no la tienes y te cabe (lo usa el modo aventura). Devuelve si lo dio.
 export function grantEgg(g, species) {
   if (owns(g, species) || !hasRoom(g)) return false;
-  g.eggs.push(newEgg(species));
+  g.eggs.push(newEgg(g, species));
   return true;
 }
 export const eggPrice = g => 100 * (g.pets.length + g.eggs.length);
@@ -500,8 +530,8 @@ export function buyEgg(g) {
   const price = eggPrice(g);
   if (g.coins < price) return { error: `Te faltan ${price - g.coins} monedas.` };
   g.coins -= price;
-  const sp = pick(free);
-  g.eggs.push(newEgg(sp.id));
+  const sp = pick(g, 'egg', free);
+  g.eggs.push(newEgg(g, sp.id));
   return { species: sp.id };
 }
 
@@ -512,7 +542,7 @@ export function hatchEgg(g, index, name) {
   tickEggs(g);
   const grade = gradeOf((egg.good || 0) / (EGG_DAYS * eggDay(g)));
   g.eggs.splice(index, 1);
-  g.pets.push(makePet(egg.species, name, grade.id));
+  g.pets.push(makePet(g, egg.species, name, grade.id));
   if (!g.seen.includes(egg.species)) g.seen.push(egg.species);
   return { pet: g.pets.length - 1, grade };
 }
@@ -549,7 +579,7 @@ export function addExp(g, amount) {
     p.level++; levels++;
     const diet = Object.fromEntries(STATS.map(k => [k, p.diet[k] || 0]));
     const fed = STATS.some(k => diet[k] > 0);
-    const byDiet = fed ? argmax(diet, STATS) : pick(STATS);
+    const byDiet = fed ? argmax(diet, STATS) : pick(g, 'stat', STATS);
     const byKind = STATS[sp.base.indexOf(Math.max(...sp.base))];
     p.stats[byDiet]++; p.stats[byKind]++;
     gains.push(byDiet, byKind);
@@ -605,7 +635,7 @@ export function buyFood(g, food) {
 // Caricias: suben el ánimo siempre; el vínculo, hasta un tope diario.
 export function stroke(g) {
   const p = g.pet;
-  rollDay(p);
+  rollDay(g, p);
   p.mood = clamp(p.mood + 2);
   if (p.strokesToday < 15) { p.bond = clamp(p.bond + (p.quirk === 'mimoso' ? 0.8 : 0.4)); p.axes.carino += 0.2; }
   p.strokesToday++;
@@ -629,7 +659,7 @@ export function play(g) {
 }
 
 export function trainsLeft(g) {
-  rollDay(g.pet);
+  rollDay(g, g.pet);
   return g.testMode ? Infinity : Math.max(0, TRAINS_PER_DAY - g.pet.trainsToday);
 }
 export function canTrain(g) {
@@ -653,7 +683,7 @@ export function train(g, stat, score) {
   p.axes.disciplina += grade === 'flojo' ? 0.75 : 1.5;
   const gained = grade !== 'flojo';
   if (gained) { p.stats[stat]++; p.trained[stat]++; }
-  g.lastTrain = { stat, grade, gained, t: Date.now() };
+  g.lastTrain = { stat, grade, gained, t: at() };
   track(g, { type: 'train', stat, grade, gained, wasLowest });
   grant(g, 'train');
   return { grade, gained, up: addExp(g, { perfecto: 12, bien: 8, flojo: 4 }[grade] + (has(g, 'muneco') ? 3 : 0)) };
@@ -701,14 +731,17 @@ export function evolve(g) {
 
 // --- Momentos de crianza ---
 
+// ¿Toca ya un momento de crianza? (además, la pantalla solo lo enseña tras un buen rato sin tocar nada)
+export const eventDue = g => !g.pendingEvent && at() - g.lastEvent >= (g.testMode ? 75e3 : 3 * 3600e3);
+// Elige el momento de crianza que toca, si toca. Devuelve si hay uno pendiente.
+export function rollEvent(g) {
+  if (eventDue(g)) g.pendingEvent = pick(g, 'event', EVENTS.filter(e => e.id !== g.lastEventId)).id;
+  return !!g.pendingEvent;
+}
+// El momento de crianza pendiente, para la pantalla (null si no hay).
 export function currentEvent(g) {
-  if (!g.pendingEvent) {
-    const wait = g.testMode ? 75e3 : 3 * 3600e3;      // además, la pantalla solo lo enseña tras un buen rato sin tocar nada
-    if (Date.now() - g.lastEvent < wait) return null;
-    g.pendingEvent = pick(EVENTS.filter(e => e.id !== g.lastEventId)).id;
-  }
   const ev = EVENTS.find(e => e.id === g.pendingEvent);
-  return { id: ev.id, text: fill(ev.text, g.pet), choices: ev.choices.map(c => c.label) };
+  return ev ? { id: ev.id, text: fill(ev.text, g.pet), choices: ev.choices.map(c => c.label) } : null;
 }
 
 export function resolveEvent(g, index) {
@@ -720,7 +753,7 @@ export function resolveEvent(g, index) {
   for (const k of ['carino', 'disciplina', 'bravura', 'descuido']) if (fx[k]) p.axes[k] += fx[k];
   for (const k of ['bond', 'mood', 'energy', 'hunger']) if (fx[k]) p[k] = clamp(p[k] + fx[k]);
   if (fx.coins) g.coins = Math.max(0, g.coins + fx.coins);
-  g.lastEventId = ev.id; g.pendingEvent = ''; g.lastEvent = Date.now();
+  g.lastEventId = ev.id; g.pendingEvent = ''; g.lastEvent = at();
   const text = fill(choice.result, p);
   log(g, text);
   return { text, up: addExp(g, fx.exp || 3) };
@@ -749,7 +782,7 @@ export function profile(pet) {
 }
 
 // Tras perder un combate hay que recuperarse (más cuanto más herida acabe). Ganando solo si acaba casi sin vida.
-export const restLeft = pet => Math.max(0, (pet.restUntil || 0) - Date.now());
+export const restLeft = pet => Math.max(0, (pet.restUntil || 0) - at());
 export const healCost = (g, pet = g.pet) => 5 + (g.testMode ? 0 : Math.ceil(restLeft(pet) / 60000));
 export function heal(g) {
   const cost = healCost(g);
@@ -763,18 +796,18 @@ const RIVAL_NAMES = ['Tizón', 'Burbu', 'Zarza', 'Pompa', 'Chisgo', 'Liana', 'Hu
 
 // Rival de la máquina con un poder parecido al tuyo (misma etapa, nivel cercano).
 // Si se indica especie, es un reto a esa especie; si no, sale una al azar.
-export function makeRival(pet, species = '') {
-  const sp = species ? speciesOf(species) : pick(ROSTER.filter(r => r.id !== pet.species));
-  const level = Math.max(1, pet.level + pick([-1, 0, 0, 1]));
+export function makeRival(g, species = '') {
+  const pet = g.pet, sp = species ? speciesOf(species) : pick(g, 'rival', ROSTER.filter(r => r.id !== pet.species));
+  const level = Math.max(1, pet.level + pick(g, 'rival', [-1, 0, 0, 1]));
   const stats = { pot: sp.base[0], agu: sp.base[1], pun: sp.base[2], agi: sp.base[3] };
   const mine = STATS.reduce((sum, k) => sum + pet.stats[k], 0);
-  const target = Math.round(12 + (mine - 12) * (0.8 + Math.random() * 0.25) + (level - pet.level) * 2);
-  for (let i = STATS.reduce((sum, k) => sum + stats[k], 0); i < target; i++) stats[pick(STATS)]++;
+  const target = Math.round(12 + (mine - 12) * (0.8 + rnd(g, 'rival') * 0.25) + (level - pet.level) * 2);
+  for (let i = STATS.reduce((sum, k) => sum + stats[k], 0); i < target; i++) stats[pick(g, 'rival', STATS)]++;
   return {
-    species: sp.id, name: pick(RIVAL_NAMES), level, stage: pet.stage, stats, hue: rollHue(),
+    species: sp.id, name: pick(g, 'rival', RIVAL_NAMES), level, stage: pet.stage, stats, hue: rollHue(g, 'rival'),
     hunger: 70, mood: 70, bond: 55,
-    char: pet.stage >= 1 ? pick(['feroz', 'leal', 'astuto', 'sereno']) : '',
-    mastery: pet.stage === 2 ? pick(STATS) : '',
+    char: pet.stage >= 1 ? pick(g, 'rival', ['feroz', 'leal', 'astuto', 'sereno']) : '',
+    mastery: pet.stage === 2 ? pick(g, 'rival', STATS) : '',
   };
 }
 
@@ -791,7 +824,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
     p.mood = clamp(p.mood + 10); p.bond = clamp(p.bond + 2);
     g.defeats[rival.species] = (g.defeats[rival.species] || 0) + 1;
     if (g.defeats[rival.species] >= DEFEATS_FOR_EGG && !owns(g, rival.species) && hasRoom(g)) {
-      g.eggs.push(newEgg(rival.species));
+      g.eggs.push(newEgg(g, rival.species));
       egg = true;
     }
     log(g, `Ganó a ${rival.name}${egg ? ' y se ganó un huevo de su especie' : ' y se quedó con su botín'}.`);
@@ -805,7 +838,7 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   const hurt = 1 - Math.max(0, Math.min(1, hpLeft));
   const minutes = win ? (hurt > 0.75 ? 3 : 0) : 10 + hurt * 10;   // ganar no obliga a esperar, salvo acabar casi sin vida
   const rest = minutes * (g.testMode ? 1000 : 60000) * (p.quirk === 'duro' ? 0.75 : 1);   // en modo prueba, segundos en vez de minutos
-  p.restUntil = Date.now() + rest;
+  p.restUntil = at() + rest;
   p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
   p.hunger = clamp(p.hunger - 10);
   const mine = speciesOf(p.species).element, theirs = speciesOf(rival.species).element;

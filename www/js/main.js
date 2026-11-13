@@ -14,7 +14,7 @@ import { watch, locale } from './i18n.js';
 import { account, onAccount, startAccount, login, logout, shortWallet } from './account.js';
 import * as A from './aventura.js';
 import { Explore } from './explorar.js';
-import { cloud, guest, DEV, me as myId, pull, touch, flush, forget, wipe, saveProfile, fetchRanking, watchCloud } from './nube.js';
+import { cloud, guest, DEV, pull, flush, forget, wipe, saveProfile, fetchRanking, watchCloud, act as actOn, ask as askOn, tickNow } from './nube.js';
 
 watch();                                             // traduce la página si el idioma no es español
 startAccount();                                      // las cuentas se conectan mientras cargan las imágenes
@@ -104,6 +104,12 @@ function duration(ms) {
   return `${s} s`;
 }
 
+// Todo lo que cambia la partida pasa por una acción (acciones.js): se aplica aquí al momento y el servidor la repite.
+// `ask` es para lo que sortea el servidor (abrir o comprar un huevo): espera su respuesta.
+const act = (kind, ...args) => actOn(game, kind, ...args);
+const ask = (kind, ...args) => askOn(game, kind, ...args);
+const tick = () => tickNow(game);
+
 function commit() { S.save(game); renderCare(); flushNews(); }
 
 // Enseña de uno en uno los avisos pendientes (misión cumplida, deseo cumplido…).
@@ -125,10 +131,16 @@ function celebrate(up) {
 
 // ---------- Primer huevo ----------
 
-function showStart() {
-  game = S.newGame();
-  startPick = 0;
+async function showStart() {
   $('game').hidden = true;
+  if (cloud.on) {                                      // la partida nueva la crea el servidor
+    $('screen-start').hidden = true; $('screen-loading').hidden = false; $('load-tip').textContent = 'Preparando tus huevos…';
+    game = null;
+    const res = await askOn(null, 'new');
+    if (!entered) return;
+    if (res?.error || !game) return loadFailed();
+  } else game = S.newGame();
+  startPick = 0;
   $('screen-loading').hidden = true;
   $('screen-start').hidden = false;
   $('start-name').value = '';
@@ -145,11 +157,13 @@ $('start-eggs').onclick = e => {
   const b = e.target.closest('[data-i]');
   if (b) { startPick = +b.dataset.i; renderStart(); }
 };
-$('btn-start').onclick = () => {
+$('btn-start').onclick = async () => {
   const name = $('start-name').value.trim().slice(0, 12);
   if (!name) return toast('Ponle un nombre antes de abrir el huevo.');
-  S.startWith(game, startPick, name);
-  if (lockTest) game.testMode = false;
+  $('btn-start').disabled = true;
+  const res = await ask('start', startPick, name);
+  $('btn-start').disabled = false;
+  if (res?.error || !game?.pet) { sfx.error(); return toast(res?.error || 'No se pudo guardar. Inténtalo de nuevo.'); }
   S.save(game);
   enterGame();
   birthModal(game.pet);
@@ -232,7 +246,8 @@ function enterGame() {
   $('game').hidden = false;
   room.setPet(game.pet);
   switchTab('care');
-  const gift = S.claimDaily(game);
+  if (game.tz !== S.deviceTz()) act('tz', S.deviceTz());   // el día empieza a medianoche de donde juega
+  const gift = act('daily');
   if (gift) { S.save(game); toast(`Regalo diario: +${gift.coins} monedas · ${gift.streak} día${gift.streak === 1 ? '' : 's'} seguido${gift.streak === 1 ? '' : 's'}`); }
 }
 
@@ -269,7 +284,7 @@ function renderAll() {
 let guideStrokes = 0;
 function guideDid(kind) {
   if (kind === 'stroke' && S.guideStep(game) === 'stroke' && ++guideStrokes < 3) return;   // unas cuantas caricias, no un roce
-  if (!S.guideAdvance(game, kind)) return;
+  if (S.guideStep(game) !== kind || !act('guide', kind)) return;
   sfx.good();
   S.save(game);
   renderGuide();
@@ -294,7 +309,7 @@ function renderGuide() {
     : step === 'battle' && !battle ? (tab === 'battle' ? $('btn-find') : document.querySelector('#tabs [data-tab="battle"]')) : null;
   target?.classList.add('guide-target');
 }
-$('guide-skip').onclick = () => { S.guideSkip(game); S.save(game); renderGuide(); };
+$('guide-skip').onclick = () => { act('guideSkip'); S.save(game); renderGuide(); };
 
 // ---------- Cuidar ----------
 
@@ -327,7 +342,7 @@ function renderCare() {
   // Deseo: lo que pide ahora mismo y cuánto queda para cumplirlo
   const wish = p.wish;
   $('wish-line').hidden = !wish;
-  if (wish) setHTML($('wish-line'), `<i class="ic ic-${S.WISHES[wish.type].icon}"></i><span>${S.WISHES[wish.type].text}${wish.type === 'pet' ? ` (${wish.got} de 5)` : ''} · ${duration(wish.until - Date.now())}</span>`);
+  if (wish) setHTML($('wish-line'), `<i class="ic ic-${S.WISHES[wish.type].icon}"></i><span>${S.WISHES[wish.type].text}${wish.type === 'pet' ? ` (${wish.got} de 5)` : ''} · ${duration(wish.until - S.at())}</span>`);
 
   // Personalidad: la actual y hacia dónde va con el trato de ahora
   const trend = S.trendOf(p), c = p.char && S.CHARS[p.char];
@@ -346,7 +361,7 @@ function renderCare() {
   renderTray();
 
   // Momento de crianza
-  if (!eventOpen && Date.now() - lastInput >= idleNeed && !game.pet.asleep) eventOpen = !!S.currentEvent(game);
+  if (!eventOpen && Date.now() - lastInput >= idleNeed && !game.pet.asleep && (game.pendingEvent || S.eventDue(game))) eventOpen = !!game.pendingEvent || !!act('event');
   const ev = eventOpen ? S.currentEvent(game) : null, card = $('event-card');
   card.hidden = !ev || !!room.mini;
   if (ev && card.dataset.id !== ev.id) {
@@ -419,7 +434,7 @@ function renderHeal() {
 }
 for (const b of document.querySelectorAll('.heal-btn')) {
   b.onclick = () => {
-    const res = S.heal(game);
+    const res = act('heal');
     if (res.error) { toast(res.error); return sfx.error(); }
     sfx.heart();
     S.save(game);
@@ -460,12 +475,18 @@ function renderEggs() {
     </div></div>${n < S.MAX_EGGS ? buy : ''}`);
 }
 
-function buyEggNow() {
-  const res = S.buyEgg(game);
-  if (res.error) { toast(res.error); return sfx.error(); }
+let buyingEgg = false;                                 // qué especie toca lo sortea el servidor: se espera su respuesta
+async function buyEggNow() {
+  if (buyingEgg) return;
+  buyingEgg = true;
+  const res = await ask('buyEgg');
+  buyingEgg = false;
+  if (!res || res.error) { toast(res?.error || 'No se pudo guardar. Inténtalo de nuevo.'); return sfx.error(); }
   sfx.coin();
   eggPick = game.eggs.length - 1;
-  commit();
+  S.save(game);
+  renderAll();
+  flushNews();
   toast(`Compraste un huevo de ${speciesOf(res.species).element}. Cuídalo ${S.EGG_DAYS} días: temperatura y limpieza.`);
 }
 function hatchNow(i) {
@@ -474,12 +495,11 @@ function hatchNow(i) {
   modal({
     title: `Huevo de ${speciesOf(egg.species).element}`,
     body: '<p>Está a punto de abrirse. ¿Cómo se va a llamar?</p><input id="egg-name" maxlength="12" autocomplete="off">',
-    actions: [{ label: 'Abrirlo', cls: 'primary', fn: () => {
+    actions: [{ label: 'Abrirlo', cls: 'primary', fn: async () => {
       const name = $('egg-name').value.trim().slice(0, 12);
       if (!name) return toast('Necesita un nombre.');
-      const res = S.hatchEgg(game, i, name);
-      if (res.error) return toast(res.error);
-      S.setActive(game, res.pet);
+      const res = await ask('hatch', i, name);         // cómo nace lo sortea el servidor; la recién nacida pasa a ser la activa
+      if (!res || res.error) return toast(res?.error || 'No se pudo guardar. Inténtalo de nuevo.');
       room.setPet(game.pet);
       commit();
       birthModal(game.pet, res.grade);
@@ -493,7 +513,7 @@ $('incubator').onclick = e => {
   const tab = t.closest('[data-egg-tab]');
   if (tab) { eggPick = +tab.dataset.eggTab; sfx.tap(); return renderEggs(); }
   const warm = t.closest('[data-warm]');
-  if (warm && S.warmEgg(game, eggPick, +warm.dataset.warm)) { sfx.tap(); S.save(game); renderEggs(); }
+  if (warm && act('warm', eggPick, +warm.dataset.warm)) { sfx.tap(); S.save(game); renderEggs(); }
 };
 // Frotar el huevo lo limpia.
 let rub = null;
@@ -502,7 +522,7 @@ window.addEventListener('pointermove', e => {
   if (!rub) return;
   rub.d += Math.hypot(e.clientX - rub.x, e.clientY - rub.y); rub.x = e.clientX; rub.y = e.clientY;
   if (rub.d < 24) return;
-  if (S.cleanEgg(game, eggPick, rub.d * 0.12)) { renderEggs(); if (game.eggs[eggPick].dirt <= 0) { sfx.good(); S.save(game); } }
+  if (act('clean', eggPick, rub.d * 0.12)) { renderEggs(); if (game.eggs[eggPick].dirt <= 0) { sfx.good(); S.save(game); } }
   rub.d = 0;
 });
 for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => { if (rub) { rub = null; S.save(game); } });
@@ -510,7 +530,7 @@ for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () 
 $('team').onclick = e => {
   const b = e.target.closest('[data-pet]');
   if (!b || +b.dataset.pet === game.active) return;
-  S.setActive(game, +b.dataset.pet);
+  act('active', +b.dataset.pet);
   room.setPet(game.pet);
   commit();
 };
@@ -518,7 +538,7 @@ $('team').onclick = e => {
 $('event-choices').onclick = e => {
   const b = e.target.closest('[data-choice]');
   if (!b) return;
-  const res = S.resolveEvent(game, +b.dataset.choice);
+  const res = act('eventPick', +b.dataset.choice);
   if (!res) return;
   eventOpen = false; idleNeed = idleGap();
   $('event-card').dataset.id = '';
@@ -530,8 +550,8 @@ $('event-choices').onclick = e => {
 $('train-list').onclick = e => {
   const b = e.target.closest('[data-train]');
   if (!b || room.mini) return;
-  const err = S.canTrain(game);
-  if (err) return room.say(err);
+  const res = act('trainStart', b.dataset.train);
+  if (res.error) return room.say(res.error);
   room.startMini(b.dataset.train);
   $('event-card').hidden = true;
   $('room').scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -539,7 +559,7 @@ $('train-list').onclick = e => {
 
 $('btn-sleep').onclick = () => {
   if (room.mini) return;
-  const res = S.toggleSleep(game);
+  const res = act('sleep', !game.pet.asleep);
   if (res.error) { toast(res.error); return sfx.error(); }
   sfx.tap();
   commit();
@@ -598,7 +618,7 @@ function buildTray() {
     drag = null; ghost.hidden = true; room.hover(null);
     $('tray').classList.remove('dragging');
     if (e.type === 'pointercancel' || (d.moved && !room.canDrop(e))) return;
-    const res = S.feed(game, d.food);
+    const res = act('feed', d.food);
     if (res.error) return room.say(res.error);
     room.eat(d.food, res.reaction, res.loved, res.hated);
     commit();
@@ -614,7 +634,7 @@ function doEvolve() {
   if (!S.evolveStatus(game)?.ready || room.mini) return;
   const p = game.pet, sp = speciesOf(p.species);
   const stats0 = { ...p.stats }, prof0 = S.profile(p);
-  const res = S.evolve(game);
+  const res = act('evolve');
   S.save(game);
   const prof1 = S.profile(p), c = S.CHARS[res.char];
   const redeemed = res.prevChar === 'resentido' && res.char !== 'resentido';
@@ -645,8 +665,9 @@ $('btn-decor').onclick = () => {
   if (room.editing) toast('Arrastra los muebles para colocarlos. Pulsa «Listo» al terminar.');
 };
 
+let movedDecor = '';
 const roomHooks = {
-  onStroke() { S.stroke(game); guideDid('stroke'); renderCare(); },
+  onStroke() { act('stroke'); guideDid('stroke'); renderCare(); },
   onTap() {
     const p = game.pet;
     if (p.asleep) return 'Zzz…';
@@ -654,13 +675,13 @@ const roomHooks = {
       : p.bond < 30 ? 'Aún no me fío de ti.' : pick(['¡Hola!', '¿Jugamos?', 'Lánzame la pelota', '¡Aquí estoy!', 'Ráscame']);
   },
   onPlay() {
-    const res = S.play(game);
+    const res = act('play');
     if (!res.error) { commit(); guideDid('play'); }
     return res;
   },
   onEvolve: doEvolve,
   onTrainDone(kind, score) {
-    const res = S.train(game, kind, score);
+    const res = act('train', Math.max(0, Math.min(1, +score || 0)));
     commit();
     guideDid('train');
     if (res.up.levels) toast(`¡Nivel ${game.pet.level}! ${res.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}`);
@@ -672,9 +693,14 @@ const roomHooks = {
   decor: () => game.decor.map(id => ({ ...S.decorAt(game, id), img: decorArt[id] })).filter(d => d.img),
   bedX: () => (game.decor.includes('cama') ? S.decorAt(game, 'cama').x : 0),
   bg: () => roomArt[game.room] || roomArt.sala,
-  onMoveDecor: (id, x, y) => S.moveDecor(game, id, x, y),
-  onDropDecor: () => S.save(game),
-  onUse: id => { if (S.useDecor(game, id)) S.save(game); },
+  onMoveDecor: (id, x, y) => { S.moveDecor(game, id, x, y); movedDecor = id; },     // mientras se arrastra, solo aquí
+  onDropDecor: () => {                                                              // al soltarlo, queda apuntado dónde
+    const at = game.decorPos[movedDecor];
+    if (at) act('moveDecor', movedDecor, at.x, at.y);
+    movedDecor = '';
+    S.save(game);
+  },
+  onUse: id => { if (act('useDecor', id)) S.save(game); },
 };
 
 // ---------- Combate ----------
@@ -715,12 +741,12 @@ function matchLines(sp, rsp) {
 }
 
 function challenge(species = '') {
-  S.tick(game);
+  tick();
   const p = game.pet, sp = speciesOf(p.species);
   if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
   if (S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   if (p.energy < S.FIGHT_ENERGY) return toast(`${p.name} está agotado. Déjalo descansar.`);
-  rival = S.makeRival(p, species);
+  rival = act('foe', species);
   const rsp = speciesOf(rival.species), map = pick(maps);
   modal({
     title: map.name,
@@ -745,8 +771,8 @@ function setView(far) {
   battle?.setView(far);
 }
 function startBattle(map) {
+  rival = act('fight', advFight ? advFight.id : '');   // gasta la energía y deja apuntado contra quién y desde cuándo
   const p = game.pet;
-  p.energy -= S.FIGHT_ENERGY;
   S.save(game);
   $('lobby').hidden = true;
   $('adventure').hidden = true;
@@ -833,15 +859,20 @@ function renderBattle() {
 
 function endBattle(win) {
   const p = game.pet, rsp = speciesOf(rival.species);
-  const r = S.finishBattle(game, win, rival, battle.player.hp / battle.player.maxHp, battle.stats);
-  S.guideAdvance(game, 'battle');                      // el primer combate cierra la guía, se gane o se pierda
-  let adv = null;                                      // si era un combate de la expedición: cómo sigue
   const advZone = advFight ? A.regionOf(game) : null;  // la región, antes de que la expedición pueda terminar
-  if (advFight) {
-    adv = A.afterBattle(game, advFight, win, battle.player.hp / battle.player.maxHp, battle.player.mp);
-    if (win) { p.restUntil = 0; r.rest = 0; }          // ganar malherida no te para: la vida ya se arrastra
-    advFight = null;
+  const hpLeft = Math.max(0, Math.min(1, battle.player.hp / battle.player.maxHp || 0));
+  let done;
+  try { done = act('fightEnd', win, hpLeft, battle.stats.dianas | 0, battle.stats.powerHits | 0, Math.max(0, Math.min(999, +battle.player.mp || 0))); }
+  catch (err) {                                        // no debería pasar: un combate que las reglas no dan por bueno
+    console.warn(err);
+    battle = null; advFight = null; music.stop(); dropAdventure();
+    $('arena').hidden = true; $('lobby').hidden = false;
+    switchTab('care');
+    return toast('El combate no se pudo dar por bueno.');
   }
+  const { r, adv } = done;                             // adv: si era un combate de la expedición, cómo sigue
+  if (S.guideStep(game) === 'battle') act('guide', 'battle');   // el primer combate cierra la guía, se gane o se pierda
+  advFight = null;
   S.save(game);
   music.stop();
   if (win) sfx.win(); else sfx.lose();
@@ -920,18 +951,18 @@ function renderAdventure() {
   $('adv-hint').textContent = box.found < box.total ? 'Muévete con las flechas o tocando el mapa. Hay cofres escondidos: búscalos donde veas un destello.' : 'Muévete con las flechas o tocando el mapa. Las bestias salvajes van a por ti si te acercas.';
 }
 async function openAdventure() {
-  S.tick(game);
+  tick();
   const p = game.pet;
   if (p.asleep) return toast(`${p.name} está durmiendo. Despiértala para pelear.`);
   if (!game.adv && S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   const region = A.REGIONS[game.adv?.region] || A.REGIONS[advRegion];
   if (!game.adv && !A.open(game, region.id)) return toast(region.lock);
-  A.start(game, region.id);
-  const zone = A.zoneOf(game);
+  const zone = (game.adv && region.zones[game.adv.zone]) || region.zones[region.first];   // primero el mapa: sin él no se sale
   $('btn-adv').disabled = true;
-  try { advMaps[zone.img] ||= await loadImage(zone.img); } catch { $('btn-adv').disabled = false; A.leave(game); return toast('No se pudo cargar el mapa. Inténtalo de nuevo.'); }
+  try { advMaps[zone.img] ||= await loadImage(zone.img); } catch { $('btn-adv').disabled = false; return toast('No se pudo cargar el mapa. Inténtalo de nuevo.'); }
   $('btn-adv').disabled = false;
   if (tab !== 'battle' || battle) return;
+  act('advStart', region.id);
   S.save(game);
   $('lobby').hidden = true; $('arena').hidden = true; $('adventure').hidden = false;
   advMount();
@@ -941,7 +972,7 @@ function advMount() {
   const zone = A.zoneOf(game);
   explore = new Explore($('adv-canvas'), game,
     { map: advMaps[zone.img], near: advNear, player: petSprite(game.pet), wild: poi => spriteOf(poi.species, A.stageOf(poi)), icon: name => icons[name], chest: decorArt.cofre, glint: vfx.destello },
-    { onReach: advReach, onMove: () => S.save(game), onRace: advRaceEnd });
+    { onReach: advReach, onMove: () => { if (game.adv) act('advMove', game.adv.x, game.adv.y); S.save(game); }, onRace: advRaceEnd });
   renderAdventure();
   for (const poi of zone.pois) {                         // las zonas de al lado se van cargando, para cruzar sin esperas
     const next = poi.to?.zone && A.regionOf(game).zones[poi.to.zone];
@@ -950,26 +981,25 @@ function advMount() {
 }
 // Cruzar un puente: la pantalla se funde, cambia la zona y la bestia aparece al otro lado.
 async function advTravel(poi) {
-  const from = { zone: game.adv.zone, x: explore.safe[0], y: explore.safe[1] }, wrap = $('adv-canvas').parentElement;
-  const zone = A.travel(game, poi);
+  const wrap = $('adv-canvas').parentElement, zone = A.regionOf(game).zones[poi.to.zone];
   if (!zone) { explore.busy = false; return; }
   wrap.classList.add('fade');
   sfx.tap();
   const pause = new Promise(done => setTimeout(done, 220));
-  try { advMaps[zone.img] ||= await loadImage(zone.img); await pause; } catch {
-    Object.assign(game.adv, from);                       // sin mapa no se cruza: se queda donde estaba
+  try { advMaps[zone.img] ||= await loadImage(zone.img); await pause; } catch {   // sin mapa no se cruza: se queda donde estaba
     wrap.classList.remove('fade');
     if (explore) { explore.back(poi); explore.busy = false; }
     return toast('No se pudo cargar el mapa. Inténtalo de nuevo.');
   }
   if (!game.adv || !explore || $('adventure').hidden) return wrap.classList.remove('fade');   // se fue a casa mientras cargaba
+  act('advTravel', poi.id);
   S.save(game);
   advMount();
   wrap.classList.remove('fade');
   toast(zone.name);
 }
 function advEnd() {
-  A.leave(game);
+  act('advLeave');
   S.save(game);
   dropAdventure();
   $('lobby').hidden = false;
@@ -983,9 +1013,10 @@ const advLeaveAsk = free => modal({
 // La bestia ha llegado a algo del camino.
 function advReach(poi) {
   explore.busy = true;
+  if (game.adv) act('advMove', explore.x, explore.y);   // dónde está, por si la expedición se retoma más tarde
   const free = () => { if (explore) explore.busy = false; renderAdventure(); };
   if (poi.type === 'chest') {
-    const got = A.openChest(game, poi);
+    const got = act('advChest', poi.id);
     S.save(game);
     sfx.coin();
     $('coins').textContent = game.coins;
@@ -993,7 +1024,7 @@ function advReach(poi) {
     return free();
   }
   if (poi.type === 'food' || poi.type === 'coin') {
-    const got = A.pick(game, poi);
+    const got = act('advPick', poi.id);
     S.save(game);
     sfx.coin();
     $('coins').textContent = game.coins;
@@ -1004,7 +1035,7 @@ function advReach(poi) {
   const go = [{ label: 'Seguir', cls: 'primary', fn: free }];
   const sealsLine = () => advTokens(game.adv.region);
   if (poi.type === 'coal' || poi.type === 'cub') {       // algo que un personaje te mandó buscar
-    const got = A.takeCoal(game, poi);
+    const got = act('advCoal', poi.id);
     S.save(game);
     sfx.coin();
     if (got) toast(`${got.label}: ${got.have} de ${got.need}`);
@@ -1012,18 +1043,18 @@ function advReach(poi) {
     return free();
   }
   if (poi.type === 'seal') {
-    A.takeSeal(game, poi);
+    act('advSeal', poi.id);
     S.save(game);
     sfx.win();
     return modal({ title: poi.found.title, body: `<p>${poi.found.text}</p>${sealsLine()}`, actions: go });
   }
   if (poi.type === 'clue') {
-    A.readClue(game);
+    act('advClue', poi.id);
     S.save(game);
     return modal({ title: 'Unas palabras grabadas', body: `<p>${poi.text}</p>`, actions: go });
   }
   if (poi.type === 'switch') {                         // una farola del acertijo
-    const lamp = A.press(game, poi);
+    const lamp = act('advPress', poi.id);
     S.save(game);
     if (lamp.solved) {
       sfx.win();
@@ -1035,7 +1066,7 @@ function advReach(poi) {
     return free();
   }
   if (poi.type === 'npc') {
-    const said = A.talk(game, poi);
+    const said = act('advTalk', poi.id);
     S.save(game);
     if (said.seal) sfx.win();
     if (said.race) {                                     // te reta a una carrera
@@ -1048,7 +1079,7 @@ function advReach(poi) {
       actions: go });
   }
   if (poi.type === 'door') {
-    const door = A.openDoor(game);
+    const door = act('advDoor', poi.id);
     S.save(game);
     if (door.open) sfx.win();
     return modal({ title: door.open ? 'La puerta se abre' : 'La puerta sellada', body: `<p>${door.open ? poi.opens : poi.text}</p>${door.open ? '' : sealsLine()}`, actions: go });
@@ -1059,7 +1090,7 @@ function advReach(poi) {
     return modal({
       title: 'Un lugar tranquilo',
       body: '<p>Aquí se puede descansar un rato: recuperas la mitad de la vida. Solo una vez por expedición.</p>',
-      actions: [{ label: 'Descansar', cls: 'primary', fn: () => { A.rest(game, poi); S.save(game); sfx.heart(); toast('Vida recuperada.'); free(); } }, { label: 'Ahora no', cls: 'ghost', fn: free }],
+      actions: [{ label: 'Descansar', cls: 'primary', fn: () => { act('advRest', poi.id); S.save(game); sfx.heart(); toast('Vida recuperada.'); free(); } }, { label: 'Ahora no', cls: 'ghost', fn: free }],
     });
   }
   if (poi.type === 'event') {
@@ -1067,7 +1098,7 @@ function advReach(poi) {
       title: 'En el camino',
       body: `<p>${poi.text}</p>`,
       actions: poi.choices.map((c, i) => ({ label: c.label, cls: i ? '' : 'primary', fn: () => {
-        const text = A.resolve(game, poi, i, S.profile(game.pet).maxMp);
+        const text = act('advResolve', poi.id, i);
         S.save(game);
         $('coins').textContent = game.coins;
         if (text) toast(text);
@@ -1076,7 +1107,7 @@ function advReach(poi) {
     });
   }
   // Una bestia salvaje o el jefe: luchar o dar media vuelta.
-  S.tick(game);
+  tick();
   const p = game.pet, sp = speciesOf(p.species), boss = poi.type === 'boss';
   const foe = A.makeWild(poi), rsp = speciesOf(foe.species), tired = p.energy < S.FIGHT_ENERGY;
   const retreat = () => { explore?.back(poi); free(); };
@@ -1095,7 +1126,7 @@ function advReach(poi) {
 function advTokens(region) { const s = A.seals(game, region); return `<p><b>${A.tokenOf(region).hud} ${s.found} de ${s.total}</b></p>`; }
 // Acabó una carrera contra un personaje.
 function advRaceEnd(poi, won) {
-  const got = A.raceDone(game, poi, won);
+  const got = act('advRace', poi.id, !!won);
   S.save(game);
   if (won) sfx.win(); else sfx.lose();
   modal({ title: won ? '¡Has ganado la carrera!' : 'Carrera perdida',
@@ -1176,7 +1207,7 @@ $('b-items').addEventListener('pointerleave', () => { hoverItem = ''; });
 $('b-items').onclick = e => {
   const id = e.target.closest('[data-item]')?.dataset.item;
   if (!id || !battle || !(game.items[id] > 0)) return;
-  if (battle.useItem(id)) { S.spendItem(game, id); S.save(game); }
+  if (battle.useItem(id)) { act('useItem', id); S.save(game); }
   else toast(battle.itemUsed ? 'Solo un objeto por turno.' : 'Ahora mismo no hace falta.');
 };
 
@@ -1213,15 +1244,15 @@ function renderShop() {
 $('tab-shop').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.useRoom) { S.setRoom(game, b.dataset.useRoom); sfx.tap(); S.save(game); return renderAll(); }
-  const res = b.dataset.buyRoom ? S.buyRoom(game, b.dataset.buyRoom) : b.dataset.buyFood ? S.buyFood(game, b.dataset.buyFood) : b.dataset.buyItem ? S.buyItem(game, b.dataset.buyItem)
-    : b.dataset.buyDecor ? S.buyDecor(game, b.dataset.buyDecor) : b.dataset.buyEgg ? S.buyEgg(game) : null;
+  if (b.dataset.useRoom) { act('setRoom', b.dataset.useRoom); sfx.tap(); S.save(game); return renderAll(); }
+  if (b.dataset.buyEgg) return buyEggNow();
+  const res = b.dataset.buyRoom ? act('buyRoom', b.dataset.buyRoom) : b.dataset.buyFood ? act('buyFood', b.dataset.buyFood) : b.dataset.buyItem ? act('buyItem', b.dataset.buyItem)
+    : b.dataset.buyDecor ? act('buyDecor', b.dataset.buyDecor) : null;
   if (!res) return;
   if (res.error) { toast(res.error); return sfx.error(); }
   sfx.coin();
   S.save(game);
   renderAll();
-  if (res.species) toast(`Compraste un huevo de ${speciesOf(res.species).element}.`);
   if (b.dataset.buyDecor) toast(`${S.DECOR[b.dataset.buyDecor].name}: ya está en tu sala.`);
 };
 
@@ -1283,59 +1314,77 @@ function gate() {
   enter();
 }
 // Ya hay cuenta: se carga su partida (de la nube si hay servidor) y se entra.
+function loadFailed() {
+  entered = false; pullFailed = true;
+  $('screen-loading').hidden = true; $('screen-start').hidden = true; $('screen-login').hidden = false;
+  $('login-text').textContent = 'No se pudo cargar tu partida. Comprueba tu conexión.';
+  $('btn-login').textContent = 'Reintentar'; $('btn-login').disabled = false;
+}
 async function enter() {
   pullFailed = false;
-  let mine = S.load();
+  let mine = cloud.on ? null : S.load();               // con la partida en la nube, la copia del navegador no cuenta
   if (cloud.on) {
     $('screen-login').hidden = true; $('screen-start').hidden = true; $('game').hidden = true;
     $('screen-loading').hidden = false; $('load-tip').textContent = 'Cargando tu partida…';
     try {
       const remote = await pull();
       if (!entered) return;                              // salió de la cuenta mientras cargaba
-      const theirs = S.adopt(remote.save);
-      if (theirs) mine = theirs;                         // manda la de la cuenta
-      else if (mine?.owner && mine.owner !== myId()) mine = null;   // la copia de este navegador es de otra cuenta
-      if (mine && remote.profile?.name) mine.profile = remote.profile;
+      mine = S.adopt(remote.save);                       // manda la de la cuenta
     } catch (err) {
       console.error(err);
       if (!entered) return;
-      entered = false; pullFailed = true;
-      $('screen-loading').hidden = true; $('screen-login').hidden = false;
-      $('login-text').textContent = 'No se pudo cargar tu partida. Comprueba tu conexión.';
-      $('btn-login').textContent = 'Reintentar'; $('btn-login').disabled = false;
-      return;
+      return loadFailed();
     }
   }
   game = mine;
-  if (game?.pet) { S.tick(game); enterGame(); S.save(game); } else showStart();
+  if (game?.pet) { tick(); enterGame(); S.save(game); } else showStart();
 }
 $('btn-login').onclick = () => { sfx.tap(); if (pullFailed) { pullFailed = false; gate(); } else if (account.state === 'failed') location.reload(); else login(); };
 
-// La nube: cada guardado se sube solo; si otro dispositivo guardó antes, se carga su partida.
-S.onSave(touch);
+// La nube: la partida buena es la del servidor. Cada vez que llega, sustituye a la de aquí sin cambiar de objetos
+// (la sala y el mapa siguen mirando a las mismas bestias). `why`: 'conflict' si otro dispositivo jugó antes,
+// 'resync' si el servidor no dio por buena alguna acción; en esos dos casos se vuelve a casa.
+function mergeInto(dst, src) {
+  const alike = (a, b) => a && b && typeof a === 'object' && typeof b === 'object' && Array.isArray(a) === Array.isArray(b);
+  if (Array.isArray(dst)) {
+    dst.length = Math.min(dst.length, src.length);
+    src.forEach((v, i) => { dst[i] = alike(dst[i], v) ? mergeInto(dst[i], v) : v; });
+    return dst;
+  }
+  for (const k of Object.keys(dst)) if (!(k in src)) delete dst[k];
+  for (const [k, v] of Object.entries(src)) dst[k] = alike(dst[k], v) ? mergeInto(dst[k], v) : v;
+  return dst;
+}
 watchCloud({
   status: () => renderAccount(),
-  conflict(save) {
+  adopt(save, why) {
     const theirs = S.adopt(save);
-    if (!theirs?.pet || !entered) return;
-    game = theirs;
-    battle = null; music.stop(); dropAdventure(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true;
+    if (!theirs || !entered) return null;
+    if (!game) { game = theirs; return game; }
+    const news = game.news || [];
+    mergeInto(game, theirs);
+    game.news = news;                                  // los avisos pendientes son de esta pantalla
     S.save(game);
-    room.setPet(game.pet);
-    switchTab('care');
-    toast('Tu partida se actualizó desde otro dispositivo.');
+    if (why) {
+      if (!game.pet) { location.reload(); return game; }
+      battle = null; advFight = null; music.stop(); dropAdventure(); $('arena').hidden = true; $('lobby').hidden = false; $('modal').hidden = true;
+      room.setPet(game.pet);
+      switchTab('care');
+      toast(why === 'conflict' ? 'Tu partida se actualizó desde otro dispositivo.' : 'Tu partida se ha sincronizado con el servidor.');
+    }
+    return game;
   },
 });
 for (const ev of ['pagehide', 'visibilitychange']) window.addEventListener(ev, () => { if (ev === 'pagehide' || document.hidden) flush(true); });
 
-$('btn-test').onclick = () => { game.testMode = !game.testMode; S.save(game); renderAll(); };
+$('btn-test').onclick = () => { if (cloud.on) return; game.testMode = !game.testMode; S.save(game); renderAll(); };   // el modo prueba es solo para jugar sin servidor
 $('btn-sound').onclick = () => { setMuted(!isMuted()); renderAll(); sfx.coin(); };
 $('btn-music').onclick = () => { music.setOn(!music.isOn()); renderAll(); sfx.tap(); };
 document.addEventListener('visibilitychange', () => music.pause(document.hidden));
 $('btn-reset').onclick = () => modal({
   title: '¿Empezar de cero?',
   body: '<p>Perderás todas tus bestias, huevos y monedas. No se puede deshacer.</p>',
-  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: () => { S.reset(); if (cloud.on) wipe(); music.stop(); dropAdventure(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; showStart(); } }, closeBtn('Cancelar')],
+  actions: [{ label: 'Sí, borrar todo', cls: 'primary', fn: async () => { S.reset(); music.stop(); dropAdventure(); battle = null; $('arena').hidden = true; $('lobby').hidden = false; $('game').hidden = true; if (cloud.on) await wipe(); showStart(); } }, closeBtn('Cancelar')],
 });
 
 // ---------- Bucle y arranque ----------
@@ -1364,7 +1413,7 @@ setInterval(() => {
   if (!game?.pet || $('game').hidden) return;
   if (tab === 'battle' && !battle) renderLobby();      // cuenta atrás de la recuperación
   flushNews();
-  if (++seconds % 5 === 0) { S.tick(game); S.save(game); }
+  if (++seconds % 5 === 0) { tick(); S.save(game); }
   if (tab !== 'care') return;
   renderCare();
   const p = game.pet;                                 // de vez en cuando avisa de lo que le falta
@@ -1402,7 +1451,7 @@ try {
   injectArt(eggGrid.flat().slice(0, EGG_ORDER.length));
   room = new Room($('room'), { bg: roomBg, icons, sprite: petSprite }, roomHooks);
   buildTray();
-  window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, get explore() { return explore; }, vfx }; // para depurar desde la consola
+  if (DEV) window.petbound = { get game() { return game; }, get room() { return room; }, get battle() { return battle; }, get explore() { return explore; }, vfx }; // para depurar desde la consola
   artReady = true;
   onAccount(gate);                                    // entra al juego si hay cuenta; si no, pantalla de entrada
   requestAnimationFrame(frame);
