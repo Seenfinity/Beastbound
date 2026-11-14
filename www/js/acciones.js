@@ -146,7 +146,7 @@ export const ACTIONS = {
     need(out.over && out.ticks === ticks, 'el combate no acaba ahí');
     delete g.fight;
     for (const id of out.used) g.items[id] = Math.max(0, (g.items[id] || 0) - 1);   // los objetos gastados
-    const r = S.finishBattle(g, out.win, f.rival, out.hpLeft, { dianas: out.dianas, powerHits: out.powerHits });
+    const r = S.finishBattle(g, out.win, f.rival, out.hpLeft, { dianas: out.dianas, powerHits: out.powerHits, tie: out.tie });
     let adv = null;                                    // si era de la expedición: cómo sigue
     const poi = f.poi && g.adv ? A.zoneOf(g)?.pois.find(p => p.id === f.poi) : null;
     if (poi) {

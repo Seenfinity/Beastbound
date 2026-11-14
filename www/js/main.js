@@ -887,15 +887,16 @@ async function endBattle() {
     return modal({ title: 'Sin conexión', body: '<p>No se pudo comprobar el combate con el servidor. Vuelve a intentarlo cuando tengas conexión.</p>',
       actions: [{ label: 'Reintentar', cls: 'primary', fn: () => endBattle() }, { label: 'Salir sin guardar', cls: 'ghost', fn: () => quit('') }] });
   }
-  const { r, adv, out } = done, win = out.win;         // adv: si era un combate de la expedición, cómo sigue
+  const { r, adv, out } = done, win = out.win, tie = !!out.tie;   // adv: si era un combate de la expedición, cómo sigue · tie: cayeron las dos a la vez
   if (S.guideStep(game) === 'battle') act('guide', 'battle');   // el primer combate cierra la guía, se gane o se pierda
   advFight = null;
   S.save(game);
   music.stop();
-  if (win) sfx.win(); else sfx.lose();
+  if (win) sfx.win(); else if (tie) sfx.bad(); else sfx.lose();
   const hunt = r.egg ? `<p><b>¡Décima victoria contra ${esc(rsp.name)}!</b> Te ganaste su huevo: ya está en tu incubadora.</p>`
     : win && !S.owns(game, rival.species) ? `<p class="muted">Victorias contra ${esc(rsp.name)}: ${Math.min(r.defeats, S.DEFEATS_FOR_EGG)} de ${S.DEFEATS_FOR_EGG} para ganar su huevo.</p>` : '';
-  const lines = win
+  const lines = tie ? '<p>Las dos bestias cayeron a la vez. Nadie gana nada y nadie pierde nada.</p>'
+    : win
     ? `<p>Le ganaste a <b translate="no">${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
     : `<p><b translate="no">${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
@@ -919,7 +920,7 @@ async function endBattle() {
     explore.resize();
     renderAdventure();
   };
-  modal({ title: win ? '¡Victoria!' : 'Derrota', body: lines + up + trip + rest,
+  modal({ title: tie ? 'Empate' : win ? '¡Victoria!' : 'Derrota', body: lines + up + trip + rest,
     actions: [adv && !adv.over && explore ? { label: 'Seguir explorando', cls: 'primary', fn: onward } : { label: 'Volver a casa', cls: 'primary', fn: home }] });
 }
 

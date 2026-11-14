@@ -818,7 +818,11 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
   const p = g.pet;
   let exp, coins = 0, stolen = 0, egg = false;
   if (!g.seen.includes(rival.species)) g.seen.push(rival.species);
-  if (win) {
+  const tie = !!stats.tie;                              // cayeron las dos a la vez: nadie gana nada y nadie pierde nada
+  if (tie) {
+    exp = 0;
+    log(g, `Empató con ${rival.name}: cayeron a la vez.`);
+  } else if (win) {
     exp = 24 + rival.level * 5;
     coins = Math.round((10 + rival.level) * (has(g, 'trofeo') ? 1.1 : 1));
     g.coins += coins; g.wins++;
@@ -837,13 +841,15 @@ export function finishBattle(g, win, rival, hpLeft = 0, stats = {}) {
     log(g, `Perdió contra ${rival.name}.`);
   }
   const hurt = 1 - Math.max(0, Math.min(1, hpLeft));
-  const minutes = win ? (hurt > 0.75 ? 3 : 0) : 10 + hurt * 10;   // ganar no obliga a esperar, salvo acabar casi sin vida
+  const minutes = tie ? 0 : win ? (hurt > 0.75 ? 3 : 0) : 10 + hurt * 10;   // ganar no obliga a esperar, salvo acabar casi sin vida
   const rest = minutes * (g.testMode ? 1000 : 60000) * (p.quirk === 'duro' ? 0.75 : 1);   // en modo prueba, segundos en vez de minutos
   p.restUntil = at() + rest;
-  p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
+  if (!tie) p.axes.bravura += rival.level > p.level ? 2.5 : 1.5;
   p.hunger = clamp(p.hunger - 10);
   const mine = speciesOf(p.species).element, theirs = speciesOf(rival.species).element;
-  track(g, { type: 'battle', win, hpLeft, dianas: stats.dianas, powerHits: stats.powerHits, disadvantage: matchup(theirs, mine) > 1 });
-  grant(g, 'fight');
-  return { exp, coins, stolen, egg, rest, defeats: g.defeats[rival.species] || 0, up: addExp(g, exp) };
+  if (!tie) {                                           // un empate no cuenta para las misiones ni para los deseos
+    track(g, { type: 'battle', win, hpLeft, dianas: stats.dianas, powerHits: stats.powerHits, disadvantage: matchup(theirs, mine) > 1 });
+    grant(g, 'fight');
+  }
+  return { exp, coins, stolen, egg, rest, tie, defeats: g.defeats[rival.species] || 0, up: addExp(g, exp) };
 }

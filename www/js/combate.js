@@ -111,7 +111,7 @@ export class Combat {
     this.stepLeft = 0; this.stepDir = 1; this.hold = false;   // pasos cortos del jugador
     this.tutor = !!opts.tutor;
     this.phase = 'aim'; this.turn = this.player;
-    this.ended = false; this.won = false;
+    this.ended = false; this.won = false; this.tied = false; this.quit = false;
     this.log = [];                                  // lo que hace el jugador: [paso, qué, ...datos]
     this.setupHazards(map.hazards || {});
   }
@@ -221,7 +221,7 @@ export class Combat {
     const f = this.player;
     if (kind === 'surrender') {
       if (this.phase === 'over') return;
-      f.hp = 0;
+      f.hp = 0; this.quit = true;
       return this.finish(0.3);
     }
     if (!this.canAct()) return;
@@ -459,14 +459,15 @@ export class Combat {
   finish(delay = 1.3) {
     this.phase = 'over';
     this.overTimer = delay;
-    const win = this.rival.hp <= 0 && this.player.hp > 0;
-    this.say(win ? '¡Victoria!' : 'Derrota…', 9);
+    this.say(this.bothDown() ? '¡Empate!' : this.rival.hp <= 0 ? '¡Victoria!' : 'Derrota…', 9);
   }
+  // Las dos caen en el mismo disparo (daño devuelto, o una explosión que alcanza a ambas): empate. Rendirse no cuenta.
+  bothDown() { return !this.quit && this.rival.hp <= 0 && this.player.hp <= 0; }
 
   // Cómo acabó (o cómo va): lo que cuenta para la partida.
   result() {
     const me = this.player;
-    return { over: this.ended, win: this.won, hpLeft: clamp(me.hp / me.maxHp, 0, 1), mp: me.mp, dianas: this.stats.dianas, powerHits: this.stats.powerHits, used: [...this.used], ticks: this.ended ? this.endTick : this.tick };
+    return { over: this.ended, win: this.won, tie: this.tied, hpLeft: clamp(me.hp / me.maxHp, 0, 1), mp: me.mp, dianas: this.stats.dianas, powerHits: this.stats.powerHits, used: [...this.used], ticks: this.ended ? this.endTick : this.tick };
   }
 
   // --- Un paso de tiempo ---
@@ -569,6 +570,7 @@ export class Combat {
     if (this.phase === 'over' && !this.ended && (this.overTimer -= dt) <= 0) {
       this.ended = true; this.endTick = this.tick;
       this.won = this.rival.hp <= 0 && this.player.hp > 0;
+      this.tied = this.bothDown();
       this.emit('end', this.won);
     }
   }

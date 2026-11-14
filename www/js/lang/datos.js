@@ -356,6 +356,7 @@ export default [
   ['Ganó a {!0} y se ganó un huevo de su especie.', 'Beat {0} and won an egg of its species.', '击败了 {0}，并赢得了一枚同种族的蛋。'],
   ['Ganó a {!0} y se quedó con su botín.', 'Beat {0} and took its loot.', '击败了 {0}，夺得了它的战利品。'],
   ['Perdió contra {!0}.', 'Lost to {0}.', '输给了 {0}。'],
+  ['Empató con {!0}: cayeron a la vez.', 'Drew with {0}: both fell at the same time.', '与 {0} 打成平局：双方同时倒下。'],
   ['Te faltan {#0} monedas.', "You're {0} coins short.", '还差 {0} 金币。'],
   ['Esa habitación ya es tuya.', 'That room is already yours.', '这个房间已经是你的了。'],
   ['Eso ya está en tu sala.', "That's already in your room.", '它已经在你的房间里了。'],
