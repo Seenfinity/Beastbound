@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url)), from = join(here, '..', 'www', 'js'), to = join(here, 'reglas');
-export const FILES = ['state.js', 'roster.js', 'events.js', 'aventura.js', 'acciones.js'];
+export const FILES = ['state.js', 'roster.js', 'events.js', 'aventura.js', 'acciones.js', 'combate.js'];
 const check = process.argv.includes('--check');
 const note = '// COPIA: este archivo se genera desde www/js con «node sync-reglas.mjs». No lo edites aquí.\n';
 let stale = 0;
