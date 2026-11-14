@@ -213,6 +213,7 @@ export const MAX_SLEEP = 8 * 3600000;   // se cansa de dormir y se despierta sol
 
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 const pick = (g, purpose, list) => list[Math.floor(rnd(g, purpose) * list.length)];
+export { rnd as roll, pick as choose };              // para las acciones que sortean algo (acciones.js)
 // El día de juego es la fecha local de la jugadora (g.tz: minutos respecto a la hora universal), con el formato de siempre («Fri Nov 13 2026»).
 const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dayKey = ms => { const d = new Date(ms); return `${WEEK[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')} ${d.getUTCFullYear()}`; };

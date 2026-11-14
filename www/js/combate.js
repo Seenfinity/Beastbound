@@ -87,6 +87,7 @@ function makeTerrain(rand, rnd) {
 export class Combat {
   // Cada bando: { pet: { name, stage, level, char }, prof, species: { element }, powers }.
   // map: { hazards }. seed: entero. opts: { hp, mp } con lo que entra el jugador (en la expedición), tutor (primer combate),
+  // items (los objetos que lleva: no se pueden usar más de los que hay),
   // scale (solo para la demostración de la portada: bestias más grandes; en el juego siempre 1).
   // Tras crearlo hay que llamar a start().
   constructor(player, rival, map, seed, opts = {}) {
@@ -99,6 +100,7 @@ export class Combat {
     this.clock = TURN_TIME; this.warm = WARM;
     this.stats = { dianas: 0, powerHits: 0 };       // lo que hizo el jugador: cuenta para las misiones
     this.itemUsed = false; this.used = [];          // objetos gastados en este combate
+    this.bag = opts.items ? { ...opts.items } : null;   // los que quedan en la mochila (null: sin límite, para la demostración)
     const land = makeTerrain(this.rand, this.rnd);
     this.terrain = land.t; this.spawns = land.spawns;
     this.player = this.makeFighter(player, land.spawns[0].x, 1, true);
@@ -260,6 +262,7 @@ export class Combat {
   }
   itemOk(id) {
     if (!this.canAct() || this.itemUsed) return false;
+    if (this.bag && !(this.bag[id] > 0)) return false;
     const f = this.player;
     return id === 'pocion' ? f.hp < f.maxHp : id === 'elixir' ? f.mp < f.maxMp : id === 'escudo' ? f.shield < 0.5 : id === 'mira' ? !f.sight : false;
   }
@@ -271,6 +274,7 @@ export class Combat {
     else if (id === 'escudo') { f.shield = 0.5; f.shieldLook = 'burbuja'; this.note(f, 'Escudo', '#4db8ff'); }
     else if (id === 'mira') { f.sight = true; this.note(f, 'Mira', '#ffd76a'); }
     this.itemUsed = true;
+    if (this.bag) this.bag[id]--;
     this.used.push(id);
     this.emit('item', id);
   }

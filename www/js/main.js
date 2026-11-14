@@ -4,6 +4,7 @@ import * as S from './state.js';
 import { MOODS, moodSheet, STAGES, ROSTER, MAPS, speciesOf, ELEMENT_COLOR, EGG_ORDER, ICON_ORDER, powersOf, effectOf, matchup, strongAgainst, weakAgainst, POWER_ICON_SHEETS, VFX_ORDER, slug } from './roster.js';
 import { loadMoods, loadGrid, loadImage, scaled, despill, tinted } from './sprites.js';
 import { Battle, W } from './battle.js';
+import { duelOf } from './acciones.js';
 import { Room } from './room.js';
 import { MINI_INFO } from './minigames.js';
 import { sfx, isMuted, setMuted } from './sfx.js';
@@ -747,7 +748,7 @@ function challenge(species = '') {
   if (S.restLeft(p)) return toast(`${p.name} aún se está recuperando.`);
   if (p.energy < S.FIGHT_ENERGY) return toast(`${p.name} está agotado. Déjalo descansar.`);
   rival = act('foe', species);
-  const rsp = speciesOf(rival.species), map = pick(maps);
+  const rsp = speciesOf(rival.species), map = maps.find(m => m.id === game.foeMap) || maps[0];   // el mapa sale con el rival
   modal({
     title: map.name,
     body: `<div class="sprites"><figure><canvas data-sprite="${p.species}:${p.stage}:${p.hue || 0}"></canvas>${own(p.name)} · Nv ${p.level}</figure><span class="versus">VS</span><figure><canvas class="flip" data-sprite="${rival.species}:${rival.stage}:${rival.hue || 0}"></canvas>${own(rival.name)} · Nv ${rival.level}</figure></div>
@@ -755,7 +756,7 @@ function challenge(species = '') {
       ${matchLines(sp, rsp)}
       ${S.guideStep(game) === 'battle' ? '<p class="how">Cómo se combate: arrastra hacia atrás desde tu bestia y suelta para disparar. Cuanto más estiras, más fuerza, y el viento desvía el tiro. En este primer combate verás la trayectoria completa.</p>' : ''}
       <p class="muted">${map.effect}</p>`,
-    actions: [{ label: '¡A luchar!', cls: 'primary', fn: () => startBattle(map) }, closeBtn('Mejor no')],
+    actions: [{ label: '¡A luchar!', cls: 'primary', fn: () => startBattle() }, closeBtn('Mejor no')],
   });
 }
 $('btn-find').onclick = () => challenge();
@@ -770,9 +771,22 @@ function setView(far) {
   try { localStorage.setItem('petbound-view', far ? 'far' : 'near'); } catch { /* sin almacenamiento */ }
   battle?.setView(far);
 }
-function startBattle(map) {
-  rival = act('fight', advFight ? advFight.id : '');   // gasta la energía y deja apuntado contra quién y desde cuándo
-  const p = game.pet;
+// El combate lo prepara el servidor: fija las cifras de los dos bandos, el mapa y la semilla del azar (queda en game.fight).
+let starting = false;
+async function startBattle() {
+  if (starting) return;
+  starting = true;
+  let duel;
+  try { duel = await ask('fight', advFight ? advFight.id : ''); } catch (err) { console.warn(err); duel = null; }
+  starting = false;
+  if (!duel || duel.error || !game.fight) {
+    advFight = null;
+    if (explore) explore.busy = false;
+    sfx.error();
+    return toast('No se pudo empezar el combate. Inténtalo de nuevo.');
+  }
+  const p = game.pet, d = duelOf(game.fight), map = maps.find(m => m.id === game.fight.map) || maps[0];
+  rival = game.fight.rival;
   S.save(game);
   $('lobby').hidden = true;
   $('adventure').hidden = true;
@@ -784,11 +798,8 @@ function startBattle(map) {
   const maxH = Math.max(240, window.innerHeight - wrap.getBoundingClientRect().top - 16);
   const w = Math.min(maxW, maxH / 0.5625), h = clamp(maxH, w * 0.5625, w * 1.35);
   wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
-  const side = pet => {
-    const sp = speciesOf(pet.species);
-    return { pet, prof: S.profile(pet), species: sp, sprite: petSprite(pet), sprites: MOODS.map((_, m) => petSprite(pet, m)), powers: powersOf(sp, pet).filter(pw => pw.unlocked) };
-  };
-  const mine = side(p), VH = Math.round((W * h) / w);
+  const look = (side, who) => ({ ...side, sprite: petSprite(who), sprites: MOODS.map((_, m) => petSprite(who, m)) });   // el motor pone las cifras; aquí, el aspecto
+  const mine = look(d.player, p), VH = Math.round((W * h) / w);
   $('b-powers').innerHTML = mine.powers.map((pw, i) => `<button class="pw" data-power="${i}"><i class="pi pi-${slug(pw.name)}"></i><span class="pw-t"><b>${esc(pw.name)}</b><em>${effectOf(pw)}</em><small>${pw.mp} MP</small></span><span></span></button>`).join('')
     || '<p class="pw-none">Aún sin poderes: el primero llega al nivel 2.</p>';
   powerButtons = [...document.querySelectorAll('#b-powers .pw')];
@@ -798,11 +809,8 @@ function startBattle(map) {
   const box = $('field').getBoundingClientRect(), tops = [$('b-powers'), $('b-items')].map(el => el.getBoundingClientRect()).filter(r => r.height).map(r => r.top);
   const pad = tops.length ? Math.max(0, ((box.bottom - Math.min(...tops)) / box.height) * VH) : 0;
   // El campo y las bestias miden lo mismo en todas las pantallas; en las estrechas la vista cercana se acerca más.
-  battle = new Battle($('field'), mine, side(rival), map, { onEnd: endBattle }, VH, 1, { vfx, icon: name => powerIcons[name] }, pad, {
-    near: w < 520 ? 1.4 : 1,
-    ...(advFight ? { hp: game.adv.hp, ...(game.adv.mp != null ? { mp: game.adv.mp } : {}) } : {}),   // en la expedición se entra con la vida y el MP que te queden
-    tutor: S.guideStep(game) === 'battle',             // primer combate: se ve la trayectoria entera
-  });
+  battle = new Battle($('field'), mine, look(d.rival, rival), map, { onEnd: () => endBattle() }, VH, 1, { vfx, icon: name => powerIcons[name] }, pad,
+    { ...d.opts, seed: d.seed, near: w < 520 ? 1.4 : 1 });
   battle.setView(viewFar, true);
   music.play(map.id);                                 // cada mapa tiene su tema
   moveButtons = [...document.querySelectorAll('#b-move .mv')];
@@ -837,7 +845,7 @@ function renderBattle() {
     btn.lastElementChild.textContent = a.cds[i] > 0 ? a.cds[i] : '';
   });
   itemButtons.forEach(btn => {
-    const n = game.items[btn.dataset.item] || 0;
+    const n = battle.bag?.[btn.dataset.item] || 0;   // los que llevaba al empezar, menos los gastados
     btn.lastElementChild.textContent = n;
     btn.disabled = !n || !mine || battle.itemUsed;
   });
@@ -856,20 +864,30 @@ function renderBattle() {
     : `Arrastra hacia atrás y suelta para disparar · Pasos cortos: flechas ◀ ▶ o toca a un lado (te quedan ${battle.stepsLeft()})${viewFar ? '' : ' · Toca el minimapa para mirar'}`;
 }
 
-function endBattle(win) {
-  const p = game.pet, rsp = speciesOf(rival.species);
+// Acabó el combate en pantalla: se le cuenta al servidor lo que hizo la jugadora, él lo repite y dice cómo acabó.
+let ending = false;
+async function endBattle() {
+  if (ending || !battle) return;
+  ending = true;
+  const fought = battle, p = game.pet, rsp = speciesOf(rival.species);
   const advZone = advFight ? A.regionOf(game) : null;  // la región, antes de que la expedición pueda terminar
-  const hpLeft = Math.max(0, Math.min(1, battle.player.hp / battle.player.maxHp || 0));
-  let done;
-  try { done = act('fightEnd', win, hpLeft, battle.stats.dianas | 0, battle.stats.powerHits | 0, Math.max(0, Math.min(999, +battle.player.mp || 0))); }
-  catch (err) {                                        // no debería pasar: un combate que las reglas no dan por bueno
-    console.warn(err);
+  const quit = text => {                               // el combate no cuenta: de vuelta a casa
     battle = null; advFight = null; music.stop(); dropAdventure();
     $('arena').hidden = true; $('lobby').hidden = false;
     switchTab('care');
-    return toast('El combate no se pudo dar por bueno.');
+    if (text) toast(text);
+  };
+  toast('Comprobando el combate…');
+  let done;
+  try { done = await ask('fightEnd', fought.log, fought.result().ticks); }
+  catch (err) { console.warn(err); ending = false; return quit('El combate no se pudo dar por bueno.'); }   // no debería pasar: las reglas no lo dan por bueno
+  ending = false;
+  if (battle !== fought) return;                       // el servidor ya mandó su partida y devolvió a casa
+  if (!done || done.error || !done.out) {              // sin conexión: se puede volver a intentar
+    return modal({ title: 'Sin conexión', body: '<p>No se pudo comprobar el combate con el servidor. Vuelve a intentarlo cuando tengas conexión.</p>',
+      actions: [{ label: 'Reintentar', cls: 'primary', fn: () => endBattle() }, { label: 'Salir sin guardar', cls: 'ghost', fn: () => quit('') }] });
   }
-  const { r, adv } = done;                             // adv: si era un combate de la expedición, cómo sigue
+  const { r, adv, out } = done, win = out.win;         // adv: si era un combate de la expedición, cómo sigue
   if (S.guideStep(game) === 'battle') act('guide', 'battle');   // el primer combate cierra la guía, se gane o se pierda
   advFight = null;
   S.save(game);
@@ -881,7 +899,7 @@ function endBattle(win) {
     ? `<p>Le ganaste a <b translate="no">${esc(rival.name)}</b> y te quedaste con su botín.</p><p>+${r.exp} EXP · +${r.coins} monedas · sube el vínculo</p>${hunt}`
     : `<p><b translate="no">${esc(rival.name)}</b> ganó esta vez${r.stolen ? ` y te robó ${r.stolen} monedas` : ''}.</p><p>+${r.exp} EXP por intentarlo</p>`;
   const up = r.up.levels ? `<p><b>¡${esc(p.name)} subió al nivel ${p.level}!</b> ${r.up.gains.map(k => '+' + S.STAT_NAMES[k]).join(' ')}</p>` : '';
-  const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${battle.stats.dianas} · Poderes acertados: ${battle.stats.powerHits}</p>`;
+  const rest = `${r.rest > 0 ? `<p>${esc(p.name)} necesita recuperarse: <b>${duration(r.rest)}</b>.</p>` : ''}<p class="muted">Dianas: ${out.dianas} · Poderes acertados: ${out.powerHits}</p>`;
   const trip = !adv ? ''
     : adv.reward ? `<p><b>${advZone.win}</b></p><p>Recompensa: +${adv.reward.coins} monedas y este objeto: ${A.itemName(adv.reward.item)}.</p>${adv.reward.egg ? '<p>También te llevas su huevo: ya está en tu incubadora.</p>' : ''}${adv.opened ? `<p><b>${A.REGIONS[adv.opened].opened}</b></p>` : ''}`
     : adv.boss ? `<p><b>${advZone.win}</b></p>${adv.coins ? `<p>Recompensa: +${adv.coins} monedas</p>` : ''}`
@@ -1118,7 +1136,7 @@ function advReach(poi) {
       ${matchLines(sp, rsp)}
       ${tired ? `<p class="adv down">${esc(p.name)} no tiene energía para luchar. Vuelve a casa y deja que descanse.</p>` : ''}`,
     actions: tired ? [{ label: 'Dar media vuelta', cls: 'primary', fn: retreat }]
-      : [{ label: '¡A luchar!', cls: 'primary', fn: () => { rival = foe; advFight = poi; startBattle(maps.find(m => m.id === A.regionOf(game).map) || maps[0]); } }, { label: 'Dar media vuelta', cls: 'ghost', fn: retreat }],
+      : [{ label: '¡A luchar!', cls: 'primary', fn: () => { rival = foe; advFight = poi; startBattle(); } }, { label: 'Dar media vuelta', cls: 'ghost', fn: retreat }],
   });
 }
 // «Sellos 2 de 3», «Lentes 1 de 3»: lo que llevas de la historia de una región.
@@ -1205,8 +1223,8 @@ $('b-items').addEventListener('pointerover', e => { hoverItem = e.target.closest
 $('b-items').addEventListener('pointerleave', () => { hoverItem = ''; });
 $('b-items').onclick = e => {
   const id = e.target.closest('[data-item]')?.dataset.item;
-  if (!id || !battle || !(game.items[id] > 0)) return;
-  if (battle.useItem(id)) { act('useItem', id); S.save(game); }
+  if (!id || !battle || !(battle.bag?.[id] > 0)) return;
+  if (battle.useItem(id)) renderBattle();              // se descuenta de la partida al acabar el combate
   else toast(battle.itemUsed ? 'Solo un objeto por turno.' : 'Ahora mismo no hace falta.');
 };
 
